@@ -252,6 +252,11 @@ CREATE TABLE "groups" (
 	"cover_url" text,
 	"category" text NOT NULL,
 	"creator_id" integer NOT NULL,
+	"privacy" text NOT NULL DEFAULT 'open',
+	"rules" text,
+	"is_verified" boolean NOT NULL DEFAULT false,
+	"is_promoted" boolean NOT NULL DEFAULT false,
+	"promoted_until" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint

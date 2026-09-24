@@ -101,21 +101,46 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: message });
   }
 
-  const [group] = await db.insert(groupsTable).values({
-    name: normalized.name,
-    description: normalized.description,
-    category: normalized.category,
-    avatarUrl: normalized.avatarUrl,
-    coverUrl: normalized.coverUrl,
-    creatorId: viewerId,
-    privacy: normalized.privacy,
-    rules: normalized.rules,
-  }).returning();
+  try {
+    const [group] = await db.transaction(async (tx) => {
+      const [createdGroup] = await tx.insert(groupsTable).values({
+        name: normalized.name,
+        description: normalized.description,
+        category: normalized.category,
+        avatarUrl: normalized.avatarUrl,
+        coverUrl: normalized.coverUrl,
+        creatorId: viewerId,
+        privacy: normalized.privacy,
+        rules: normalized.rules,
+      }).returning();
 
-  await db.insert(groupMembersTable).values({ groupId: group.id, userId: viewerId, role: "admin" });
+      if (!createdGroup) {
+        throw new Error("Failed to create group");
+      }
 
-  const enriched = await enrichGroup(group, viewerId);
-  return res.status(201).json(enriched);
+      await tx.insert(groupMembersTable).values({
+        groupId: createdGroup.id,
+        userId: viewerId,
+        role: "admin",
+      }).onConflictDoNothing();
+
+      const [membership] = await tx.select({ id: groupMembersTable.id })
+        .from(groupMembersTable)
+        .where(and(eq(groupMembersTable.groupId, createdGroup.id), eq(groupMembersTable.userId, viewerId)));
+
+      if (!membership) {
+        throw new Error("Creator membership was not recorded");
+      }
+
+      return [createdGroup] as const;
+    });
+
+    const enriched = await enrichGroup(group, viewerId);
+    return res.status(201).json(enriched);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not create group";
+    return res.status(500).json({ error: message });
+  }
 });
 
 router.get("/:id", async (req, res) => {

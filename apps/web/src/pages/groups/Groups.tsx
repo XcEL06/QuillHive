@@ -406,8 +406,8 @@ function GroupsList() {
                   description: form.description || null,
                   category: 'general',
                   coverUrl: form.coverUrl || null,
-                  privacy: form.privacy,
-                } as any,
+                  privacy: form.privacy as 'public' | 'private',
+                },
               })}
               disabled={isCreating || !form.name}
               className="w-full rounded-xl"

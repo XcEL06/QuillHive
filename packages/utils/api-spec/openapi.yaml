@@ -1187,9 +1187,15 @@ components:
           type: ["string", "null"]
         coverUrl:
           type: ["string", "null"]
+        privacy:
+          type: string
+          enum: [public, private]
+        rules:
+          type: ["string", "null"]
       required:
         - name
         - category
+        - privacy
 
     GroupsListResponse:
       type: object
