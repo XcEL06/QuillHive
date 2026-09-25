@@ -5,6 +5,7 @@ import { translationCacheTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import { getRedis } from "../lib/redis";
+import { logger } from "../lib/logger";
 
 const router = Router();
 const AI_DAILY_LIMIT = Number.parseInt(process.env.AI_DAILY_LIMIT ?? "50", 10);
@@ -58,7 +59,7 @@ function getViewerId(req: any): number | null {
   return getSessionUserId(auth.slice(7));
 }
 
-function getAnthropicConfig(): { apiKey: string; baseUrl: string } | null {
+export function getAnthropicConfig(): { apiKey: string; baseUrl: string } | null {
   if (process.env.ANTHROPIC_API_KEY) {
     return { apiKey: process.env.ANTHROPIC_API_KEY, baseUrl: "https://api.anthropic.com" };
   }
@@ -69,6 +70,18 @@ function getAnthropicConfig(): { apiKey: string; baseUrl: string } | null {
     };
   }
   return null;
+}
+
+export function logAiConfiguration(): void {
+  if (process.env.ANTHROPIC_API_KEY) {
+    logger.info("AI features enabled via ANTHROPIC_API_KEY");
+    return;
+  }
+  if (process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY && process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL) {
+    logger.info("AI features enabled via AI_INTEGRATIONS_ANTHROPIC_API_KEY");
+    return;
+  }
+  logger.warn("AI features disabled: ANTHROPIC_API_KEY missing");
 }
 
 async function callAnthropic(system: string, user: string, maxTokens = 1024): Promise<string> {

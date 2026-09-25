@@ -9,6 +9,7 @@ import { initSentry } from "./lib/sentry";
 import { startDailyDigest, startAnomalyMonitor } from "./lib/alertEngine";
 import { seedFeatureFlags } from "./lib/featureFlags";
 import { testConnection } from "@workspace/db";
+import { logAiConfiguration } from "./routes/ai";
 
 const rawPort = process.env["PORT"];
 
@@ -30,6 +31,7 @@ if (!dbReady) {
   process.exit(1);
 }
 logger.info("Database connection verified");
+logAiConfiguration();
 
 // Validate JWT_SECRET early
 const jwtSecret = process.env.JWT_SECRET;

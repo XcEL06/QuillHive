@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { HealthCheckResponse } from "@workspace/api-zod";
 import { pool } from "@workspace/db";
 import { getRedis } from "../lib/redis";
+import { getAnthropicConfig } from "./ai";
 
 const router: IRouter = Router();
 
@@ -124,6 +125,21 @@ router.get("/health/email", async (_req, res) => {
     status: configured ? "ok" : "unconfigured",
     provider,
     from: process.env.MAIL_FROM || `noreply@${process.env.MAIL_DOMAIN || "quillhive.app"}`,
+    checked_at: new Date().toISOString(),
+  });
+});
+
+router.get("/health/ai", async (_req, res) => {
+  const directKeyConfigured = Boolean(process.env.ANTHROPIC_API_KEY);
+  const integrationConfigured = Boolean(
+    process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY && process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+  );
+  const configured = Boolean(getAnthropicConfig());
+  return res.status(configured ? 200 : 503).json({
+    status: configured ? "ok" : "unconfigured",
+    provider: directKeyConfigured ? "anthropic" : integrationConfigured ? "anthropic-integration" : "none",
+    api_key_set: directKeyConfigured || integrationConfigured,
+    base_url_set: directKeyConfigured || Boolean(process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL),
     checked_at: new Date().toISOString(),
   });
 });
