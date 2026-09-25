@@ -3,10 +3,10 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import { reportsTable, safetyPreferencesTable, supportMessagesTable, supportTicketsTable, usersTable } from "@workspace/db/schema";
 import { and, desc, eq, inArray, or } from "drizzle-orm";
-import { requireAuth } from "../../middleware/admin";
+import { requireAuth, requirePermission } from "../../middleware/admin";
 import { preventSpam } from "../../middleware/abuseProtection";
 import { validateBody, validateParams } from "../../middleware/validate";
-import { emitToUser } from "../../lib/socket";
+import { emitToSupportTicket, emitToUser } from "../../lib/socket";
 import { logger } from "../../lib/logger";
 import { notify } from "../notifications/notification.service";
 import { sendEmail } from "../email/email.service";
@@ -23,6 +23,52 @@ supportRouter.get("/tickets", async (req: any, res) => {
   return res.json({ tickets });
 });
 
+supportRouter.get("/admin/tickets", requirePermission("manage_support"), async (_req: any, res) => {
+  const tickets = await db
+    .select({
+      id: supportTicketsTable.id,
+      userId: supportTicketsTable.userId,
+      subject: supportTicketsTable.subject,
+      category: supportTicketsTable.category,
+      severity: supportTicketsTable.severity,
+      status: supportTicketsTable.status,
+      createdAt: supportTicketsTable.createdAt,
+      updatedAt: supportTicketsTable.updatedAt,
+      username: usersTable.username,
+      displayName: usersTable.displayName,
+      email: usersTable.email,
+    })
+    .from(supportTicketsTable)
+    .leftJoin(usersTable, eq(usersTable.id, supportTicketsTable.userId))
+    .orderBy(desc(supportTicketsTable.updatedAt));
+  return res.json({ tickets });
+});
+
+supportRouter.get("/admin/tickets/:id/messages", requirePermission("manage_support"), validateParams(z.object({ id: z.coerce.number().int().positive() })), async (req: any, res) => {
+  const [ticket] = await db.select().from(supportTicketsTable).where(eq(supportTicketsTable.id, Number(req.params.id)));
+  if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+  const messages = await db.select().from(supportMessagesTable).where(eq(supportMessagesTable.ticketId, ticket.id)).orderBy(supportMessagesTable.createdAt);
+  return res.json({ ticket, messages });
+});
+
+supportRouter.post("/admin/tickets/:id/message", requirePermission("manage_support"), validateParams(z.object({ id: z.coerce.number().int().positive() })), validateBody(z.object({ message: z.string().min(1).max(5_000) })), async (req: any, res) => {
+  const [ticket] = await db.select().from(supportTicketsTable).where(eq(supportTicketsTable.id, Number(req.params.id)));
+  if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+  const [message] = await db.insert(supportMessagesTable).values({ ticketId: ticket.id, userId: req.currentUser.id, message: req.body.message, fileId: null }).returning();
+  await db.update(supportTicketsTable).set({ status: "open", updatedAt: new Date() }).where(eq(supportTicketsTable.id, ticket.id));
+  await notify({ userId: ticket.userId, actorId: req.currentUser.id, type: "admin_action", title: "Support replied", message: req.body.message.slice(0, 160), url: "/support" });
+  emitToSupportTicket(ticket.id, "support:message", { ticketId: ticket.id, message });
+  emitToUser(ticket.userId, "support:message", { ticketId: ticket.id, message });
+  return res.status(201).json(message);
+});
+
+supportRouter.patch("/admin/tickets/:id", requirePermission("manage_support"), validateParams(z.object({ id: z.coerce.number().int().positive() })), validateBody(z.object({ status: z.enum(["open", "pending", "resolved", "closed"]) })), async (req: any, res) => {
+  const [ticket] = await db.update(supportTicketsTable).set({ status: req.body.status, updatedAt: new Date() }).where(eq(supportTicketsTable.id, Number(req.params.id))).returning();
+  if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+  emitToSupportTicket(ticket.id, "support:updated", { ticket });
+  return res.json(ticket);
+});
+
 supportRouter.post("/tickets", preventSpam("support-tickets", { max: 5, windowMs: 60_000, contentField: "subject" }), validateBody(z.object({
   subject: z.string().min(3).max(180),
   message: z.string().min(1).max(5_000),
@@ -30,18 +76,25 @@ supportRouter.post("/tickets", preventSpam("support-tickets", { max: 5, windowMs
   severity: z.enum(["low", "normal", "high", "urgent"]).optional(),
   fileId: z.number().int().positive().optional(),
 })), async (req: any, res) => {
-  const [ticket] = await db.insert(supportTicketsTable).values({
-    userId: req.currentUser.id,
-    subject: req.body.subject,
-    category: req.body.category ?? "general",
-    severity: req.body.severity ?? "normal",
-  }).returning();
-  const [message] = await db.insert(supportMessagesTable).values({
-    ticketId: ticket.id,
-    userId: req.currentUser.id,
-    message: req.body.message,
-    fileId: req.body.fileId ?? null,
-  }).returning();
+  const [supportOwner] = await db.select({ id: usersTable.id }).from(usersTable)
+    .where(and(eq(usersTable.role, "super_admin"), eq(usersTable.isDeleted, false))).limit(1);
+  if (!supportOwner) return res.status(503).json({ error: "Support is temporarily unavailable. Please try again later." });
+
+  const { ticket, message } = await db.transaction(async (tx) => {
+    const [createdTicket] = await tx.insert(supportTicketsTable).values({
+      userId: req.currentUser.id,
+      subject: req.body.subject,
+      category: req.body.category ?? "general",
+      severity: req.body.severity ?? "normal",
+    }).returning();
+    const [createdMessage] = await tx.insert(supportMessagesTable).values({
+      ticketId: createdTicket.id,
+      userId: req.currentUser.id,
+      message: req.body.message,
+      fileId: req.body.fileId ?? null,
+    }).returning();
+    return { ticket: createdTicket, message: createdMessage };
+  });
   const { sendEmail } = await import("../email/email.service");
   const ownerEmail = process.env.OWNER_EMAIL;
   if (ownerEmail) {
@@ -55,7 +108,6 @@ supportRouter.post("/tickets", preventSpam("support-tickets", { max: 5, windowMs
       `,
     }).catch(() => {});
   }
-  const [supportOwner] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.role, "super_admin")).limit(1);
   if (supportOwner && supportOwner.id !== req.currentUser.id) {
     void notify({
       userId: supportOwner.id,
@@ -90,6 +142,11 @@ supportRouter.post("/tickets/:id/message", validateParams(z.object({ id: z.coerc
     fileId: req.body.fileId ?? null,
   }).returning();
   await db.update(supportTicketsTable).set({ updatedAt: new Date() }).where(eq(supportTicketsTable.id, ticket.id));
+  const [supportOwner] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.role, "super_admin")).limit(1);
+  if (supportOwner && supportOwner.id !== req.currentUser.id) {
+    void notify({ userId: supportOwner.id, actorId: req.currentUser.id, type: "system", title: "Support ticket updated", message: `${req.currentUser.displayName ?? req.currentUser.username ?? "A member"} replied to ${ticket.subject}`, url: "/admin" }).catch(() => {});
+  }
+  emitToSupportTicket(ticket.id, "support:message", { ticketId: ticket.id, message });
   emitToUser(req.currentUser.id, "support:message", { ticketId: ticket.id, message });
   return res.status(201).json(message);
 });

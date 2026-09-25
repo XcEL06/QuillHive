@@ -3,6 +3,7 @@ import {
   conversationsTable,
   conversationParticipantsTable,
   messagesTable,
+  usersTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, ne, isNull } from "drizzle-orm";
 import { getUserWithCounts } from "../profiles/profile.service";
@@ -209,13 +210,16 @@ export async function sendMessage(
       { conversationId: convId, userId: data.recipientId, unreadCount: 1 },
     ]);
   } else if (convId) {
-    const otherParticipants = await db
+    const participants = await db
       .select()
       .from(conversationParticipantsTable)
       .where(eq(conversationParticipantsTable.conversationId, convId));
+    if (!participants.some((participant) => participant.userId === viewerId)) {
+      throw new Error("Forbidden");
+    }
 
     await Promise.all(
-      otherParticipants
+      participants
         .filter(p => p.userId !== viewerId)
         .map(p =>
           db
@@ -263,4 +267,21 @@ export async function sendMessage(
   }
 
   return enrichedMessage;
+}
+
+export async function sendAdminMessage(adminId: number, targetUserId: number, content: string) {
+  const [target] = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, targetUserId), eq(usersTable.isDeleted, false)))
+    .limit(1);
+  if (!target) throw new Error("User not found");
+
+  const [newConversation] = await db.insert(conversationsTable).values({ isGroup: false }).returning();
+  await db.insert(conversationParticipantsTable).values([
+    { conversationId: newConversation.id, userId: adminId, unreadCount: 0 },
+    { conversationId: newConversation.id, userId: targetUserId, unreadCount: 1 },
+  ]);
+
+  return sendMessage(adminId, { conversationId: newConversation.id, content });
 }

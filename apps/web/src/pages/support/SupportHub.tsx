@@ -11,6 +11,10 @@ import toast from "react-hot-toast";
 
 export default function SupportHub() {
   const [tickets, setTickets] = useState<any[]>([]);
+  const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
+  const [ticketMessages, setTicketMessages] = useState<any[]>([]);
+  const [ticketReply, setTicketReply] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [category, setCategory] = useState("general");
@@ -55,6 +59,33 @@ export default function SupportHub() {
     setMessage("");
     toast.success("Support ticket created");
     loadTickets();
+  };
+
+  const openTicket = async (ticket: any) => {
+    const res = await fetch(`/api/support/tickets/${ticket.id}/messages`, { headers: authHeaders() });
+    const data = await res.json();
+    if (!res.ok) { toast.error(data.error || "Could not load ticket"); return; }
+    setSelectedTicket(data.ticket);
+    setTicketMessages(data.messages || []);
+  };
+
+  const replyToTicket = async () => {
+    if (!selectedTicket || !ticketReply.trim()) return;
+    setSendingReply(true);
+    try {
+      const res = await fetch(`/api/support/tickets/${selectedTicket.id}/message`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ message: ticketReply.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not send reply");
+      setTicketMessages((current) => [...current, data]);
+      setTicketReply("");
+      await loadTickets();
+    } catch (error: any) {
+      toast.error(error.message || "Could not send reply");
+    } finally { setSendingReply(false); }
   };
 
   const saveSafety = async () => {
@@ -152,16 +183,24 @@ export default function SupportHub() {
           <CardContent className="space-y-3">
             {tickets.length === 0 && <p className="text-sm text-muted-foreground">No support tickets yet.</p>}
             {tickets.map(ticket => (
-              <div key={ticket.id} className="flex items-center justify-between rounded-xl border border-border/60 p-4">
+              <button key={ticket.id} onClick={() => void openTicket(ticket)} className="flex w-full items-center justify-between rounded-xl border border-border/60 p-4 text-left hover:bg-muted/40">
                 <div>
                   <p className="font-medium">{ticket.subject}</p>
                   <p className="text-xs text-muted-foreground">{ticket.category} • {new Date(ticket.createdAt).toLocaleString()}</p>
                 </div>
                 <Badge>{ticket.status}</Badge>
-              </div>
+              </button>
             ))}
           </CardContent>
         </Card>
+        {selectedTicket && <Card className="rounded-2xl">
+          <CardHeader><CardTitle>{selectedTicket.subject}</CardTitle><p className="text-xs text-muted-foreground">Status: {selectedTicket.status}</p></CardHeader>
+          <CardContent className="space-y-3">
+            {ticketMessages.map(item => <div key={item.id} className="rounded-xl border border-border/60 p-3"><p className="whitespace-pre-wrap text-sm">{item.message}</p><p className="mt-2 text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</p></div>)}
+            <Textarea value={ticketReply} onChange={event => setTicketReply(event.target.value)} placeholder="Reply to support..." rows={3} />
+            <Button onClick={() => void replyToTicket()} disabled={sendingReply || !ticketReply.trim()}>Send Reply</Button>
+          </CardContent>
+        </Card>}
       </div>
     </AppLayout>
   );

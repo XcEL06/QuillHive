@@ -70,8 +70,13 @@ export const sendMessage = async (req: Request, res: Response) => {
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const { recipientId, conversationId, content } = req.body;
   if (!content) return res.status(400).json({ error: "Content is required" });
-  const message = await MessagingService.sendMessage(viewerId, { conversationId, recipientId, content });
-  return res.status(201).json(message);
+  try {
+    const message = await MessagingService.sendMessage(viewerId, { conversationId, recipientId, content });
+    return res.status(201).json(message);
+  } catch (error: any) {
+    if (error?.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
+    throw error;
+  }
 };
 
 export const markConversationSeen = async (req: Request, res: Response) => {

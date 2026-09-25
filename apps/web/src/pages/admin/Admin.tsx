@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from "react";
 import { Redirect, useLocation } from "wouter";
 import {
-  Activity, BarChart3, BookOpen, Briefcase, Flag, Gauge, Languages, LayoutDashboard,
+  Activity, BarChart3, BookOpen, Briefcase, Flag, Gauge, Languages, LayoutDashboard, MessageSquare, Send,
   ListTodo, Settings, Shield, ToggleRight, Users,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
@@ -19,12 +19,15 @@ import AdminFeatureFlags from "./components/AdminFeatureFlags";
 import AdminSettings from "./components/AdminSettings";
 import AdminMonitoring from "./components/AdminMonitoring";
 import AdminLanguages from "./components/AdminLanguages";
+import AdminSupport from "./components/AdminSupport";
+import AdminCommunications from "./components/AdminCommunications";
 import AdminConsoleShell, { type AdminNavItem, type AdminTabKey } from "./components/AdminConsoleShell";
 import type { AdminProps } from "./components/types";
 
 const ADMIN_GROUPS: readonly { label: string; items: readonly AdminNavItem[] }[] = [
   { label: "Overview", items: [["dashboard", "Dashboard", LayoutDashboard]] },
   { label: "People", items: [["users", "Users", Users], ["referrals", "Growth / Referrals", BarChart3]] },
+  { label: "Communications", items: [["support", "Support inbox", MessageSquare], ["communications", "Send messages", Send]] },
   { label: "Content", items: [["content", "Content", BookOpen], ["trust", "Moderation", Shield]] },
   { label: "Growth", items: [["chains", "Chains", ListTodo], ["scheduled", "Scheduled posts", Gauge]] },
   { label: "Payments / Boosts", items: [["revenue", "Revenue & boosts", Briefcase]] },
@@ -61,6 +64,8 @@ export default function Admin() {
     settings: <AdminSettings {...props} />,
     monitoring: <AdminMonitoring {...props} />,
     languages: <AdminLanguages {...props} />,
+    support: <AdminSupport {...props} />,
+    communications: <AdminCommunications {...props} />,
   };
 
   const signOut = () => { logout(); setLocation("/"); };

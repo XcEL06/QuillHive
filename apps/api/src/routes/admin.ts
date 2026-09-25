@@ -15,6 +15,7 @@ import { notify, notifyOfficialNotice } from "../features/notifications/notifica
 import { BOOST_PLANS, type PlanKey } from "../features/boost/boost.routes";
 import { deleteCachePattern } from "../lib/cache";
 import { memDeletePattern } from "../lib/memCache";
+import * as MessagingService from "../features/messaging/messaging.service";
 
 const router = Router();
 router.use(requireAdmin);
@@ -208,6 +209,49 @@ router.post("/users/:id/notice", async (req: any, res) => {
   await auditLog(req.currentUser.id, "official_notice_sent", "user", id, message);
 
   return res.status(201).json({ success: true, emailQueued: email.ok });
+});
+
+router.get("/support/status", requireSuperAdmin, async (_req, res) => {
+  const superAdmins = await db
+    .select({ id: usersTable.id, email: usersTable.email, displayName: usersTable.displayName })
+    .from(usersTable)
+    .where(and(eq(usersTable.role, "super_admin"), eq(usersTable.isDeleted, false)));
+  return res.json({
+    superAdminCount: superAdmins.length,
+    superAdmins,
+    ownerEmailConfigured: Boolean(process.env.OWNER_EMAIL),
+  });
+});
+
+router.post("/communications/direct", requireSuperAdmin, async (req: any, res) => {
+  const targetUserId = Number(req.body?.userId);
+  const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+  if (!Number.isInteger(targetUserId) || targetUserId <= 0) return res.status(400).json({ error: "userId must be a positive integer" });
+  if (!content || content.length > 5_000) return res.status(400).json({ error: "content is required and must be 5000 characters or fewer" });
+  if (!checkRateLimit(req.currentUser.id, "admin_direct_message")) return res.status(429).json({ error: "Too many messages. Try again in a minute." });
+
+  try {
+    const message = await MessagingService.sendAdminMessage(req.currentUser.id, targetUserId, content);
+    await notify({ userId: targetUserId, actorId: req.currentUser.id, type: "admin_action", title: "Message from QuillHive", message: content.slice(0, 160), url: "/messages" });
+    await auditLog(req.currentUser.id, "admin_direct_message_sent", "user", targetUserId, content);
+    return res.status(201).json({ success: true, message });
+  } catch (error: any) {
+    if (error?.message === "User not found") return res.status(404).json({ error: error.message });
+    throw error;
+  }
+});
+
+router.post("/communications/broadcast", requireSuperAdmin, async (req: any, res) => {
+  const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+  const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  if (!title || title.length > 180) return res.status(400).json({ error: "title is required and must be 180 characters or fewer" });
+  if (!message || message.length > 5_000) return res.status(400).json({ error: "message is required and must be 5000 characters or fewer" });
+  if (!checkRateLimit(req.currentUser.id, "admin_broadcast", 5)) return res.status(429).json({ error: "Too many broadcasts. Try again later." });
+
+  const recipients = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.isDeleted, false));
+  await Promise.all(recipients.map((recipient) => notify({ userId: recipient.id, actorId: req.currentUser.id, type: "admin_action", title, message, url: "/notifications" })));
+  await auditLog(req.currentUser.id, "admin_notification_broadcast", "users", undefined, `${title}: ${message}`);
+  return res.status(201).json({ success: true, recipientCount: recipients.length });
 });
 
 router.patch("/users/:id/role", requireSuperAdmin, async (req: any, res) => {
