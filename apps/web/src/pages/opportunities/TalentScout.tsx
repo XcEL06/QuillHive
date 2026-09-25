@@ -43,7 +43,7 @@ const STATUS_COLORS: Record<string, string> = {
   open_to_opportunities:  'bg-blue-500/15 text-blue-600 border-blue-200 dark:border-blue-800',
 };
 const STATUS_LABELS: Record<string, string> = {
-  available:             'Opportunity Ready',
+  available:             'Available for others to find',
   open_to_opportunities: 'Collaboration Ready',
 };
 const TIER_COLORS: Record<string, string> = {
@@ -338,11 +338,11 @@ export default function TalentScout() {
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="h-9 w-[200px] text-sm rounded-xl">
               <Globe className="w-3.5 h-3.5 mr-2 text-muted-foreground" />
-              <SelectValue placeholder="Opportunity status…" />
+              <SelectValue placeholder="Availability status…" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="available">Opportunity Ready</SelectItem>
+              <SelectItem value="available">Available for others to find</SelectItem>
               <SelectItem value="open_to_opportunities">Collaboration Ready</SelectItem>
             </SelectContent>
           </Select>

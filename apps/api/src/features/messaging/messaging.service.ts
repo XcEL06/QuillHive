@@ -4,6 +4,7 @@ import {
   conversationParticipantsTable,
   messagesTable,
   usersTable,
+  paymentProposalsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, ne, isNull } from "drizzle-orm";
 import { getUserWithCounts } from "../profiles/profile.service";
@@ -284,4 +285,45 @@ export async function sendAdminMessage(adminId: number, targetUserId: number, co
   ]);
 
   return sendMessage(adminId, { conversationId: newConversation.id, content });
+}
+
+async function requireConversationParticipant(conversationId: number, userId: number) {
+  const participants = await db.select().from(conversationParticipantsTable)
+    .where(eq(conversationParticipantsTable.conversationId, conversationId));
+  if (!participants.some((participant) => participant.userId === userId)) throw new Error("Forbidden");
+  return participants;
+}
+
+export async function getPaymentProposals(conversationId: number, viewerId: number) {
+  await requireConversationParticipant(conversationId, viewerId);
+  return db.select().from(paymentProposalsTable)
+    .where(eq(paymentProposalsTable.conversationId, conversationId))
+    .orderBy(paymentProposalsTable.createdAt);
+}
+
+export async function createPaymentProposal(data: {
+  conversationId: number;
+  proposerId: number;
+  amount: number;
+  currency: string;
+  note?: string;
+}) {
+  const participants = await requireConversationParticipant(data.conversationId, data.proposerId);
+  const [proposal] = await db.insert(paymentProposalsTable).values({
+    conversationId: data.conversationId,
+    proposerId: data.proposerId,
+    amount: data.amount,
+    currency: data.currency.toUpperCase(),
+    note: data.note?.trim() || null,
+    status: "proposed",
+  }).returning();
+  return { proposal, recipientIds: participants.filter((participant) => participant.userId !== data.proposerId).map((participant) => participant.userId) };
+}
+
+export async function updatePaymentProposal(proposalId: number, viewerId: number, status: "accepted" | "rejected") {
+  const [proposal] = await db.select().from(paymentProposalsTable).where(eq(paymentProposalsTable.id, proposalId));
+  if (!proposal) throw new Error("Not found");
+  await requireConversationParticipant(proposal.conversationId, viewerId);
+  const [updated] = await db.update(paymentProposalsTable).set({ status }).where(eq(paymentProposalsTable.id, proposalId)).returning();
+  return updated;
 }

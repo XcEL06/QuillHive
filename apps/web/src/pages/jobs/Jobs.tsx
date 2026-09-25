@@ -6,8 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Briefcase, MapPin, DollarSign, Clock, Plus, Star, ExternalLink,
-  Eye, Users, Sparkles, Zap, ChevronRight, Target, FileCheck,
+  Briefcase, MapPin, DollarSign, Clock, Plus, Star,
+  Eye, Users, Sparkles, Zap, ChevronRight, Target,
 } from 'lucide-react';
 import { Link as WouterLink } from 'wouter';
 import { formatDistanceToNow } from 'date-fns';
@@ -17,6 +17,7 @@ import { getStoredToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { formatAccountAge } from '@/lib/accountAge';
 import { ReportDialog } from '@/components/report/ReportDialog';
+import { ApplyOpportunityActions } from '@/components/opportunities/ApplyOpportunityActions';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -112,7 +113,6 @@ function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: numbe
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {matches.map(job => {
-          const applyHref = job.applyUrl || (job.applyEmail ? `mailto:${job.applyEmail}` : undefined);
           return (
             <div key={job.id} data-card className="bg-card border border-primary/20 rounded-2xl p-4 md:p-5 hover:border-primary/50 transition-all shadow-sm group flex flex-col gap-3">
               <div className="flex items-start justify-between gap-2">
@@ -150,13 +150,7 @@ function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: numbe
                   {job.compensation && <span className="text-accent font-medium flex items-center gap-0.5"><DollarSign className="w-3 h-3" />{job.compensation}</span>}
                   <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{job.remote ? 'Remote' : job.location || 'Onsite'}</span>
                 </div>
-                {applyHref && (
-                  <a href={applyHref} target={applyHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer"
-                     onClick={() => fetch(`/api/jobs/${job.id}/click`, { method: 'POST' }).catch(() => {})}
-                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity">
-                    Apply <ChevronRight className="w-3 h-3" />
-                  </a>
-                )}
+                <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={job.applyUrl || (job.applyEmail ? `mailto:${job.applyEmail}` : undefined)} />
               </div>
             </div>
           );
@@ -317,9 +311,7 @@ export default function Jobs() {
           {data?.jobs.map(job => {
             const j = job as any;
             const isFeatured = !!j.isFeatured && (!j.featuredUntil || new Date(j.featuredUntil) > new Date());
-            const applyHref: string | undefined = j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined);
             const matchData = matchMap.get(job.id);
-            const trackClick = () => { fetch(`/api/jobs/${job.id}/click`, { method: 'POST' }).catch(() => {}); };
             return (
               <div
                 key={job.id}
@@ -412,14 +404,7 @@ export default function Jobs() {
                         </span>
                       ))}
                       {job.skills.length > 3 && <span className="text-xs text-muted-foreground">+{job.skills.length - 3}</span>}
-                      {applyHref && (
-                        <a href={applyHref} target={applyHref.startsWith('http') ? '_blank' : undefined}
-                           rel="noopener noreferrer" onClick={trackClick}
-                           className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold hover:opacity-90 transition-opacity min-h-[44px]"
-                           data-testid={`apply-${job.id}`}>
-                          <FileCheck className="w-3.5 h-3.5" /> Apply with Proof-of-Work
-                        </a>
-                      )}
+                      <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined)} />
                       <ReportDialog targetType="job" targetId={job.id} label="Report" className="min-h-[44px]" />
                     </div>
                   </div>
@@ -433,7 +418,7 @@ export default function Jobs() {
               <Briefcase className="w-12 h-12 text-muted-foreground/50 mx-auto mb-4" />
               <h3 className="text-xl font-medium mb-2">No opportunities found</h3>
               <p className="text-muted-foreground">Check back later or post your own.</p>
-              <Link href="/jobs/post"><Button className="mt-5 rounded-xl"><Briefcase className="w-4 h-4 mr-2" />Post an opportunity</Button></Link>
+              <Link href="/jobs/post"><Button className="mt-5 rounded-xl"><Briefcase className="w-4 h-4 mr-2" />Post Opportunity</Button></Link>
             </div>
           )}
         </div>

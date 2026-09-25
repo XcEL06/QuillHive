@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Briefcase, MapPin, DollarSign, Clock, Plus, Star, ExternalLink,
+  Briefcase, MapPin, DollarSign, Clock, Plus, Star,
   Sparkles, Zap, ChevronRight, Target,
 } from 'lucide-react';
 import { Link } from 'wouter';
@@ -15,6 +15,7 @@ import { getStoredToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { formatAccountAge } from '@/lib/accountAge';
 import { ReportDialog } from '@/components/report/ReportDialog';
+import { ApplyOpportunityActions } from '@/components/opportunities/ApplyOpportunityActions';
 
 type JobType = 'all' | 'job' | 'commission' | 'collaboration';
 
@@ -88,7 +89,6 @@ function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: numbe
       </h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {matches.map(job => {
-          const applyHref = job.applyUrl || (job.applyEmail ? `mailto:${job.applyEmail}` : undefined);
           return (
             <div key={job.id} data-card className="bg-card border border-primary/20 rounded-2xl p-4 md:p-5 hover:border-primary/50 transition-all shadow-sm group flex flex-col gap-3">
               <div className="flex items-start justify-between gap-2">
@@ -114,13 +114,7 @@ function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: numbe
                   {job.compensation && <span className="text-accent font-medium flex items-center gap-0.5"><DollarSign className="w-3 h-3" />{job.compensation}</span>}
                   <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{job.remote ? 'Remote' : job.location || 'Onsite'}</span>
                 </div>
-                {applyHref && (
-                  <a href={applyHref} target={applyHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer"
-                     onClick={() => fetch(`/api/jobs/${job.id}/click`, { method: 'POST' }).catch(() => {})}
-                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity">
-                    Apply <ChevronRight className="w-3 h-3" />
-                  </a>
-                )}
+                <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={job.applyUrl || (job.applyEmail ? `mailto:${job.applyEmail}` : undefined)} />
               </div>
             </div>
           );
@@ -155,7 +149,7 @@ export function JobsPanel() {
         {user && (
           <Link href="/jobs/post">
             <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
-              <Plus className="w-3.5 h-3.5" /> Post a job
+              <Plus className="w-3.5 h-3.5" /> Post Opportunity
             </Button>
           </Link>
         )}
@@ -178,7 +172,6 @@ export function JobsPanel() {
         {data?.jobs.map(job => {
           const j = job as any;
           const isFeatured = !!j.isFeatured && (!j.featuredUntil || new Date(j.featuredUntil) > new Date());
-          const applyHref: string | undefined = j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined);
           const matchData = matchMap.get(job.id);
 
           return (
@@ -212,13 +205,7 @@ export function JobsPanel() {
                     }`}>{job.type}</Badge>
                     {matchData && <MatchBadge score={matchData.score} />}
                   </div>
-                  {applyHref && (
-                    <a href={applyHref} target={applyHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer"
-                       onClick={() => fetch(`/api/jobs/${job.id}/click`, { method: 'POST' }).catch(() => {})}
-                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition-opacity shrink-0">
-                      Apply <ChevronRight className="w-3 h-3" />
-                    </a>
-                  )}
+                  <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined)} />
                   <ReportDialog targetType="job" targetId={job.id} label="Report" />
                 </div>
 

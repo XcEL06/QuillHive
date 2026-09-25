@@ -175,13 +175,13 @@ const AVAILABLE_FOR_OPTIONS = [
   { id: 'freelance',      label: 'Freelance',      displayLabel: 'Accepting Creative Projects',  icon: '🧑‍💻' },
   { id: 'beta_readers',   label: 'Beta Readers',   displayLabel: 'Seeking Beta Readers',         icon: '📖' },
   { id: 'editing',        label: 'Editing',        displayLabel: 'Accepting Editing Work',       icon: '✏️' },
-  { id: 'sponsorships',   label: 'Sponsorships',   displayLabel: 'Opportunity Ready',            icon: '🌟' },
+  { id: 'sponsorships',   label: 'Sponsorships',   displayLabel: 'Available for others to find', icon: '🌟' },
 ];
 
 export default function Profile() {
   const [, profileParams] = useRoute('/profile/:username');
   const [, publicParams] = useRoute('/u/:username');
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { user: currentUser } = useAuthStore();
   const queryClient = useQueryClient();
   const username = profileParams?.username || publicParams?.username || currentUser?.username || '';
@@ -312,6 +312,11 @@ export default function Profile() {
   const [isCollaborateOpen, setIsCollaborateOpen] = useState(false);
   const [collaborateMsg, setCollaborateMsg] = useState('');
   const [isSendingCollab, setIsSendingCollab] = useState(false);
+
+  useEffect(() => {
+    const action = new URLSearchParams(location.split("?")[1] ?? "").get("action");
+    if (action === "collaborate" && !isMe && data?.user?.id) setIsCollaborateOpen(true);
+  }, [location, isMe, data?.user?.id]);
 
   // Creator public stats (visible to everyone)
   const [creatorPublicStats, setCreatorPublicStats] = useState<CreatorPublicStats | null>(null);
@@ -616,11 +621,11 @@ export default function Profile() {
               <>
                 {creatorProfile.isAvailableForHire && (
                   <Button onClick={handleHireMe} className="rounded-xl gap-2 bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-500/30 font-semibold">
-                    <Zap className="w-4 h-4" /> {t('profile.inviteToCollaborate', 'Invite to Collaborate')}
+                    <Zap className="w-4 h-4" /> {t('profile.inviteToCollaborate', 'Message about a project')}
                   </Button>
                 )}
                 <Button onClick={() => setIsCollaborateOpen(true)} variant="outline" className="rounded-xl gap-2 border-primary/50 text-primary hover:bg-primary/5">
-                  <Handshake className="w-4 h-4" /> {t('profile.collaborate', 'Collaborate')}
+                  <Handshake className="w-4 h-4" /> {t('profile.collaborate', 'Request collaboration')}
                 </Button>
                 {currentUser && (
                   <Button onClick={handleHireMe} variant="outline" className="rounded-xl gap-2 border-border/60 hover:border-primary/40">
@@ -648,7 +653,7 @@ export default function Profile() {
             {creatorProfile.isAvailableForHire && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold border border-amber-300 dark:border-amber-700">
                 <Zap className="w-3.5 h-3.5" />
-                {t('profile.openToOpportunities', '⚡ Open to opportunities')}
+                {t('profile.openToOpportunities', '⚡ Available for others to find')}
               </span>
             )}
             {(creatorProfile.availableFor || []).map(af => {
@@ -1523,7 +1528,7 @@ export default function Profile() {
                 <label htmlFor="hire-toggle" className="font-medium text-sm cursor-pointer text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                   <Zap className="w-4 h-4" /> {t('profile.openToOpportunities', 'Open to opportunities')}
                 </label>
-                <p className="text-xs text-muted-foreground mt-0.5">{t('profile.opportunityReadyDesc', 'Show that you are open to opportunities on your profile')}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t('profile.opportunityReadyDesc', 'Let people find you when you are available for creative work')}</p>
               </div>
             </div>
             <div className="space-y-2">

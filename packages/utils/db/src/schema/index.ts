@@ -3,6 +3,7 @@ export * from "./posts";
 export * from "./messages";
 export * from "./groups";
 export * from "./jobs";
+export * from "./opportunityApplications";
 export * from "./notifications";
 export * from "./appreciations";
 export * from "./reports";

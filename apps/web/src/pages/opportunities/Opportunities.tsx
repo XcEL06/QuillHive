@@ -49,7 +49,7 @@ const STATUS_COLORS: Record<string, string> = {
   open_to_opportunities: 'bg-blue-500/15 text-blue-600 border-blue-200 dark:border-blue-800',
 };
 const STATUS_LABELS: Record<string, string> = {
-  available: 'Opportunity Ready',
+  available: 'Available for others to find',
   open_to_opportunities: 'Collaboration Ready',
 };
 
@@ -194,9 +194,9 @@ function CreatorCard({ creator }: { creator: Creator }) {
             View Profile <ChevronRight className="w-3 h-3" />
           </Button>
         </Link>
-        <Link href={`/inbox?to=${user.username}&type=commission`}>
+        <Link href={`/profile/${user.username}?action=collaborate`}>
           <Button size="sm" className="gap-1 text-xs">
-            <Briefcase className="w-3 h-3" /> Hire
+            <Briefcase className="w-3 h-3" /> Request collaboration
           </Button>
         </Link>
       </div>
@@ -297,7 +297,7 @@ export default function Opportunities() {
               <Users2 className="w-4 h-4 text-white" />
             </div>
             <h1 className="text-2xl font-bold font-serif tracking-tight">
-              {t('opportunities.title', 'Hire Creators')}
+              {t('opportunities.title', 'Browse People')}
             </h1>
           </div>
           <p className="text-muted-foreground ml-10 mb-5">
@@ -323,7 +323,7 @@ export default function Opportunities() {
                 <Briefcase className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="font-semibold text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Post an Opportunity</p>
+                <p className="font-semibold text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Post Opportunity</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Reach verified creators actively looking for work, collaborations, or brand partnerships.</p>
               </div>
             </Link>

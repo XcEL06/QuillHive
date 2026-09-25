@@ -20,3 +20,6 @@ messagesRouter.post("/start", preventSpam("conversation-start", { max: 10, windo
 messagesRouter.get("/conversations/:conversationId", validateParams(conversationParamsSchema), MessagingController.getConversationMessages);
 messagesRouter.post("/conversations/:conversationId/seen", requireAuth, validateParams(conversationParamsSchema), MessagingController.markConversationSeen);
 messagesRouter.post("/send", preventSpam("messages", { max: 20, windowMs: 60_000 }), validateBody(sendMessageSchema), MessagingController.sendMessage);
+messagesRouter.get("/conversations/:conversationId/payment-proposals", validateParams(conversationParamsSchema), MessagingController.getPaymentProposals);
+messagesRouter.post("/conversations/:conversationId/payment-proposals", validateParams(conversationParamsSchema), validateBody(z.object({ amount: z.coerce.number().positive(), currency: z.string().length(3), note: z.string().max(1000).optional() })), MessagingController.createPaymentProposal);
+messagesRouter.patch("/conversations/:conversationId/payment-proposals/:proposalId", validateParams(z.object({ conversationId: z.coerce.number().int().positive(), proposalId: z.coerce.number().int().positive() })), validateBody(z.object({ status: z.enum(["accepted", "rejected"]) })), MessagingController.updatePaymentProposal);

@@ -451,7 +451,7 @@ export default function Pricing() {
         <section className="mb-16">
           <h2 className="text-2xl font-serif font-bold mb-2">Job Listings</h2>
           <p className="text-muted-foreground mb-8">
-            Reach thousands of skilled creators. Post a job and connect with talent fast.
+            Reach skilled creators. Post an opportunity and connect with the right person.
           </p>
           <div className="grid md:grid-cols-2 gap-6">
             {[
@@ -486,7 +486,7 @@ export default function Pricing() {
                   </ul>
                   <Button className="w-full rounded-xl" variant={plan.featured ? 'default' : 'outline'} asChild>
                     <Link href="/jobs">
-                      <ArrowRight className="w-4 h-4 mr-2" /> Post a Job
+                      <ArrowRight className="w-4 h-4 mr-2" /> Post Opportunity
                     </Link>
                   </Button>
                 </CardContent>

@@ -3,8 +3,10 @@ import { db } from "@workspace/db";
 import {
   jobsTable, usersTable, topicFollowsTable, topicsTable,
   creatorProfilesTable, userTrustScoresTable, postsTable,
+  opportunityApplicationsTable, conversationsTable, conversationParticipantsTable, messagesTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, or, isNull, gt, sql, inArray, gte } from "drizzle-orm";
+import { z } from "zod";
 import { getSessionUserId } from "../lib/auth";
 import { getUserWithCounts } from "../features/profiles/profile.service";
 import { notify } from "../features/notifications/notification.service";
@@ -229,6 +231,84 @@ router.post("/", async (req, res) => {
     ...enriched,
     message: isSuspicious ? "Your listing is being reviewed" : undefined,
   });
+});
+
+const applyOpportunitySchema = z.object({
+  mode: z.enum(["apply", "apply_and_message"]),
+  message: z.string().max(5_000).optional(),
+  proposedBudget: z.number().positive().optional(),
+  proposedCurrency: z.string().length(3).default("USD"),
+});
+
+router.post("/:id/apply", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid opportunity id" });
+
+  const parsed = applyOpportunitySchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid application" });
+  const data = parsed.data;
+  const [job] = await db.select().from(jobsTable).where(and(eq(jobsTable.id, id), eq(jobsTable.isActive, true)));
+  if (!job) return res.status(404).json({ error: "Opportunity not found" });
+  if (job.authorId === viewerId) return res.status(400).json({ error: "You cannot apply to your own opportunity" });
+
+  const [existing] = await db.select({ id: opportunityApplicationsTable.id })
+    .from(opportunityApplicationsTable)
+    .where(and(eq(opportunityApplicationsTable.jobId, id), eq(opportunityApplicationsTable.applicantId, viewerId)));
+  if (existing) return res.status(409).json({ error: "You have already applied to this opportunity" });
+
+  let conversationId: number | null = null;
+  const result = await db.transaction(async (tx) => {
+    if (data.mode === "apply_and_message") {
+      const [conversation] = await tx.insert(conversationsTable).values({ isGroup: false, opportunityId: id }).returning();
+      conversationId = conversation.id;
+      await tx.insert(conversationParticipantsTable).values([
+        { conversationId: conversation.id, userId: viewerId, unreadCount: 0 },
+        { conversationId: conversation.id, userId: job.authorId, unreadCount: 1 },
+      ]);
+      await tx.insert(messagesTable).values({
+        conversationId: conversation.id,
+        senderId: viewerId,
+        content: data.message?.trim() || `I would like to apply for ${job.title}.`,
+        deliveredAt: new Date(),
+      });
+    }
+    const [application] = await tx.insert(opportunityApplicationsTable).values({
+      jobId: id,
+      applicantId: viewerId,
+      message: data.message?.trim() || null,
+      proposedBudget: data.proposedBudget ?? null,
+      proposedCurrency: data.proposedCurrency.toUpperCase(),
+      conversationId,
+    }).returning();
+    return application;
+  });
+
+  await notify({ userId: job.authorId, actorId: viewerId, type: "system", title: "New opportunity application", message: `Someone applied to "${job.title.slice(0, 100)}".`, url: conversationId ? `/messages?conv=${conversationId}` : "/workspace?tab=work" });
+  return res.status(201).json({ application: result, conversationId });
+});
+
+router.get("/applications", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const applications = await db.select({
+    id: opportunityApplicationsTable.id,
+    jobId: opportunityApplicationsTable.jobId,
+    applicantId: opportunityApplicationsTable.applicantId,
+    message: opportunityApplicationsTable.message,
+    proposedBudget: opportunityApplicationsTable.proposedBudget,
+    proposedCurrency: opportunityApplicationsTable.proposedCurrency,
+    status: opportunityApplicationsTable.status,
+    conversationId: opportunityApplicationsTable.conversationId,
+    createdAt: opportunityApplicationsTable.createdAt,
+    jobTitle: jobsTable.title,
+    jobAuthorId: jobsTable.authorId,
+  }).from(opportunityApplicationsTable)
+    .innerJoin(jobsTable, eq(jobsTable.id, opportunityApplicationsTable.jobId))
+    .where(or(eq(opportunityApplicationsTable.applicantId, viewerId), eq(jobsTable.authorId, viewerId)))
+    .orderBy(desc(opportunityApplicationsTable.createdAt));
+  return res.json({ applications });
 });
 
 // ── GET /my-matches - top matched opportunities for the logged-in creator ──────

@@ -143,9 +143,9 @@ function CreatorCard({ creator, checkoutEnabled, onCheckout }: { creator: Creato
             <CreditCard className="w-3 h-3" /> Pay
           </Button>
         ) : (
-          <Link href={`/workspace?tab=collaborate&to=${user.username}&type=commission`}>
+          <Link href={`/profile/${user.username}?action=collaborate`}>
             <Button size="sm" className="gap-1 text-xs h-8">
-              <Briefcase className="w-3 h-3" /> Hire
+              <Briefcase className="w-3 h-3" /> Request collaboration
             </Button>
           </Link>
         )}

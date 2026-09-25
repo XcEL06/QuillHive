@@ -118,7 +118,7 @@ export default function PostJob() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
               <Briefcase className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-bold font-serif">Post an Opportunity</h1>
+            <h1 className="text-2xl font-bold font-serif">Post Opportunity</h1>
           </div>
           <p className="text-muted-foreground ml-11 text-sm">
             Reach verified creators - ranked by skill endorsements, creator level, and published proof-of-work.

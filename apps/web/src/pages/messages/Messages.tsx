@@ -9,13 +9,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck } from 'lucide-react';
+import { Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck, DollarSign } from 'lucide-react';
 import NewConversationModal from '@/components/messages/NewConversationModal';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { formatDistanceToNow } from 'date-fns';
 import { useSocketEvent, useJoinConversation } from '@/hooks/useSocket';
 import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
+import { getStoredToken } from '@/lib/api';
 
 interface LocalMessage {
   id: number;
@@ -33,6 +34,16 @@ interface LocalMessage {
   };
 }
 
+interface PaymentProposal {
+  id: number;
+  proposerId: number;
+  amount: number;
+  currency: string;
+  note?: string | null;
+  status: string;
+  createdAt: string;
+}
+
 export default function Messages() {
   usePageTitle('Messages');
   const { user: currentUser } = useAuthStore();
@@ -43,6 +54,10 @@ export default function Messages() {
   const [isNewConvOpen, setIsNewConvOpen] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
+  const [paymentProposals, setPaymentProposals] = useState<PaymentProposal[]>([]);
+  const [proposalAmount, setProposalAmount] = useState('');
+  const [proposalCurrency, setProposalCurrency] = useState('USD');
+  const [proposalNote, setProposalNote] = useState('');
   const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set());
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
@@ -63,10 +78,24 @@ export default function Messages() {
   }, [messages]);
 
   useEffect(() => {
+    if (!activeConvId) { setPaymentProposals([]); return; }
+    const token = getStoredToken();
+    void fetch(`/api/messages/conversations/${activeConvId}/payment-proposals`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    }).then((response) => response.ok ? response.json() : []).then((data) => setPaymentProposals(Array.isArray(data) ? data : [])).catch(() => setPaymentProposals([]));
+  }, [activeConvId]);
+
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [localMessages]);
 
   useJoinConversation(activeConvId);
+
+  useSocketEvent<PaymentProposal>('payment:proposal', useCallback((proposal) => {
+    if (proposal && !paymentProposals.some((current) => current.id === proposal.id)) {
+      setPaymentProposals((current) => [...current, proposal]);
+    }
+  }, [paymentProposals]));
 
   useSocketEvent<LocalMessage & { conversationId: number }>('message:receive', useCallback((msg) => {
     if (msg.conversationId !== activeConvId) {
@@ -161,6 +190,32 @@ export default function Messages() {
     e.preventDefault();
     if (!messageText.trim() || !activeConvId) return;
     sendMsg({ data: { conversationId: activeConvId, content: messageText } });
+  };
+
+  const proposePayment = async () => {
+    if (!activeConvId || !proposalAmount || Number(proposalAmount) <= 0) return;
+    const token = getStoredToken();
+    const response = await fetch(`/api/messages/conversations/${activeConvId}/payment-proposals`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ amount: Number(proposalAmount), currency: proposalCurrency, note: proposalNote.trim() || undefined }),
+    });
+    const data = await response.json();
+    if (!response.ok) return;
+    setPaymentProposals((current) => [...current, data]);
+    setProposalAmount('');
+    setProposalNote('');
+  };
+
+  const updatePaymentProposal = async (proposalId: number, status: 'accepted' | 'rejected') => {
+    if (!activeConvId) return;
+    const token = getStoredToken();
+    const response = await fetch(`/api/messages/conversations/${activeConvId}/payment-proposals/${proposalId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ status }),
+    });
+    if (response.ok) setPaymentProposals((current) => current.map((proposal) => proposal.id === proposalId ? { ...proposal, status } : proposal));
   };
 
   const handleSelectConv = (convId: number) => {
@@ -351,6 +406,14 @@ export default function Messages() {
                   ) : (
                     <p className="text-xs text-muted-foreground">@{otherUser?.username}</p>
                   )}
+                </div>
+              </div>
+
+              <div className="border-b border-border/50 bg-muted/20 px-6 py-3">
+                <div className="flex items-center gap-2 mb-2"><DollarSign className="w-4 h-4 text-primary" /><p className="text-xs font-semibold">Payment terms</p><span className="text-[10px] text-muted-foreground">Propose or counter a budget/rate</span></div>
+                <div className="space-y-2">
+                  {paymentProposals.map((proposal) => <div key={proposal.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs"><span className="font-semibold">{proposal.currency} {proposal.amount.toLocaleString()}</span><span className="text-muted-foreground">{proposal.note || 'No note'}</span><span className="ml-auto rounded-full bg-muted px-2 py-0.5 capitalize">{proposal.status}</span>{proposal.status === 'proposed' && proposal.proposerId !== currentUser?.id && <><Button size="sm" className="h-6 text-[10px]" onClick={() => void updatePaymentProposal(proposal.id, 'accepted')}>Accept</Button><Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => void updatePaymentProposal(proposal.id, 'rejected')}>Decline</Button></>}</div>)}
+                  <div className="flex flex-wrap items-center gap-2"><Input className="h-8 w-24 text-xs" type="number" min="0" placeholder="Amount" value={proposalAmount} onChange={(event) => setProposalAmount(event.target.value)} /><Input className="h-8 w-16 text-xs uppercase" maxLength={3} value={proposalCurrency} onChange={(event) => setProposalCurrency(event.target.value.toUpperCase())} /><Input className="h-8 min-w-40 flex-1 text-xs" placeholder="Scope, timing, or counter terms" value={proposalNote} onChange={(event) => setProposalNote(event.target.value)} /><Button size="sm" className="h-8" onClick={() => void proposePayment()} disabled={!proposalAmount}><DollarSign className="mr-1 h-3.5 w-3.5" />Propose</Button></div>
                 </div>
               </div>
 
