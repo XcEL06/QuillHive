@@ -74,12 +74,17 @@ analyticsRouter.get("/portfolio-views", requireAuth, async (req: any, res) => {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const [portfolioViewsRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
+    .select({ count: sql<number>`count(distinct ${profileViewsTable.viewerUserId})::int` })
     .from(profileViewsTable)
-    .where(and(eq(profileViewsTable.profileUserId, userId), gte(profileViewsTable.viewedAt, thirtyDaysAgo)));
+    .where(and(
+      eq(profileViewsTable.profileUserId, userId),
+      gte(profileViewsTable.viewedAt, thirtyDaysAgo),
+      sql`${profileViewsTable.viewerUserId} IS NOT NULL`,
+      sql`${profileViewsTable.viewerUserId} IS DISTINCT FROM ${userId}`,
+    ));
 
   const [recruiterViewsRow] = await db
-    .select({ count: sql<number>`count(*)::int` })
+    .select({ count: sql<number>`count(distinct ${profileViewsTable.viewerUserId})::int` })
     .from(profileViewsTable)
     .where(and(
       eq(profileViewsTable.profileUserId, userId),

@@ -233,6 +233,53 @@ router.post("/", async (req, res) => {
   });
 });
 
+const updateJobSchema = z.object({
+  title: z.string().trim().min(1).max(180).optional(),
+  description: z.string().trim().min(1).max(50_000).optional(),
+  type: z.string().trim().min(1).max(50).optional(),
+  skills: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
+  compensation: z.string().max(200).nullable().optional(),
+  remote: z.boolean().optional(),
+  location: z.string().max(200).nullable().optional(),
+  isPaid: z.boolean().optional(),
+  budget: z.number().nonnegative().nullable().optional(),
+  companyName: z.string().max(200).nullable().optional(),
+  applyUrl: z.string().url().nullable().optional(),
+  applyEmail: z.string().email().nullable().optional(),
+  category: z.string().max(80).nullable().optional(),
+}).strict().refine(data => Object.keys(data).length > 0, "At least one field is required");
+
+router.patch("/:id", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid opportunity id" });
+
+  const parsed = updateJobSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid opportunity" });
+
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, id));
+  if (!job) return res.status(404).json({ error: "Opportunity not found" });
+  if (job.authorId !== viewerId) return res.status(403).json({ error: "Forbidden" });
+
+  const data = parsed.data;
+  const { skills, ...jobFields } = data;
+  const update: Partial<typeof jobsTable.$inferInsert> = {
+    ...jobFields,
+    ...(skills ? { skills: JSON.stringify(skills) } : {}),
+  };
+  const nextTitle = data.title ?? job.title;
+  const nextDescription = data.description ?? job.description;
+  const isSuspicious = SCAM_PATTERNS.some(pattern => pattern.test(`${nextTitle} ${nextDescription}`));
+  if (isSuspicious) {
+    update.isApproved = false;
+    update.moderationStatus = "under_review";
+  }
+
+  const [updated] = await db.update(jobsTable).set(update).where(eq(jobsTable.id, id)).returning();
+  return res.json(await enrichJob(updated, viewerId));
+});
+
 const applyOpportunitySchema = z.object({
   mode: z.enum(["apply", "apply_and_message"]),
   message: z.string().max(5_000).optional(),
@@ -465,12 +512,14 @@ router.get("/:id", async (req, res) => {
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, id));
   if (!job) return res.status(404).json({ error: "Job not found" });
 
-  // Fire-and-forget view increment (non-blocking, never crashes the request)
-  void db
-    .update(jobsTable)
-    .set({ viewCount: sql`${jobsTable.viewCount} + 1` })
-    .where(eq(jobsTable.id, id))
-    .catch(() => undefined);
+  if (job.authorId !== viewerId) {
+    // Fire-and-forget view increment (non-blocking, never crashes the request)
+    void db
+      .update(jobsTable)
+      .set({ viewCount: sql`${jobsTable.viewCount} + 1` })
+      .where(eq(jobsTable.id, id))
+      .catch(() => undefined);
+  }
 
   const enriched = await enrichJob(job, viewerId);
   return res.json(enriched);

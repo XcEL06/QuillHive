@@ -268,6 +268,7 @@ export default function Profile() {
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [addPortfolioOpen, setAddPortfolioOpen] = useState(false);
+  const [editingPortfolioId, setEditingPortfolioId] = useState<number | null>(null);
   const [portfolioForm, setPortfolioForm] = useState({ title: '', description: '', mediaUrl: '', category: 'general', visibility: 'public' });
   const [isSavingPortfolio, setIsSavingPortfolio] = useState(false);
   const [viewItem, setViewItem] = useState<PortfolioItem | null>(null);
@@ -441,18 +442,34 @@ export default function Profile() {
     }
     setIsSavingPortfolio(true);
     try {
-      const res = await fetch('/api/gallery', {
-        method: 'POST',
+      const res = await fetch(editingPortfolioId ? `/api/gallery/${editingPortfolioId}` : '/api/gallery', {
+        method: editingPortfolioId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify(portfolioForm),
       });
       if (!res.ok) throw new Error('Failed');
-      toast({ title: t('profile.portfolioItemAdded', 'Portfolio item added!') });
+      const savedItem = await res.json() as PortfolioItem;
+      toast({ title: editingPortfolioId ? 'Portfolio item updated.' : t('profile.portfolioItemAdded', 'Portfolio item added!') });
       setAddPortfolioOpen(false);
+      setEditingPortfolioId(null);
       setPortfolioForm({ title: '', description: '', mediaUrl: '', category: 'general', visibility: 'public' });
-      if (data?.user?.id) fetchPortfolio(data.user.id);
+      setPortfolioItems(items => editingPortfolioId
+        ? items.map(item => item.id === savedItem.id ? savedItem : item)
+        : [savedItem, ...items]);
     } catch { toast({ title: t('profile.portfolioAddFailed', 'Failed to add item'), variant: 'destructive' }); }
     finally { setIsSavingPortfolio(false); }
+  };
+
+  const handleEditPortfolio = (item: PortfolioItem) => {
+    setEditingPortfolioId(item.id);
+    setPortfolioForm({
+      title: item.title,
+      description: item.description ?? '',
+      mediaUrl: item.mediaUrl,
+      category: item.category,
+      visibility: item.visibility,
+    });
+    setAddPortfolioOpen(true);
   };
 
   const handleDeletePortfolio = async (id: number) => {
@@ -570,11 +587,6 @@ export default function Profile() {
               <>
                 <Link href="/settings">
                   <Button variant="outline" className="rounded-xl border-border/80">{t('profile.editProfile', 'Edit Profile')}</Button>
-                </Link>
-                <Link href={`/portfolio/${user.username}`}>
-                  <Button variant="outline" className="rounded-xl gap-2" data-testid="button-view-portfolio">
-                    <Briefcase className="w-4 h-4" /> {t('profile.viewPortfolio', 'View Portfolio')}
-                  </Button>
                 </Link>
                 <Button variant="outline" onClick={openEditCreator} className="rounded-xl gap-2">
                   <Pencil className="w-4 h-4" /> {t('profile.creatorProfile', 'Creator Profile')}
@@ -909,7 +921,7 @@ export default function Profile() {
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-serif font-semibold">{t('profile.portfolio', 'Portfolio')}</h2>
               {isMe && (
-                <Button size="sm" onClick={() => setAddPortfolioOpen(true)} className="rounded-xl gap-2">
+                <Button size="sm" onClick={() => { setEditingPortfolioId(null); setPortfolioForm({ title: '', description: '', mediaUrl: '', category: 'general', visibility: 'public' }); setAddPortfolioOpen(true); }} className="rounded-xl gap-2">
                   <Plus className="w-4 h-4" /> {t('profile.addItemShort', 'Add Item')}
                 </Button>
               )}
@@ -939,10 +951,16 @@ export default function Profile() {
                       </div>
                     </div>
                     {isMe && (
-                      <button onClick={e => { e.stopPropagation(); handleDeletePortfolio(item.id); }}
-                        className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                      <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button type="button" title="Edit portfolio item" aria-label="Edit portfolio item" onClick={e => { e.stopPropagation(); handleEditPortfolio(item); }}
+                          className="bg-black/60 text-white rounded-full p-1.5 hover:bg-primary">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button type="button" title="Delete portfolio item" aria-label="Delete portfolio item" onClick={e => { e.stopPropagation(); handleDeletePortfolio(item.id); }}
+                          className="bg-black/60 text-white rounded-full p-1.5 hover:bg-red-600">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     )}
                   </div>
                 ))}
@@ -951,7 +969,7 @@ export default function Profile() {
 
             <Dialog open={addPortfolioOpen} onOpenChange={setAddPortfolioOpen}>
               <DialogContent className="sm:max-w-md rounded-2xl">
-                <DialogHeader><DialogTitle className="font-serif text-xl">{t('profile.addItem', 'Add Portfolio Item')}</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle className="font-serif text-xl">{editingPortfolioId ? 'Edit Portfolio Item' : t('profile.addItem', 'Add Portfolio Item')}</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
                   <div className="space-y-2"><Label>{t('profile.titleLabel', 'Title')}</Label><Input placeholder={t('profile.portfolioTitlePlaceholder', 'e.g., Midnight Bloom')} value={portfolioForm.title} onChange={e => setPortfolioForm(f => ({ ...f, title: e.target.value }))} className="rounded-xl" /></div>
                   <div className="space-y-2"><Label>{t('profile.descriptionLabel', 'Description')}</Label><Textarea placeholder={t('profile.portfolioDescriptionPlaceholder', 'Tell us about this piece...')} value={portfolioForm.description} onChange={e => setPortfolioForm(f => ({ ...f, description: e.target.value }))} className="rounded-xl" /></div>

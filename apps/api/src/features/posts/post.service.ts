@@ -664,15 +664,17 @@ export async function toggleLike(postId: number, userId: number) {
     await db.delete(likesTable).where(and(eq(likesTable.postId, postId), eq(likesTable.userId, userId)));
     liked = false;
   } else {
-    await db.insert(likesTable).values({ postId, userId });
+    const [newLike] = await db.insert(likesTable).values({ postId, userId })
+      .onConflictDoNothing()
+      .returning({ id: likesTable.id });
     liked = true;
 
     const [post] = await db.select().from(postsTable).where(eq(postsTable.id, postId));
-    if (post) {
+    if (post && newLike) {
       const { checkLikeMilestones } = await import("../achievements/achievement.service");
       void checkLikeMilestones(postId, post.authorId);
     }
-    if (post && post.authorId !== userId) {
+    if (post && newLike && post.authorId !== userId) {
       const liker = await getUserWithCounts(userId, null);
       const [notif] = await db
         .insert(notificationsTable)
@@ -689,7 +691,7 @@ export async function toggleLike(postId: number, userId: number) {
     }
 
     // ── Trending notification ─────────────────────────────────────────────
-    if (post && post.authorId !== userId) {
+    if (post && newLike && post.authorId !== userId) {
       const TRENDING_THRESHOLDS = [50, 100, 250, 500];
       const window24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
 

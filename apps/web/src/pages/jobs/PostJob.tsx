@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,8 @@ const OPPORTUNITY_TYPES = [
 ];
 
 export default function PostJob() {
-  const [, setLocation] = useLocation();
+  const [locationPath, setLocation] = useLocation();
+  const editId = new URLSearchParams(locationPath.split("?")[1] ?? "").get("edit");
   const { toast } = useToast();
   const token = getStoredToken();
 
@@ -45,6 +46,51 @@ export default function PostJob() {
   const [skillInput, setSkillInput]         = useState('');
   const [skills, setSkills]                 = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting]     = useState(false);
+  const [isLoadingEdit, setIsLoadingEdit]   = useState(Boolean(editId));
+
+  useEffect(() => {
+    if (!editId) return;
+    let cancelled = false;
+    setIsLoadingEdit(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/jobs/${editId}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (!res.ok) throw new Error("Could not load this opportunity");
+        const job: {
+          title?: string; type?: string; companyName?: string | null; description?: string;
+          budget?: number | string | null; compensation?: string | null; remote?: boolean;
+          location?: string | null; applyUrl?: string | null; applyEmail?: string | null; skills?: string[];
+        } = await res.json();
+        if (cancelled) return;
+        setTitle(job.title ?? '');
+        setType(job.type ?? 'freelance');
+        setCompanyName(job.companyName ?? '');
+        setDescription(job.description ?? '');
+        setRemote(job.remote ?? true);
+        setLocation2(job.location ?? '');
+        setApplyUrl(job.applyUrl ?? '');
+        setApplyEmail(job.applyEmail ?? '');
+        setSkills(Array.isArray(job.skills) ? job.skills : []);
+        const compensation = job.compensation?.match(/^([A-Z]{3})\s+([\d.]+)(?:[–-]([\d.]+))?(\/hr| fixed)$/);
+        if (compensation) {
+          setCurrency(compensation[1]);
+          setBudgetMin(compensation[2]);
+          setBudgetMax(compensation[3] ?? '');
+          setRateType(compensation[4] === '/hr' ? 'hourly' : 'fixed');
+        } else {
+          setBudgetMin(job.budget == null ? '' : String(job.budget));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast({ title: error instanceof Error ? error.message : 'Could not load this opportunity', variant: 'destructive' });
+          setLocation('/workspace?tab=work');
+        }
+      } finally {
+        if (!cancelled) setIsLoadingEdit(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [editId, token, setLocation, toast]);
 
   const addSkill = () => {
     const s = skillInput.trim();
@@ -75,21 +121,21 @@ export default function PostJob() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/jobs', {
-        method: 'POST',
+      const res = await fetch(editId ? `/api/jobs/${editId}` : '/api/jobs', {
+        method: editId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           title:        title.trim(),
           type,
           description:  fullDescription,
           skills,
-          compensation: compensationStr,
-          budget:       minVal ?? undefined,
-          companyName:  companyName.trim() || undefined,
+          compensation: compensationStr ?? null,
+          budget:       minVal ?? null,
+          companyName:  companyName.trim() || null,
           remote,
-          location:     !remote && location.trim() ? location.trim() : undefined,
-          applyUrl:     applyUrl.trim() || undefined,
-          applyEmail:   applyEmail.trim() || undefined,
+          location:     !remote && location.trim() ? location.trim() : null,
+          applyUrl:     applyUrl.trim() || null,
+          applyEmail:   applyEmail.trim() || null,
           isPaid:       !!minVal && minVal > 0,
           category:     type,
         }),
@@ -97,10 +143,10 @@ export default function PostJob() {
       const data: { error?: string; id?: number; message?: string } = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to post');
       toast({
-        title: data.message ? 'Opportunity submitted for review' : 'Opportunity posted! 🎉',
-        description: data.message ?? 'Creators can now discover your opportunity.',
+        title: editId ? 'Opportunity updated.' : data.message ? 'Opportunity submitted for review' : 'Opportunity posted! 🎉',
+        description: data.message ?? (editId ? undefined : 'Creators can now discover your opportunity.'),
       });
-      setLocation('/jobs');
+      setLocation(editId ? '/workspace?tab=work' : '/jobs');
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : 'Failed to post', variant: 'destructive' });
     } finally {
@@ -118,7 +164,7 @@ export default function PostJob() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
               <Briefcase className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-bold font-serif">Post Opportunity</h1>
+            <h1 className="text-2xl font-bold font-serif">{editId ? 'Edit Opportunity' : 'Post Opportunity'}</h1>
           </div>
           <p className="text-muted-foreground ml-11 text-sm">
             Reach verified creators - ranked by skill endorsements, creator level, and published proof-of-work.
@@ -326,10 +372,10 @@ export default function PostJob() {
             type="submit"
             size="lg"
             className="w-full h-12 rounded-xl font-semibold text-base gap-2"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isLoadingEdit}
           >
-            {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-            {isSubmitting ? 'Posting…' : 'Post Opportunity'}
+            {isSubmitting || isLoadingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
+            {isLoadingEdit ? 'Loading…' : isSubmitting ? 'Saving…' : editId ? 'Save Changes' : 'Post Opportunity'}
           </Button>
         </form>
       </div>

@@ -25,12 +25,29 @@ function engagementRate(interactions: number, reach: number): number {
 }
 
 export async function recordPostView(postId: number, viewerId: number | null, req: Request) {
+  const [post] = await db
+    .select({ authorId: postsTable.authorId })
+    .from(postsTable)
+    .where(eq(postsTable.id, postId));
+  if (!post || (viewerId !== null && post.authorId === viewerId)) return;
+
   const cfCountry = req.headers["cf-ipcountry"] as string | undefined;
   const country = cfCountry && cfCountry !== "XX" ? cfCountry : null;
+  const ipHash = hashIp(getIp(req));
+  const viewerFilter = viewerId === null
+    ? eq(postViewsTable.ipHash, ipHash)
+    : eq(postViewsTable.viewerId, viewerId);
+  const [existingView] = await db
+    .select({ id: postViewsTable.id })
+    .from(postViewsTable)
+    .where(and(eq(postViewsTable.postId, postId), viewerFilter))
+    .limit(1);
+  if (existingView) return;
+
   await db.insert(postViewsTable).values({
     postId,
     viewerId,
-    ipHash: hashIp(getIp(req)),
+    ipHash,
     userAgent: req.headers["user-agent"]?.slice(0, 500) ?? null,
     country: country ?? null,
   });
@@ -38,7 +55,10 @@ export async function recordPostView(postId: number, viewerId: number | null, re
     const [row] = await db
       .select({ total: sql<number>`COUNT(*)::int` })
       .from(postViewsTable)
-      .where(eq(postViewsTable.postId, postId));
+      .where(and(
+        eq(postViewsTable.postId, postId),
+        sql`${postViewsTable.viewerId} IS DISTINCT FROM ${post.authorId}`,
+      ));
     const totalViews = numberValue(row?.total);
     emitToPost(postId, "post:view", { postId, totalViews });
 
@@ -143,7 +163,10 @@ export async function getGeographyAnalytics(userId: number): Promise<Array<{ cou
       views: sql<number>`COUNT(*)::int`,
     })
     .from(postViewsTable)
-    .where(inArray(postViewsTable.postId, postIds))
+    .where(and(
+      inArray(postViewsTable.postId, postIds),
+      sql`${postViewsTable.viewerId} IS DISTINCT FROM ${userId}`,
+    ))
     .groupBy(sql`COALESCE(${postViewsTable.country}, 'Unknown')`)
     .orderBy(sql`COUNT(*) DESC`)
     .limit(20);
@@ -214,13 +237,19 @@ export async function getUserAnalytics(userId: number) {
       reach: sql<number>`count(distinct coalesce(${postViewsTable.viewerId}::text, ${postViewsTable.ipHash}))::int`,
     })
     .from(postViewsTable)
-    .where(inArray(postViewsTable.postId, postIds));
+    .where(and(
+      inArray(postViewsTable.postId, postIds),
+      sql`${postViewsTable.viewerId} IS DISTINCT FROM ${userId}`,
+    ));
   const [likes] = await db.select({ count: count() }).from(likesTable).where(inArray(likesTable.postId, postIds));
   const [comments] = await db.select({ count: count() }).from(commentsTable).where(inArray(commentsTable.postId, postIds));
   const topPosts = await Promise.all(
     postIds.slice(0, 10).map(async postId => {
       const [post] = await db.select().from(postsTable).where(eq(postsTable.id, postId));
-      const [postViews] = await db.select({ count: count() }).from(postViewsTable).where(eq(postViewsTable.postId, postId));
+      const [postViews] = await db.select({ count: count() }).from(postViewsTable).where(and(
+        eq(postViewsTable.postId, postId),
+        sql`${postViewsTable.viewerId} IS DISTINCT FROM ${userId}`,
+      ));
       const [postLikes] = await db.select({ count: count() }).from(likesTable).where(eq(likesTable.postId, postId));
       const [postComments] = await db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.postId, postId));
       return {
@@ -261,7 +290,10 @@ export async function getPostAnalytics(postId: number, viewerId: number) {
       reach: sql<number>`count(distinct coalesce(${postViewsTable.viewerId}::text, ${postViewsTable.ipHash}))::int`,
     })
     .from(postViewsTable)
-    .where(eq(postViewsTable.postId, postId));
+    .where(and(
+      eq(postViewsTable.postId, postId),
+      sql`${postViewsTable.viewerId} IS DISTINCT FROM ${post.authorId}`,
+    ));
   const [likes] = await db.select({ count: count() }).from(likesTable).where(eq(likesTable.postId, postId));
   const [comments] = await db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.postId, postId));
   const [reading] = await db

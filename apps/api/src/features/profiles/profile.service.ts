@@ -214,6 +214,7 @@ export async function enrichPost(post: any, viewerId: number | null) {
         and(
           eq(postViewsTable.postId, post.id),
           sql`${postViewsTable.createdAt} > ${since}`,
+          sql`${postViewsTable.viewerId} IS DISTINCT FROM ${post.authorId}`,
         ),
       );
     isTrending = (trendRow?.count ?? 0) >= 50;

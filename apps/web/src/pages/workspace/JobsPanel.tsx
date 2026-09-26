@@ -5,10 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Briefcase, MapPin, DollarSign, Clock, Plus, Star,
+  Briefcase, MapPin, DollarSign, Clock, Plus, Star, Pencil,
   Sparkles, Zap, ChevronRight, Target,
 } from 'lucide-react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getStoredToken } from '@/lib/api';
@@ -125,6 +125,7 @@ function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: numbe
 }
 
 export function JobsPanel() {
+  const [, setLocation] = useLocation();
   const { user } = useAuthStore();
   const token = getStoredToken();
   const [typeFilter, setTypeFilter] = useState<JobType>('all');
@@ -205,6 +206,11 @@ export function JobsPanel() {
                     }`}>{job.type}</Badge>
                     {matchData && <MatchBadge score={matchData.score} />}
                   </div>
+                  {job.author.id === user?.id && (
+                    <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setLocation(`/jobs/post?edit=${job.id}`)}>
+                      <Pencil className="w-3.5 h-3.5" /> Edit
+                    </Button>
+                  )}
                   <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined)} />
                   <ReportDialog targetType="job" targetId={job.id} label="Report" />
                 </div>

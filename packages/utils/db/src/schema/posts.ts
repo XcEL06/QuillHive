@@ -94,6 +94,7 @@ export const likesTable = pgTable("likes", {
 }, (t) => ({
   idxLikesPostId: index("idx_likes_post_id").on(t.postId),
   idxLikesUserId: index("idx_likes_user_id").on(t.userId),
+  uniqueLikePerUserPost: uniqueIndex("likes_user_post_unique").on(t.postId, t.userId),
 }));
 
 export const postSharesTable = pgTable("post_shares", {

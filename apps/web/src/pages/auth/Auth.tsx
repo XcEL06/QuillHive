@@ -349,18 +349,6 @@ export default function Auth() {
           <p className="text-xs text-muted-foreground text-center mt-1">
             Build a visible creative track record and get found for real paid opportunities.
           </p>
-          <div className="flex items-center gap-6 mt-8">
-            {[
-              { label: "Members", value: "10K+" },
-              { label: "Works Published", value: "50K+" },
-              { label: "Countries", value: "80+" },
-            ].map(stat => (
-              <div key={stat.label}>
-                <p className="text-2xl font-bold text-white">{stat.value}</p>
-                <p className="text-white/50 text-sm">{stat.label}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
 
