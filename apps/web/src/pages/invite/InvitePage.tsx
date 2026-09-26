@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link2, Copy, Check, Users, Gift, Share2, ChevronRight } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
-import { getStoredToken } from "@/lib/api";
+import { apiFetch, getApiErrorMessage } from "@/lib/api";
 import { BackButton } from "@/components/ui/BackButton";
 
 interface InviteCode {
@@ -27,7 +27,6 @@ interface GenerateInviteResponse {
 
 export default function InvitePage() {
   const { user } = useAuthStore();
-  const token = getStoredToken();
   const [data, setData] = useState<InviteStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -37,25 +36,31 @@ export default function InvitePage() {
   const appUrl = import.meta.env.VITE_PUBLIC_APP_URL as string | undefined ?? window.location.origin;
 
   useEffect(() => {
-    void fetch("/api/invites/mine", {
-      credentials: "include",
-      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    })
-      .then(r => r.json())
-      .then((d: InviteStats) => setData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [token]);
+    let active = true;
+    void apiFetch("/api/invites/mine")
+      .then(async response => {
+        if (!response.ok) throw new Error(await getApiErrorMessage(response, "Could not load your invite codes."));
+        const result = await response.json() as Partial<InviteStats>;
+        if (!Array.isArray(result.codes)) throw new Error("The invite service returned an invalid response.");
+        if (active) setData({ codes: result.codes, totalInvited: result.totalInvited ?? 0 });
+      })
+      .catch(error => {
+        if (active) setError(error instanceof Error ? error.message : "Could not load your invite codes.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, []);
 
   const generateCode = async () => {
     setGenerating(true);
     setError("");
     try {
-      const res = await fetch("/api/invites/generate", {
+      const res = await apiFetch("/api/invites/generate", {
         method: "POST",
-        credentials: "include",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       });
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, "Failed to generate invite code."));
       const d = await res.json() as GenerateInviteResponse;
       const invite = d.invite;
       if (invite) {
@@ -67,8 +72,8 @@ export default function InvitePage() {
       } else {
         setError(d.error ?? "Failed to generate invite code.");
       }
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Network error. Please try again.");
     } finally {
       setGenerating(false);
     }
@@ -82,8 +87,9 @@ export default function InvitePage() {
     });
   };
 
-  const activeCode = data?.codes.find(c => c.isActive && !c.usedBy);
-  const usedCodes = (Array.isArray(data?.codes) ? data.codes : []).filter(c => c.usedBy);
+  const codes = Array.isArray(data?.codes) ? data.codes : [];
+  const activeCode = codes.find(c => c.isActive && !c.usedBy);
+  const usedCodes = codes.filter(c => c.usedBy);
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-4 md:p-8 max-w-2xl mx-auto">
