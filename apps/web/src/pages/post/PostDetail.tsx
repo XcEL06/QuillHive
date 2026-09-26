@@ -519,7 +519,7 @@ export default function PostDetail() {
                   </Button>
                 }
               />
-              {user && (
+              {user && isOwner && post.isPublished && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -693,7 +693,7 @@ export default function PostDetail() {
             <Button
               onClick={() => {
                 setShowLibraryDialog(false);
-                window.location.href = `/library/add?postId=${post.id}&title=${encodeURIComponent(post.title || '')}&summary=${encodeURIComponent((post.content || '').replace(/<[^>]+>/g, '').slice(0, 280))}`;
+                window.location.href = `/library/new?postId=${post.id}`;
               }}
             >
               Continue to Library Form

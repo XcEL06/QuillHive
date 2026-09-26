@@ -19,4 +19,4 @@ Disallow: /write
 Disallow: /library/new
 Disallow: /api/
 
-Sitemap: __APP_URL__/sitemap.xml
+Sitemap: https://quillhive.pages.dev/sitemap.xml

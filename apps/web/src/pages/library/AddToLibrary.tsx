@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,10 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { BookOpen, X, Plus, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getStoredToken } from "@/lib/api";
+import { apiFetch, apiUrl, getApiErrorMessage, getStoredToken } from "@/lib/api";
 import { ImageUploadField } from "@/components/media/ImageUploadField";
 import { BackButton } from "@/components/ui/BackButton";
+import { useAuthStore } from "@/store/auth";
 
 const CATEGORIES = [
   { key: "writing_literature", label: "📝 Writing & Literature" },
@@ -65,11 +66,44 @@ interface FormState {
   tags: string[];
 }
 
+interface SourcePost {
+  id: number;
+  authorId: number;
+  title?: string | null;
+  content: string;
+  excerpt?: string | null;
+  type: string;
+  imageUrl?: string | null;
+  tags?: string[];
+  isPublished: boolean;
+  attachments?: Array<{ url?: string; mimeType?: string }>;
+}
+
+function postContentToText(content: string): string {
+  return content
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, "\n")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export default function AddToLibrary() {
   const [, setLocation] = useLocation();
+  const { user } = useAuthStore();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const [sourcePostId, setSourcePostId] = useState<number | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState("");
 
   const [form, setForm] = useState<FormState>({
     title: "",
@@ -84,6 +118,65 @@ export default function AddToLibrary() {
     isPublic: true,
     tags: [],
   });
+
+  useEffect(() => {
+    const postId = Number(new URLSearchParams(window.location.search).get("postId"));
+    if (!Number.isInteger(postId) || postId <= 0) return;
+
+    let active = true;
+    setSourcePostId(postId);
+    setSourceLoading(true);
+    void apiFetch(`/api/posts/${postId}`)
+      .then(async response => {
+        if (!response.ok) throw new Error(await getApiErrorMessage(response, "Could not load the selected post."));
+        const post = await response.json() as SourcePost;
+        if (post.authorId !== user?.id) throw new Error("Only your own posts can be added to your Library.");
+        if (!post.isPublished) throw new Error("Only published posts can be added to your Library.");
+
+        const plainContent = postContentToText(post.content ?? "");
+        const attachments = Array.isArray(post.attachments) ? post.attachments : [];
+        const imageAttachment = attachments.find(item => item.mimeType?.toLowerCase().startsWith("image/"));
+        const attachment = attachments.find(item =>
+          /^(video|audio)\//i.test(item.mimeType ?? "") || /^(application\/pdf|text\/plain)/i.test(item.mimeType ?? ""),
+        );
+        const mimeType = attachment?.mimeType?.toLowerCase() ?? "";
+        const contentType = mimeType.startsWith("video/") ? "video"
+          : mimeType.startsWith("audio/") ? "audio"
+          : mimeType ? "document" : "article";
+        const summary = (post.excerpt ? postContentToText(post.excerpt) : plainContent).slice(0, 400);
+        const thumbnailSource = post.imageUrl || imageAttachment?.url;
+        const thumbnailUrl = thumbnailSource
+          ? new URL(apiUrl(thumbnailSource), window.location.origin).toString()
+          : "";
+        const mediaUrl = attachment?.url
+          ? new URL(apiUrl(attachment.url), window.location.origin).toString()
+          : "";
+
+        if (!active) return;
+        setForm(current => ({
+          ...current,
+          title: post.title?.trim() || `Post #${post.id}`,
+          summary: summary.length >= 10 ? summary : "A published post from my QuillHive profile.",
+          body: plainContent,
+          category: post.type === "artwork" ? "art_design" : contentType === "video" ? "film_motion" : "writing_literature",
+          contentType,
+          mediaUrl,
+          externalUrl: `${window.location.origin}/post/${post.id}`,
+          thumbnailUrl,
+          license: "all_rights_reserved",
+          isPublic: true,
+          tags: Array.isArray(post.tags) ? post.tags.slice(0, 10) : [],
+        }));
+      })
+      .catch(error => {
+        if (active) setSourceError(error instanceof Error ? error.message : "Could not load the selected post.");
+      })
+      .finally(() => {
+        if (active) setSourceLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [user?.id]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -154,6 +247,11 @@ export default function AddToLibrary() {
     <AppLayout>
       <div className="max-w-2xl mx-auto px-4 py-8">
         <BackButton fallback="/library" />
+        {sourceLoading && <p className="mb-4 text-sm text-muted-foreground">Loading your post…</p>}
+        {sourceError && <p role="alert" className="mb-4 text-sm text-destructive">{sourceError}</p>}
+        {sourcePostId && !sourceLoading && !sourceError && (
+          <p className="mb-4 text-sm text-muted-foreground">Prefilled from your post. Publishing here creates a separate public Library entry.</p>
+        )}
         <div className="flex items-center gap-3 mb-8">
           <div className="p-2 bg-primary/10 rounded-xl">
             <BookOpen className="w-5 h-5 text-primary" />
@@ -346,7 +444,7 @@ export default function AddToLibrary() {
 
           {/* Submit */}
           <div className="flex items-center gap-3 pt-2">
-            <Button type="submit" disabled={submitting} className="flex-1">
+            <Button type="submit" disabled={submitting || sourceLoading} className="flex-1">
               {submitting ? "Publishing..." : "Publish to Library"}
             </Button>
             <Button type="button" variant="outline" onClick={() => window.history.back()}>

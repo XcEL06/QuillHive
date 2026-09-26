@@ -249,7 +249,11 @@ function GroupsList() {
         setForm({ name: '', description: '', privacy: 'public', coverUrl: '' });
         if (fileInputRef.current) fileInputRef.current.value = '';
       },
-      onError: () => toast({ title: t('groups.createFailed', 'Failed to create group'), variant: 'destructive' })
+      onError: (error) => toast({
+        title: t('groups.createFailed', 'Failed to create group'),
+        description: error instanceof Error ? error.message : t('common.tryAgain', 'Please try again.'),
+        variant: 'destructive',
+      })
     }
   });
 
@@ -402,14 +406,14 @@ function GroupsList() {
             <Button
               onClick={() => createGroup({
                 data: {
-                  name: form.name,
+                  name: form.name.trim(),
                   description: form.description || null,
                   category: 'general',
                   coverUrl: form.coverUrl || null,
                   privacy: form.privacy as 'public' | 'private',
                 },
               })}
-              disabled={isCreating || !form.name}
+              disabled={isCreating || isUploadingCover || !form.name.trim()}
               className="w-full rounded-xl"
             >
               {isCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
