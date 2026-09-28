@@ -1,4 +1,4 @@
-import { useState, useEffect, type ComponentType } from 'react';
+import { useState, useEffect, useRef, type ComponentType } from 'react';
 import { useLocation } from 'wouter';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useEditor, EditorContent } from '@tiptap/react';
@@ -144,14 +144,16 @@ export default function Write() {
 
   const [boostCtaPostId, setBoostCtaPostId] = useState<number | null>(null);
   const [serverDraftId, setServerDraftId] = useState<number | null>(null);
-  const serverSaveRef = { current: serverDraftId };
-  serverSaveRef.current = serverDraftId;
+  const serverDraftIdRef = useRef<number | null>(serverDraftId);
+  const draftSavePromiseRef = useRef<Promise<boolean> | null>(null);
+  serverDraftIdRef.current = serverDraftId;
 
   const { mutate: createPost, isPending: isCreating } = useCreatePost({
     mutation: {
       onSuccess: (post) => {
         try { localStorage.removeItem(`qh_draft_${user?.id || 'anon'}`); } catch { }
         setServerDraftId(null);
+        serverDraftIdRef.current = null;
         queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
         if ((post as any).isPublished) {
           const isFirstPost = ((user as any)?.postsCount ?? 1) === 0;
@@ -348,7 +350,8 @@ export default function Write() {
     const id = parseInt(draftIdParam, 10);
     if (!id) return;
     setServerDraftId(id);
-    fetch(`/api/posts/draft/${id}`, {
+    serverDraftIdRef.current = id;
+    fetch(apiUrl(`/api/posts/draft/${id}`), {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.ok ? r.json() : null)
@@ -361,6 +364,11 @@ export default function Write() {
           try { setTagsStr(JSON.parse(d.tags).join(', ')); } catch { setTagsStr(d.tags); }
         }
         if (d.imageUrl) setImageUrl(d.imageUrl);
+        let attachments = d.attachments;
+        if (typeof attachments === 'string') {
+          try { attachments = JSON.parse(attachments); } catch { attachments = []; }
+        }
+        setPostAttachments(Array.isArray(attachments) ? attachments : []);
         if (d.content) editor.commands.setContent(d.content);
         setDraftRestored(true);
         setHasDraft(false);
@@ -387,6 +395,7 @@ export default function Write() {
       if (d.type) setType(d.type);
       if (d.tagsStr) setTagsStr(d.tagsStr);
       if (d.imageUrl) setImageUrl(d.imageUrl);
+      if (Array.isArray(d.postAttachments)) setPostAttachments(d.postAttachments);
       if (d.content && editor) editor.commands.setContent(d.content);
       setDraftRestored(true);
       setHasDraft(false);
@@ -410,6 +419,7 @@ export default function Write() {
         const draft = JSON.stringify({
           title, type, tagsStr,
           imageUrl: imageUrl?.startsWith('data:') ? '' : imageUrl,
+          postAttachments,
           content, savedAt: Date.now(),
         });
         if (draft.length > 200_000) return;
@@ -418,46 +428,67 @@ export default function Write() {
       } catch { }
     }, 30_000);
     return () => window.clearInterval(interval);
-  }, [editor, title, type, tagsStr, imageUrl, DRAFT_KEY]);
+  }, [editor, title, type, tagsStr, imageUrl, postAttachments, DRAFT_KEY]);
 
-  const saveDraftSilently = async () => {
-    if (!editor || !token || editPostId) return;
-    if (!content || content === '<p></p>' || (!title.trim() && !editor.getText().trim())) return;
+  const saveDraftSilently = async (): Promise<boolean> => {
+    if (!editor || !token || editPostId) return false;
+    if (draftSavePromiseRef.current) {
+      const currentSaveSucceeded = await draftSavePromiseRef.current;
+      if (!currentSaveSucceeded) return false;
+      return saveDraftSilently();
+    }
+
+    const draftContent = editor.getHTML();
+    if (!draftContent || editor.isEmpty || (!title.trim() && !editor.getText().trim())) return false;
 
     const body: Record<string, unknown> = {
       title: title || undefined,
-      content,
+      content: draftContent,
       type: type as any,
       tags: tagsStr.split(',').map((tag) => tag.trim()).filter(Boolean),
       imageUrl: imageUrl || undefined,
+      attachments: postAttachments,
       isPublished: false,
     };
-    if (serverSaveRef.current) body.draftId = serverSaveRef.current;
+    if (serverDraftIdRef.current) body.draftId = serverDraftIdRef.current;
 
-    try {
-      const res = await fetch('/api/posts/draft', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const error = await res.json().catch(() => null) as { error?: string } | null;
-        throw new Error(error?.error || 'Draft could not be saved');
+    const savePromise = (async () => {
+      try {
+        const res = await fetch(apiUrl('/api/posts/draft'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const error = await res.json().catch(() => null) as { error?: string } | null;
+          throw new Error(error?.error || 'Draft could not be saved');
+        }
+
+        const data = await res.json() as { draftId?: number };
+        if (data.draftId && !serverDraftIdRef.current) {
+          serverDraftIdRef.current = data.draftId;
+          setServerDraftId(data.draftId);
+        }
+        setLastSavedAt(Date.now());
+        setShowSaved(true);
+        window.setTimeout(() => setShowSaved(false), 1800);
+        return true;
+      } catch (error) {
+        console.error('[write] draft autosave failed', error);
+        setShowSaved(false);
+        toast({
+          title: 'Draft could not be saved',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'destructive',
+        });
+        return false;
       }
-
-      const data = await res.json() as { draftId?: number };
-      if (data.draftId && !serverSaveRef.current) setServerDraftId(data.draftId);
-      setLastSavedAt(Date.now());
-      setShowSaved(true);
-      window.setTimeout(() => setShowSaved(false), 1800);
-    } catch (error) {
-      console.error('[write] draft autosave failed', error);
-      setShowSaved(false);
-      toast({
-        title: 'Draft could not be saved',
-        description: error instanceof Error ? error.message : 'Please try again.',
-        variant: 'destructive',
-      });
+    })();
+    draftSavePromiseRef.current = savePromise;
+    try {
+      return await savePromise;
+    } finally {
+      if (draftSavePromiseRef.current === savePromise) draftSavePromiseRef.current = null;
     }
   };
 
@@ -467,7 +498,7 @@ export default function Write() {
       void saveDraftSilently();
     }, 3_000);
     return () => window.clearTimeout(timer);
-  }, [editor, title, content, tagsStr, type, imageUrl, token, serverDraftId]);
+  }, [editor, title, content, tagsStr, type, imageUrl, postAttachments, token, serverDraftId]);
 
   const checkOriginality = async (content: string): Promise<{ ok: boolean; warning: string | null }> => {
     if (!token || content.replace(/<[^>]+>/g, '').trim().length < 100) return { ok: true, warning: null };
@@ -521,6 +552,11 @@ export default function Write() {
     const content = editor.getHTML();
     if (content.length > 50_000) {
       toast({ title: 'Content is too long', description: 'Keep content under 50,000 characters.', variant: 'destructive' });
+      return;
+    }
+    if (!isPublished) {
+      const saved = await saveDraftSilently();
+      if (saved) toast({ title: t('write.savedAsDraft'), description: t('write.savedAsDraftDesc') });
       return;
     }
     if (isPublished) {

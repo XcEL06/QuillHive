@@ -62,8 +62,8 @@ export const saveDraft = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
 
-  const { draftId, title, content, type, tags, imageUrl } = req.body as {
-    draftId?: number; title?: string; content: string; type?: string; tags?: string[]; imageUrl?: string;
+  const { draftId, title, content, type, tags, imageUrl, attachments } = req.body as {
+    draftId?: number; title?: string; content: string; type?: string; tags?: string[]; imageUrl?: string; attachments?: unknown[];
   };
 
   const VALID_TYPES = ["post", "article", "story", "novel", "artwork", "spark"];
@@ -83,6 +83,7 @@ export const saveDraft = async (req: Request, res: Response) => {
       type: resolvedType,
       tags: JSON.stringify(tags ?? []),
       imageUrl: imageUrl ?? null,
+      attachments: JSON.stringify(attachments ?? []),
       updatedAt: new Date(),
     }).where(eq(postsTable.id, draftId));
     return res.json({ draftId });
@@ -95,6 +96,7 @@ export const saveDraft = async (req: Request, res: Response) => {
     type: resolvedType,
     tags: JSON.stringify(tags ?? []),
     imageUrl: imageUrl ?? null,
+    attachments: JSON.stringify(attachments ?? []),
     isPublished: false,
   }).returning({ id: postsTable.id });
 
@@ -157,6 +159,7 @@ export const getDraft = async (req: Request, res: Response) => {
       content: postsTable.content,
       tags: postsTable.tags,
       imageUrl: postsTable.imageUrl,
+      attachments: postsTable.attachments,
       updatedAt: postsTable.updatedAt,
       createdAt: postsTable.createdAt,
     })

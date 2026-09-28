@@ -52,6 +52,7 @@ const draftBodySchema = z.object({
   type: z.string().max(50).optional(),
   tags: z.array(z.string().min(1).max(40)).max(12).optional(),
   imageUrl: z.string().url().optional(),
+  attachments: z.array(z.any()).max(20).optional(),
 });
 
 export const postsRouter = Router();

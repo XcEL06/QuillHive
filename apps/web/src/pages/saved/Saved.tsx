@@ -17,7 +17,12 @@ export default function Saved() {
   const t = useT();
 
   useEffect(() => {
+    let active = true;
+    let latestRequest = 0;
     const fetchSaved = async () => {
+      const requestId = ++latestRequest;
+      setLoading(true);
+      setError('');
       try {
         const res = await fetch(apiUrl(`/api/users/me/saved?page=${page}&limit=20`), {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -25,20 +30,26 @@ export default function Saved() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not load saved posts');
         const nextPosts = Array.isArray(data.posts) ? data.posts : [];
+        if (!active || requestId !== latestRequest) return;
         setPosts(nextPosts);
         setTotal(Number(data.total) || 0);
         setHasMore(Boolean(data.hasMore));
+        if (nextPosts.length === 0 && page > 1) setPage(current => Math.max(1, current - 1));
       } catch {
+        if (!active || requestId !== latestRequest) return;
         setPosts([]);
         setError('Could not load saved posts. Please try again.');
       } finally {
-        setLoading(false);
+        if (active && requestId === latestRequest) setLoading(false);
       }
     };
     void fetchSaved();
     const refreshSaved = () => void fetchSaved();
     window.addEventListener('quillhive:saved-changed', refreshSaved);
-    return () => window.removeEventListener('quillhive:saved-changed', refreshSaved);
+    return () => {
+      active = false;
+      window.removeEventListener('quillhive:saved-changed', refreshSaved);
+    };
   }, [page, token]);
 
   return (

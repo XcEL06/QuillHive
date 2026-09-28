@@ -8,7 +8,7 @@ import {
   FileText, PenLine, Trash2, Clock, AlertCircle, RefreshCw,
   PlusCircle, BookOpen, Sparkles,
 } from "lucide-react";
-import { getStoredToken } from "@/lib/api";
+import { apiUrl, getStoredToken } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { toast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
@@ -64,7 +64,7 @@ export default function Drafts() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/posts/my-drafts", {
+      const res = await fetch(apiUrl("/api/posts/my-drafts"), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to load drafts");
@@ -93,7 +93,7 @@ export default function Drafts() {
     if (!draft) return;
     setDrafts(prev => prev.filter(item => item.id !== id));
     const timeoutId = window.setTimeout(() => {
-      void fetch(`/api/posts/draft/${id}`, {
+      void fetch(apiUrl(`/api/posts/draft/${id}`), {
         method: "DELETE",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       }).then((res) => {

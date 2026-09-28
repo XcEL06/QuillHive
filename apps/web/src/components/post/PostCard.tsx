@@ -534,6 +534,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
     if (!currentUser) { toast({ title: 'Sign in to save posts', variant: 'destructive' }); return; }
     if (!token) { toast({ title: 'Sign in to save posts', variant: 'destructive' }); return; }
     setIsSaving(true);
@@ -545,11 +546,11 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
           Authorization: `Bearer ${token}`,
         },
       });
-      if (res.ok || res.status === 409) {
-        const newSaved = !post.isSaved;
+      if (res.ok || (method === 'POST' && res.status === 409)) {
+        const newSaved = method === 'POST';
         setPost(p => ({ ...p, isSaved: newSaved }));
         window.dispatchEvent(new CustomEvent('quillhive:saved-changed'));
-        toast({ title: newSaved ? 'Saved' : 'Removed from saved' });
+        toast({ title: res.status === 409 ? 'Already saved' : newSaved ? 'Saved' : 'Removed from saved' });
       } else {
         toast({ title: 'Failed to save', variant: 'destructive' });
       }
