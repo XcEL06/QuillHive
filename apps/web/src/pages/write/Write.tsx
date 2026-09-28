@@ -89,7 +89,12 @@ function findStandaloneUrl(text: string): string | null {
 }
 
 export default function Write() {
-  usePageTitle('Write');
+  const editPostId = (() => {
+    const search = typeof window !== 'undefined' ? window.location.search : '';
+    const value = Number(new URLSearchParams(search).get('edit'));
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  })();
+  usePageTitle(editPostId ? 'Edit post' : 'Write');
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const t = useT();
@@ -119,7 +124,10 @@ export default function Write() {
   });
   const [tagsStr, setTagsStr] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [originalImageUrl, setOriginalImageUrl] = useState('');
   const [postAttachments, setPostAttachments] = useState<import('@/components/post/AttachmentPicker').Attachment[]>([]);
+  const [isLoadingEdit, setIsLoadingEdit] = useState(Boolean(editPostId));
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [enableSchedule, setEnableSchedule] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
   const [enableAB, setEnableAB] = useState(false);
@@ -235,6 +243,64 @@ export default function Write() {
   });
 
   useEffect(() => {
+    if (!editPostId || !editor) return;
+    if (!token || !user) {
+      setIsLoadingEdit(false);
+      toast({ title: 'Sign in to edit this post', variant: 'destructive' });
+      setLocation('/login');
+      return;
+    }
+
+    let active = true;
+    setIsLoadingEdit(true);
+    fetch(apiUrl(`/api/posts/${editPostId}`), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(response.status === 404 ? 'Post not found.' : 'Could not load this post for editing.');
+        }
+        return response.json() as Promise<Record<string, any>>;
+      })
+      .then((post) => {
+        if (!active) return;
+        const authorId = Number(post.author?.id ?? post.authorId);
+        if (authorId !== Number(user.id)) throw new Error('You can only edit your own posts.');
+
+        setTitle(post.title ?? '');
+        setType(post.type === 'blog' || post.type === 'note' ? 'post' : post.type || 'post');
+        setTagsStr(Array.isArray(post.tags)
+          ? post.tags.join(', ')
+          : typeof post.tags === 'string'
+            ? (() => { try { const tags = JSON.parse(post.tags); return Array.isArray(tags) ? tags.join(', ') : ''; } catch { return ''; } })()
+            : '');
+        setImageUrl(post.imageUrl ?? '');
+        setOriginalImageUrl(post.imageUrl ?? '');
+        let attachments = post.attachments;
+        if (typeof attachments === 'string') {
+          try { attachments = JSON.parse(attachments); } catch { attachments = []; }
+        }
+        setPostAttachments(Array.isArray(attachments) ? attachments : []);
+        editor.commands.setContent(post.content ?? '');
+        setDraftRestored(true);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        toast({
+          title: 'Could not edit post',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'destructive',
+        });
+        setLocation('/');
+      })
+      .finally(() => {
+        if (active) setIsLoadingEdit(false);
+      });
+
+    return () => { active = false; };
+  }, [editPostId, editor, token, user?.id, toast, setLocation]);
+
+  useEffect(() => {
     const standaloneUrl = editor ? findStandaloneUrl(editor.getText()) : null;
     if (!standaloneUrl || !token) {
       setLinkPreview(null);
@@ -278,7 +344,7 @@ export default function Write() {
   useEffect(() => {
     const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const draftIdParam = params.get('draftId');
-    if (!draftIdParam || !editor || !token) return;
+    if (editPostId || !draftIdParam || !editor || !token) return;
     const id = parseInt(draftIdParam, 10);
     if (!id) return;
     setServerDraftId(id);
@@ -304,7 +370,7 @@ export default function Write() {
   }, [editor, token]);
 
   useEffect(() => {
-    if (draftRestored) return;
+    if (editPostId || draftRestored) return;
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
@@ -336,7 +402,7 @@ export default function Write() {
   };
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editPostId) return;
     const interval = window.setInterval(() => {
       const content = editor.getHTML();
       if (!content || content === '<p></p>') return;
@@ -355,7 +421,7 @@ export default function Write() {
   }, [editor, title, type, tagsStr, imageUrl, DRAFT_KEY]);
 
   const saveDraftSilently = async () => {
-    if (!editor || !token) return;
+    if (!editor || !token || editPostId) return;
     if (!content || content === '<p></p>' || (!title.trim() && !editor.getText().trim())) return;
 
     const body: Record<string, unknown> = {
@@ -396,7 +462,7 @@ export default function Write() {
   };
 
   useEffect(() => {
-    if (!editor || !token || (!title.trim() && !editor.getText().trim())) return;
+    if (!editor || !token || editPostId || (!title.trim() && !editor.getText().trim())) return;
     const timer = window.setTimeout(() => {
       void saveDraftSilently();
     }, 3_000);
@@ -453,6 +519,10 @@ export default function Write() {
       return;
     }
     const content = editor.getHTML();
+    if (content.length > 50_000) {
+      toast({ title: 'Content is too long', description: 'Keep content under 50,000 characters.', variant: 'destructive' });
+      return;
+    }
     if (isPublished) {
       const { ok, warning } = await checkOriginality(content);
       if (!ok) {
@@ -466,6 +536,49 @@ export default function Write() {
       }
       setOriginalityWarning(null);
     }
+    if (editPostId) {
+      const tags = tagsStr.split(',').map(tag => tag.trim()).filter(Boolean);
+      if (title.length > 180 || tags.length > 12 || tags.some(tag => tag.length > 40)) {
+        toast({ title: 'Check your post details', description: 'Titles can be up to 180 characters and posts can have up to 12 tags of 40 characters each.', variant: 'destructive' });
+        return;
+      }
+
+      setIsSavingEdit(true);
+      try {
+        const response = await fetch(apiUrl(`/api/posts/${editPostId}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            title,
+            content,
+            excerpt: editor.getText().trim().slice(0, 500),
+            ...(imageUrl !== originalImageUrl && imageUrl ? { imageUrl } : {}),
+            attachments: postAttachments,
+            tags,
+          }),
+        });
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => null) as { error?: string; message?: string } | null;
+          throw new Error(response.status === 403
+            ? 'You can only edit your own posts.'
+            : errorBody?.error || errorBody?.message || 'Could not save changes.');
+        }
+        await response.json();
+        await queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
+        toast({ title: 'Changes saved', description: 'Your post and edit history have been updated.' });
+        setLocation(`/post/${editPostId}`);
+      } catch (error) {
+        toast({
+          title: 'Could not save changes',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSavingEdit(false);
+      }
+      return;
+    }
+
     const payload: any = {
       title: enableAB ? undefined : (title || undefined),
       titleA: enableAB ? (titleA || undefined) : undefined,
@@ -661,26 +774,28 @@ export default function Write() {
         )}
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <h1 className="text-3xl font-serif font-bold">{t('write.newPiece')}</h1>
+          <h1 className="text-3xl font-serif font-bold">{editPostId ? 'Edit post' : t('write.newPiece')}</h1>
           <div className="flex items-center gap-3">
             {showSaved && <span className="text-xs text-emerald-600 dark:text-emerald-400 animate-in fade-in duration-300">Saved</span>}
-            <Button
-              variant="outline"
-              onClick={() => handlePublish(false)}
-              disabled={isCreating}
-              className="rounded-xl"
-            >
-              <Save className="w-4 h-4 mr-2" /> {t('write.draft')}
-            </Button>
+            {!editPostId && (
+              <Button
+                variant="outline"
+                onClick={() => handlePublish(false)}
+                disabled={isCreating}
+                className="rounded-xl"
+              >
+                <Save className="w-4 h-4 mr-2" /> {t('write.draft')}
+              </Button>
+            )}
             <Button
               onClick={() => handlePublish(true)}
-              disabled={isCreating || (enableSchedule && !scheduledAt)}
+              disabled={isCreating || isSavingEdit || isLoadingEdit || (!editPostId && enableSchedule && !scheduledAt)}
               className="rounded-xl bg-gradient-to-r from-primary to-violet-500 text-white border-0 shadow-lg"
             >
-              {isCreating
+              {isCreating || isSavingEdit || isLoadingEdit
                 ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 : enableSchedule ? <Calendar className="w-4 h-4 mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-              {enableSchedule ? t('write.schedule') : t('write.publish')}
+              {isLoadingEdit ? 'Loading post...' : isSavingEdit ? 'Saving changes...' : editPostId ? 'Save changes' : enableSchedule ? t('write.schedule') : t('write.publish')}
             </Button>
           </div>
         </div>
@@ -693,6 +808,10 @@ export default function Write() {
             {/* Type */}
             <div className="space-y-2 col-span-1 md:col-span-2">
               <Label>{t('write.typeLabel')}</Label>
+              {editPostId ? (
+                <p className="text-sm capitalize text-muted-foreground">{type.replace(/_/g, ' ')}</p>
+              ) : (
+              <>
               <div className="grid grid-cols-3 gap-2">
                 {PRIMARY_POST_TYPES.map(pt => {
                   const Icon = pt.icon;
@@ -741,17 +860,19 @@ export default function Write() {
                   )}
                 </>
               )}
+              </>
+              )}
             </div>
 
             {/* Title / A-B Testing */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>{t('write.titleLabel')} {enableAB ? t('write.abTestSuffix') : t('write.optionalSuffix')}</Label>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {!editPostId && <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <FlaskConical className="w-3 h-3" />
                   <span>{t('write.abTest')}</span>
                   <Switch checked={enableAB} onCheckedChange={setEnableAB} />
-                </div>
+                </div>}
               </div>
               {enableAB ? (
                 <div className="space-y-2">
@@ -783,7 +904,7 @@ export default function Write() {
             </div>
 
             {/* Series */}
-            {mySeries.length > 0 && (
+            {!editPostId && mySeries.length > 0 && (
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <BookOpen className="w-4 h-4" /> Add to Series
@@ -824,7 +945,7 @@ export default function Write() {
               <p className="text-xs text-muted-foreground">{t('write.attachFilesHint')}</p>
             </div>
             {/* Scheduling */}
-            <div className="space-y-2 col-span-1 md:col-span-2">
+            {!editPostId && <div className="space-y-2 col-span-1 md:col-span-2">
               <div className="flex items-center justify-between">
                 <Label className="flex items-center gap-2"><Clock className="w-4 h-4" /> {t('write.schedulePublishing')}</Label>
                 <Switch checked={enableSchedule} onCheckedChange={setEnableSchedule} />
@@ -841,7 +962,7 @@ export default function Write() {
                   <p className="text-xs text-muted-foreground mt-1">{t('write.scheduleHint')}</p>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
 
           {/* Toolbar */}
