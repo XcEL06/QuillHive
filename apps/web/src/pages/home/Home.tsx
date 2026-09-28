@@ -14,7 +14,7 @@ import { PenTool, UserPlus, BookOpen, Check, TrendingUp, Rocket, Sparkles, Arrow
 import { Link, useLocation } from 'wouter';
 import { useAuthStore } from '@/store/auth';
 import { useSocketConnection } from '@/hooks/useSocket';
-import { apiUrl, getStoredToken } from '@/lib/api';
+import { apiFetch, apiUrl, getApiErrorMessage, getStoredToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useT } from '@/lib/i18n';
 import { StreakChip } from '@/components/profile/StreakWidget';
@@ -515,7 +515,7 @@ function AuthenticatedHome() {
   const feedAlgorithm: FeedAlgorithm = 'algorithmic';
   const [feedPosts, setFeedPosts] = useState<import('@workspace/api-client-react').Post[] | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
-  const [feedError, setFeedError] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [activeStoryGroup, setActiveStoryGroup] = useState<any>(null);
   const [latestSeenTimestamp, setLatestSeenTimestamp] = useState<string | null>(null);
   const [newPostsAvailable, setNewPostsAvailable] = useState(0);
@@ -529,21 +529,16 @@ function AuthenticatedHome() {
 
   const fetchAlgorithmicFeed = async (algo: FeedAlgorithm) => {
     setFeedLoading(true);
-    setFeedError(false);
+    setFeedError(null);
     try {
-      const res = await fetch(`/api/feed?type=${algo}&limit=20`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await apiFetch(`/api/feed?type=${algo}&limit=20`);
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load the feed.'));
       const json = await res.json() as { posts?: unknown };
-      if (!res.ok || !Array.isArray(json.posts)) {
-        setFeedPosts([]);
-        setFeedError(true);
-        return;
-      }
+      if (!Array.isArray(json.posts)) throw new Error('The feed returned an invalid response.');
       setFeedPosts(json.posts as import('@workspace/api-client-react').Post[]);
-    } catch {
+    } catch (error) {
       setFeedPosts([]);
-      setFeedError(true);
+      setFeedError(error instanceof Error ? error.message : 'Could not load the feed.');
     } finally {
       setFeedLoading(false);
     }
@@ -589,7 +584,7 @@ function AuthenticatedHome() {
   const handleSourceChange = (val: FeedSource) => {
     setFeedSource(val);
     setFeedPosts(null);
-    setFeedError(false);
+    setFeedError(null);
     setLatestSeenTimestamp(null);
     setNewPostsAvailable(0);
   };
@@ -681,7 +676,7 @@ function AuthenticatedHome() {
 
           {(error || feedError) && !isDisplayLoading && (
             <div className="text-center py-12 text-destructive bg-destructive/10 rounded-2xl border border-destructive/20">
-              <p>{t('home.failedToLoad', 'Failed to load feed. Please try again.')}</p>
+              <p>{feedError || t('home.failedToLoad', 'Failed to load feed. Please try again.')}</p>
             </div>
           )}
 

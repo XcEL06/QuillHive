@@ -280,6 +280,23 @@ router.patch("/:id", async (req, res) => {
   return res.json(await enrichJob(updated, viewerId));
 });
 
+router.delete("/:id", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid opportunity id" });
+
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.id, id));
+  if (!job) return res.status(404).json({ error: "Opportunity not found" });
+  if (job.authorId !== viewerId) return res.status(403).json({ error: "Forbidden" });
+
+  await db.update(jobsTable)
+    .set({ isActive: false, moderationStatus: "closed", expiresAt: new Date() })
+    .where(eq(jobsTable.id, id));
+
+  return res.json({ ok: true, deleted: true });
+});
+
 const applyOpportunitySchema = z.object({
   mode: z.enum(["apply", "apply_and_message"]),
   message: z.string().max(5_000).optional(),

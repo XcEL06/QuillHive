@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link } from 'wouter';
-import { getStoredToken } from '@/lib/api';
+import { apiFetch, getApiErrorMessage, getStoredToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { getInitials } from '@/lib/utils';
 import {
@@ -69,17 +69,17 @@ function CollabRequestModal({ creator, open, onClose }: { creator: Creator | nul
     if (!message.trim()) { toast({ title: 'Add a message', variant: 'destructive' }); return; }
     setSending(true);
     try {
-      const res = await fetch('/api/collaboration/requests', {
+      const res = await apiFetch('/api/collaboration/request', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ receiverId: creator.user.id, message: message.trim() }),
       });
-      if (!res.ok) throw new Error('Failed to send');
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Failed to send collaboration request.'));
       toast({ title: 'Collaboration request sent! 🤝' });
       setMessage('');
       onClose();
-    } catch {
-      toast({ title: 'Failed to send request', variant: 'destructive' });
+    } catch (error) {
+      toast({ title: 'Failed to send request', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' });
     } finally {
       setSending(false);
     }

@@ -174,6 +174,28 @@ export function JobsPanel() {
           const j = job as any;
           const isFeatured = !!j.isFeatured && (!j.featuredUntil || new Date(j.featuredUntil) > new Date());
           const matchData = matchMap.get(job.id);
+          const expiresAt = j.expiresAt ? new Date(j.expiresAt) : null;
+          const isOwner = job.author.id === user?.id;
+
+          const handleDelete = async () => {
+            if (!isOwner) return;
+            const confirmed = window.confirm('Delete this opportunity? It will no longer be visible to creators.');
+            if (!confirmed) return;
+            try {
+              const token = getStoredToken();
+              const res = await fetch(`/api/jobs/${job.id}`, {
+                method: 'DELETE',
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+              });
+              if (!res.ok) {
+                const error = await res.json().catch(() => ({ error: 'Could not delete opportunity' }));
+                throw new Error(error.error || 'Could not delete opportunity');
+              }
+              window.location.reload();
+            } catch (error) {
+              alert(error instanceof Error ? error.message : 'Could not delete opportunity');
+            }
+          };
 
           return (
             <div
@@ -206,10 +228,15 @@ export function JobsPanel() {
                     }`}>{job.type}</Badge>
                     {matchData && <MatchBadge score={matchData.score} />}
                   </div>
-                  {job.author.id === user?.id && (
-                    <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setLocation(`/jobs/post?edit=${job.id}`)}>
-                      <Pencil className="w-3.5 h-3.5" /> Edit
-                    </Button>
+                  {isOwner && (
+                    <div className="flex items-center gap-1.5">
+                      <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setLocation(`/jobs/post?edit=${job.id}`)}>
+                        <Pencil className="w-3.5 h-3.5" /> Edit
+                      </Button>
+                      <Button type="button" size="sm" variant="destructive" className="h-8 gap-1.5" onClick={handleDelete}>
+                        Delete
+                      </Button>
+                    </div>
                   )}
                   <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined)} />
                   <ReportDialog targetType="job" targetId={job.id} label="Report" />
@@ -229,6 +256,11 @@ export function JobsPanel() {
                   {j.compensation && <span className="text-foreground font-medium flex items-center gap-0.5"><DollarSign className="w-3 h-3" />{j.compensation}</span>}
                   <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{j.remote ? 'Remote' : j.location || 'Onsite'}</span>
                   <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}</span>
+                  {expiresAt && (
+                    <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
+                      <Calendar className="w-3 h-3" />Available until {expiresAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
