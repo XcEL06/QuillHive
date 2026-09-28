@@ -131,7 +131,7 @@ export function SparkComposer({ onPosted, prompt, placeholder }: { onPosted?: ()
                   <AttachmentPicker
                     attachments={attachments}
                     onChange={setAttachments}
-                    max={6}
+                    max={20}
                     label=""
                     compact
                   />

@@ -14,7 +14,7 @@ function fileToBase64(file: File): Promise<string> {
 
 export function uploadWithProgress(
   file: File,
-  category: 'general' | 'post' | 'support' | 'profile' | 'moderation',
+  category: 'general' | 'post' | 'support' | 'profile' | 'moderation' | 'gallery' | 'library' | 'group',
   onProgress: (pct: number) => void,
 ): Promise<Record<string, unknown>> {
   return fileToBase64(file).then((dataBase64) => new Promise((resolve, reject) => {

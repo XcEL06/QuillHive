@@ -62,7 +62,7 @@ app.use(cors({
     const appUrl = process.env.APP_URL ?? "";
     const allowed =
       (appUrl && origin === appUrl) ||
-      /^https:\/\/[^/]*\.quillhive\.pages\.dev$/.test(origin ?? "") ||
+      /^https:\/\/(?:[^/]+\.)?quillhive\.pages\.dev$/.test(origin ?? "") ||
       (process.env.NODE_ENV !== "production" && (
         /^https?:\/\/[^/]*\.replit\.dev$/.test(origin ?? "") ||
         /^https?:\/\/[^/]*\.repl\.co$/.test(origin ?? "") ||

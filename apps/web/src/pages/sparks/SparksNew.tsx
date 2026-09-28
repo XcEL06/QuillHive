@@ -104,7 +104,7 @@ export default function SparksNew() {
           {/* Toolbar */}
           <div className="flex items-center justify-between px-3 py-2.5 border-t border-border/50">
             <div className="flex items-center gap-1">
-              <AttachmentPicker attachments={attachments} onChange={setAttachments} max={6} compact label="Media" />
+              <AttachmentPicker attachments={attachments} onChange={setAttachments} max={20} compact label="Media" />
               <button
                 onClick={handleMakePunchier}
                 disabled={!content.trim() || makingPunchier}

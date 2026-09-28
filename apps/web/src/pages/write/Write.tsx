@@ -818,7 +818,7 @@ export default function Write() {
               <AttachmentPicker
                 attachments={postAttachments}
                 onChange={setPostAttachments}
-                max={10}
+                max={20}
                 label={t('write.addFiles')}
               />
               <p className="text-xs text-muted-foreground">{t('write.attachFilesHint')}</p>

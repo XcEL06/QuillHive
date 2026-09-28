@@ -94,8 +94,14 @@ async function generateImageVariants(originalPath: string, mimeType: string): Pr
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const allowedDocumentMimeTypes = new Set([
   "image/jpeg", "image/png", "image/gif", "image/webp",
-  "application/pdf", "text/plain",
+  "application/pdf", "text/plain", "text/csv", "text/markdown",
+  "application/json", "application/xml", "text/xml",
+  "application/rtf", "text/rtf", "application/epub+zip", "application/zip",
   "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.oasis.opendocument.text", "application/vnd.oasis.opendocument.spreadsheet",
+  "application/vnd.oasis.opendocument.presentation",
 ]);
 
 function isAllowedUploadMimeType(mimeType: string): boolean {
@@ -106,7 +112,7 @@ const uploadSchema = z.object({
   filename: z.string().min(1).max(180),
   mimeType: z.string().min(3).max(180),
   dataBase64: z.string().min(1),
-  category: z.enum(["general", "post", "support", "profile", "moderation"]).optional(),
+  category: z.enum(["general", "post", "support", "profile", "moderation", "gallery", "library", "group"]).optional(),
 });
 
 function uploadsDir() {

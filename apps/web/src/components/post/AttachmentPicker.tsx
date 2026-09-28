@@ -12,11 +12,18 @@ export interface Attachment {
 }
 
 const MAX_SIZE = 50 * 1024 * 1024;
+const MAX_ATTACHMENTS = 20;
 const ACCEPTED_DOCUMENTS = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-  'application/pdf', 'text/plain',
+  'application/pdf', 'text/plain', 'text/csv', 'text/markdown',
+  'application/json', 'application/xml', 'text/xml',
+  'application/rtf', 'text/rtf', 'application/epub+zip', 'application/zip',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.oasis.opendocument.text', 'application/vnd.oasis.opendocument.spreadsheet',
+  'application/vnd.oasis.opendocument.presentation',
 ];
 
 function isAcceptedMimeType(mimeType: string): boolean {
@@ -52,7 +59,7 @@ interface AttachmentPickerProps {
   compact?: boolean;
 }
 
-export function AttachmentPicker({ attachments, onChange, max = 10, label = 'Attach files', compact = false }: AttachmentPickerProps) {
+export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS, label = 'Attach files', compact = false }: AttachmentPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
@@ -96,7 +103,7 @@ export function AttachmentPicker({ attachments, onChange, max = 10, label = 'Att
         }
         const data = await res.json();
         next.push({
-          url: data.url || apiUrl(`/api/file/${data.id}`),
+          url: apiUrl(data.url || `/api/file/${data.id}`),
           mimeType: file.type,
           filename: file.name,
           sizeBytes: file.size,
@@ -122,7 +129,7 @@ export function AttachmentPicker({ attachments, onChange, max = 10, label = 'Att
         ref={inputRef}
         type="file"
         multiple
-        accept="image/*,video/*,audio/*,application/pdf,text/plain,.doc,.docx"
+        accept="image/*,video/*,audio/*,application/pdf,text/plain,text/csv,text/markdown,application/json,application/xml,application/rtf,application/epub+zip,application/zip,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.rtf,.csv,.md,.json,.epub,.zip"
         className="hidden"
         onChange={(e) => handleFiles(e.target.files)}
       />

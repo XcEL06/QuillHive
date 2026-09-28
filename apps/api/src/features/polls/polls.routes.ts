@@ -67,7 +67,7 @@ const standalonePollSchema = z.object({
   durationHours: z.coerce.number().int().min(1).max(336).optional(),
   multipleChoice: z.boolean().optional(),
   showResultsBeforeVoting: z.boolean().optional(),
-  attachments: z.array(z.any()).max(10).optional(),
+  attachments: z.array(z.any()).max(20).optional(),
 });
 
 pollsRouter.post("/standalone", async (req, res) => {

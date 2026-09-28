@@ -37,7 +37,7 @@ const postBodySchema = z.object({
   seriesId: z.number().int().positive().optional(),
   quotedPostId: z.number().int().positive().optional(),
   scheduledAt: z.string().optional(),
-  attachments: z.array(z.any()).max(10).optional(),
+  attachments: z.array(z.any()).max(20).optional(),
 });
 const updatePostBodySchema = postBodySchema.partial().refine(value => Object.keys(value).length > 0, { message: "At least one field is required" });
 const commentBodySchema = z.object({ content: z.string().min(1).max(2_000) });

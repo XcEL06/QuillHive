@@ -432,7 +432,7 @@ function sanitizeAttachments(input: unknown): PostAttachment[] {
       sizeBytes: typeof a.sizeBytes === "number" ? a.sizeBytes : undefined,
     }))
     .filter((a) => a.url.length > 0)
-    .slice(0, 10);
+    .slice(0, 20);
 }
 
 export async function createPost(
