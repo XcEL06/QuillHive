@@ -537,8 +537,18 @@ function AuthenticatedHome() {
       if (!Array.isArray(json.posts)) throw new Error('The feed returned an invalid response.');
       setFeedPosts(json.posts as import('@workspace/api-client-react').Post[]);
     } catch (error) {
-      setFeedPosts([]);
-      setFeedError(error instanceof Error ? error.message : 'Could not load the feed.');
+      try {
+        const res = await apiFetch('/api/posts?limit=20');
+        if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load posts.'));
+        const json = await res.json() as { posts?: unknown };
+        if (!Array.isArray(json.posts)) throw new Error('Posts returned an invalid response.');
+        setFeedPosts(json.posts as import('@workspace/api-client-react').Post[]);
+      } catch (fallbackError) {
+        setFeedPosts([]);
+        const primaryMessage = error instanceof Error ? error.message : 'Could not load the feed.';
+        const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'Could not load posts.';
+        setFeedError(`${primaryMessage} ${fallbackMessage}`);
+      }
     } finally {
       setFeedLoading(false);
     }
@@ -553,6 +563,7 @@ function AuthenticatedHome() {
     feedSource === 'explore' ? (feedPosts ?? apiPosts) : apiPosts;
   const isDisplayLoading =
     feedSource === 'explore' ? (feedLoading || (feedPosts === null && isLoading)) : isLoading;
+  const feedLoadFailed = feedSource === 'explore' ? Boolean(feedError) : error;
 
   useEffect(() => {
     if (isDisplayLoading || latestSeenTimestamp) return;
@@ -674,13 +685,16 @@ function AuthenticatedHome() {
             ))
           )}
 
-          {(error || feedError) && !isDisplayLoading && (
+          {feedLoadFailed && !isDisplayLoading && (
             <div className="text-center py-12 text-destructive bg-destructive/10 rounded-2xl border border-destructive/20">
               <p>{feedError || t('home.failedToLoad', 'Failed to load feed. Please try again.')}</p>
+              <Button type="button" variant="outline" className="mt-4" onClick={() => void handleRefreshFeed()}>
+                {t('common.retry', 'Retry')}
+              </Button>
             </div>
           )}
 
-          {displayPosts?.length === 0 && !isDisplayLoading && (
+          {displayPosts.length === 0 && !isDisplayLoading && !feedLoadFailed && (
             <div className="text-center py-16 bg-muted/20 rounded-3xl border border-dashed border-border">
               <div className="bg-gradient-to-br from-primary/10 to-violet-500/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
                 {feedSource === 'following' ? <UserPlus className="w-8 h-8 text-primary" /> : <Rocket className="w-8 h-8 text-primary" />}
@@ -701,7 +715,7 @@ function AuthenticatedHome() {
             </div>
           )}
 
-          {displayPosts?.map((post) => (
+          {displayPosts.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
         </div>

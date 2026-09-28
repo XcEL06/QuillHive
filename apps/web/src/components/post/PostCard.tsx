@@ -5,7 +5,6 @@ import { EditHistoryModal } from './EditHistoryModal';
 import { TrustIndicator, type TrustTier } from './TrustIndicator';
 import { AttachmentList } from './AttachmentList';
 import { readingTimeLabel } from '@/lib/readingTime';
-import { formatDistanceToNow } from 'date-fns';
 import { useLikePost, useDeletePost, type Post } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
@@ -28,6 +27,7 @@ import { PollBlock } from '@/components/post/PollBlock';
 import { PostOptionsMenu, type PostOptionAction, type PostOptionPost } from './PostOptionsMenu';
 import { ToastAction } from '@/components/ui/toast';
 import { ImageLightbox } from './ImageLightbox';
+import { formatPostTimestamp } from '@/lib/postTimestamp';
 
 type CtaButton = { label: string; url: string; style: 'primary' | 'secondary' | 'outline' };
 
@@ -729,6 +729,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
 
   const isSpark = (post.type as string) === 'spark';
   const isFirst24h = (Date.now() - new Date(post.createdAt).getTime()) < 24 * 60 * 60 * 1000;
+  const postTimestamp = formatPostTimestamp(post.createdAt);
   const feelingTag = (post.tags || []).find((t: string) => typeof t === 'string' && t.startsWith('feeling:'));
   const feelingMap: Record<string, { emoji: string; label: string }> = {
     happy: { emoji: '😊', label: 'feeling happy' },
@@ -794,7 +795,11 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
                 )}
               </h3>
               <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <span>@{post.author.username} · {formatDistanceToNow(new Date(post.createdAt))} ago</span>
+                <span>
+                  @{post.author.username} · {postTimestamp && (
+                    <time dateTime={postTimestamp.dateTime} title={postTimestamp.title}>{postTimestamp.label}</time>
+                  )}
+                </span>
                 {!isSpark && readingTimeLabel(post.content || post.excerpt || '') && (
                   <span className="inline-flex items-center gap-0.5">
                     · <Clock className="w-3 h-3" /> {readingTimeLabel(post.content || post.excerpt || '')}

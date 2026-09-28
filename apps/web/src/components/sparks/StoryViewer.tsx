@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { apiUrl, getStoredToken, mediaUrl } from "@/lib/api";
+import { formatPostTimestamp } from "@/lib/postTimestamp";
 
 interface StorySpark {
   id: number;
   content: string;
   mediaUrl?: string | null;
+  createdAt?: string | Date | null;
 }
 
 interface StoryGroup {
@@ -25,6 +27,7 @@ export function StoryViewer({
   const [progress, setProgress] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const current = group.sparks[index];
+  const currentTimestamp = current?.createdAt ? formatPostTimestamp(current.createdAt) : null;
 
   useEffect(() => {
     if (!current) {
@@ -115,7 +118,14 @@ export function StoryViewer({
             event.currentTarget.src = "/images/logo-icon.png";
           }}
         />
-        <span className="text-sm font-medium">{group.authorDisplayName}</span>
+        <div>
+          <span className="block text-sm font-medium">{group.authorDisplayName}</span>
+          {currentTimestamp && (
+            <time className="block text-xs text-white/70" dateTime={currentTimestamp.dateTime} title={currentTimestamp.title}>
+              {currentTimestamp.label}
+            </time>
+          )}
+        </div>
       </div>
 
       <button
