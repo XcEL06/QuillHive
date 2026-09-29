@@ -223,8 +223,8 @@ button:active, [role="button"]:active {
   white-space: pre-wrap;
 }
 
-.qh-editor p + p {
-  margin-top: 0;
+.qh-editor p {
+  margin: 0;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
