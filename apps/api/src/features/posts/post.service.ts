@@ -22,6 +22,7 @@ import { sanitizeRichText, sanitizePlain } from "../../lib/sanitize";
 import { notify } from "../notifications/notification.service";
 import { calculateRankingScore } from "./ranking.service";
 import { logger } from "../../lib/logger";
+import { SPARK_LIFETIME_MS, visiblePostExpiryCondition } from "./postExpiry";
 
 async function getBlockedUserIds(viewerId: number | null): Promise<number[]> {
   if (!viewerId) return [];
@@ -185,7 +186,7 @@ export async function listPosts(
 
   const conds = [
     eq(postsTable.isPublished, true),
-    or(eq(postsTable.type, "spark"), isNull(postsTable.expiresAt), gt(postsTable.expiresAt, new Date())),
+    visiblePostExpiryCondition(),
   ];
   if (feed === "following" && viewerId) {
     const followingFiltered = followingIds.filter(id => !hiddenAuthorIds.includes(id));
@@ -458,6 +459,7 @@ export async function createPost(
   }
 ) {
   const isSpark = data.type === "spark";
+  const isPublished = data.isPublished ?? true;
   const rawContent = isSpark
     ? sanitizePlain(data.content).slice(0, 280)
     : data.content;
@@ -515,14 +517,14 @@ export async function createPost(
       imageUrl: data.imageUrl || null,
       attachments: JSON.stringify(sanitizeAttachments(data.attachments)),
       tags: JSON.stringify(tags),
-      isPublished: data.isPublished ?? true,
+      isPublished,
       groupId: data.groupId || null,
       seriesId: data.seriesId || null,
       quotedPostId: quotedPost?.id ?? null,
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : null,
-      // Keep Sparks in the existing highlights tray while treating them as permanent posts.
+      // Sparks expire after one day; legacy Sparks are bounded by createdAt in feed filters.
       isHighlight: isSpark,
-      expiresAt: null,
+      expiresAt: isSpark && isPublished ? new Date(Date.now() + SPARK_LIFETIME_MS) : null,
       contentWarning: data.contentWarning ? sanitizePlain(data.contentWarning).slice(0, 80) : null,
       contentTags: JSON.stringify(cwTags),
       aiTextScore: score,
@@ -588,7 +590,7 @@ export async function createPost(
 export async function getPostById(id: number, viewerId: number | null) {
   const [post] = await db.select().from(postsTable).where(and(
     eq(postsTable.id, id),
-    or(ne(postsTable.type, "spark"), isNull(postsTable.expiresAt), gt(postsTable.expiresAt, new Date())),
+    visiblePostExpiryCondition(),
   ));
   if (!post) return null;
   return enrichPost(post, viewerId);

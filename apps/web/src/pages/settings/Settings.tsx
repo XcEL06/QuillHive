@@ -15,7 +15,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
+import { apiFetch, apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
+import { uploadFile } from '@/lib/uploadFile';
 import { useI18n, useT, SUPPORTED_LANGS } from '@/lib/i18n';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { CreatorModeToggle } from '@/components/settings/CreatorModeToggle';
@@ -51,27 +52,6 @@ const COUNTRIES = [
   'Uganda','Ukraine','United Arab Emirates','United Kingdom','United States','Uruguay',
   'Uzbekistan','Venezuela','Vietnam','Yemen','Zambia','Zimbabwe',
 ];
-
-async function uploadFile(file: File, token: string | null): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const base64 = (reader.result as string).split(',')[1];
-        const res = await fetch(apiUrl('/api/upload'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ filename: file.name, mimeType: file.type, dataBase64: base64, category: 'profile' }),
-        });
-        if (!res.ok) throw new Error('Upload failed');
-        const data = await res.json();
-        resolve(mediaUrl(data.url ?? data.secure_url));
-      } catch (e) { reject(e); }
-    };
-    reader.onerror = () => reject(new Error('File read failed'));
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function Settings() {
   usePageTitle('Settings');
@@ -456,32 +436,60 @@ export default function Settings() {
   }, [activeSection]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast({ title: t('settings.pleaseSelectImage'), variant: 'destructive' }); return; }
     if (file.size > 5 * 1024 * 1024) { toast({ title: t('settings.imageMustBeUnder5MB'), variant: 'destructive' }); return; }
     setIsUploadingAvatar(true);
     try {
-      const url = await uploadFile(file, token);
+      const { url } = await uploadFile(file, 'profile');
+      const response = await apiFetch('/api/users/me/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarUrl: url }),
+      });
+      const updatedUser = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(updatedUser?.error || 'Profile update failed');
       setProfileForm(f => ({ ...f, avatarUrl: url }));
-      updateProfile({ data: { ...profileForm, avatarUrl: url } as any });
+      setUser(updatedUser as any);
+      if (user?.username) {
+        queryClient.setQueryData([`/api/users/${user.username}`], (previous: any) => previous ? { ...previous, user: { ...previous.user, avatarUrl: url } } : previous);
+        void queryClient.invalidateQueries({ queryKey: [`/api/users/${user.username}`] });
+      }
+      void queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       toast({ title: t('settings.avatarUploaded') });
-    } catch { toast({ title: t('settings.uploadFailed'), variant: 'destructive' }); }
+    } catch (error) { toast({ title: t('settings.uploadFailed'), description: error instanceof Error ? error.message : undefined, variant: 'destructive' }); }
     finally { setIsUploadingAvatar(false); }
   };
 
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast({ title: t('settings.pleaseSelectImage'), variant: 'destructive' }); return; }
     if (file.size > 10 * 1024 * 1024) { toast({ title: t('settings.imageMustBeUnder10MB'), variant: 'destructive' }); return; }
     setIsUploadingCover(true);
     try {
-      const url = await uploadFile(file, token);
+      const { url } = await uploadFile(file, 'profile');
+      const response = await apiFetch('/api/users/me/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coverUrl: url }),
+      });
+      const updatedUser = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(updatedUser?.error || 'Profile update failed');
       setProfileForm(f => ({ ...f, coverUrl: url }));
-      updateProfile({ data: { ...profileForm, coverUrl: url } as any });
+      setUser(updatedUser as any);
+      if (user?.username) {
+        queryClient.setQueryData([`/api/users/${user.username}`], (previous: any) => previous ? { ...previous, user: { ...previous.user, coverUrl: url } } : previous);
+        void queryClient.invalidateQueries({ queryKey: [`/api/users/${user.username}`] });
+      }
+      void queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       toast({ title: t('settings.coverPhotoUploaded') });
-    } catch { toast({ title: t('settings.uploadFailed'), variant: 'destructive' }); }
+    } catch (error) { toast({ title: t('settings.uploadFailed'), description: error instanceof Error ? error.message : undefined, variant: 'destructive' }); }
     finally { setIsUploadingCover(false); }
   };
 

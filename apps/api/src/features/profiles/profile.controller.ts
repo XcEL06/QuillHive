@@ -30,6 +30,7 @@ import {
 import { recordLoginIntegrity, getLoginMeta } from "../security/locationIntegrity";
 import { emitEvent, maskIp } from "../../lib/events";
 import { recordSignup } from "../../lib/alertEngine";
+import { visiblePostExpiryCondition } from "../posts/postExpiry";
 import { consumeInvite } from "../invites/invites.routes";
 import { sendEmail } from "../email/email.service";
 import { welcomeEmailHtml, welcomeEmailText } from "../email/email.templates";
@@ -628,7 +629,7 @@ export const getUserByUsername = async (req: Request, res: Response) => {
   const recentPosts = await db
     .select()
     .from(postsTable)
-    .where(and(eq(postsTable.authorId, profileUser.id), eq(postsTable.isPublished, true)))
+    .where(and(eq(postsTable.authorId, profileUser.id), eq(postsTable.isPublished, true), visiblePostExpiryCondition()))
     .orderBy(desc(postsTable.createdAt))
     .limit(6);
 
@@ -695,7 +696,7 @@ export const getUserPosts = async (req: Request, res: Response) => {
   const posts = await db
     .select()
     .from(postsTable)
-    .where(and(eq(postsTable.authorId, user.id), eq(postsTable.isPublished, true)))
+    .where(and(eq(postsTable.authorId, user.id), eq(postsTable.isPublished, true), visiblePostExpiryCondition()))
     .orderBy(desc(postsTable.createdAt))
     .limit(limit)
     .offset((page - 1) * limit);
@@ -1127,7 +1128,7 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
     .select({ postId: savedPostsTable.postId })
     .from(savedPostsTable)
     .innerJoin(postsTable, eq(savedPostsTable.postId, postsTable.id))
-    .where(and(eq(savedPostsTable.userId, viewerId), eq(postsTable.isDeleted, false)))
+    .where(and(eq(savedPostsTable.userId, viewerId), eq(postsTable.isDeleted, false), visiblePostExpiryCondition()))
     .orderBy(desc(savedPostsTable.createdAt))
     .limit(limit)
     .offset((page - 1) * limit);
@@ -1136,7 +1137,7 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
     .select({ count: sql<number>`count(*)` })
     .from(savedPostsTable)
     .innerJoin(postsTable, eq(savedPostsTable.postId, postsTable.id))
-    .where(and(eq(savedPostsTable.userId, viewerId), eq(postsTable.isDeleted, false)));
+    .where(and(eq(savedPostsTable.userId, viewerId), eq(postsTable.isDeleted, false), visiblePostExpiryCondition()));
 
   const postIds = savedRows.map(r => r.postId);
   const total = Number(totalRow?.count ?? 0);
@@ -1172,7 +1173,7 @@ export const getUserPortfolio = async (req: Request, res: Response) => {
       likeCount: (postsTable as any).likeCount,
     })
     .from(postsTable)
-    .where(and(eq(postsTable.authorId, user.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false)))
+    .where(and(eq(postsTable.authorId, user.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), visiblePostExpiryCondition()))
     .orderBy(desc((postsTable as any).likeCount), desc(postsTable.createdAt))
     .limit(6);
 

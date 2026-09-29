@@ -2,6 +2,7 @@ import { Worker, type Job } from "bullmq";
 import { logger } from "../logger";
 import { emitToUser } from "../socket";
 import { createBullMQConnection, type JobName, type JobPayloads } from "./queue";
+import { SPARK_LIFETIME_MS } from "../../features/posts/postExpiry";
 
 let worker: Worker | null = null;
 
@@ -64,7 +65,13 @@ async function processJob(job: Job): Promise<void> {
         const { db } = await import("@workspace/db");
         const { postsTable } = await import("@workspace/db/schema");
         const { eq } = await import("drizzle-orm");
-        await db.update(postsTable).set({ isPublished: true, scheduledAt: null, updatedAt: new Date() }).where(eq(postsTable.id, postId));
+        const [post] = await db.select({ type: postsTable.type }).from(postsTable).where(eq(postsTable.id, postId));
+        await db.update(postsTable).set({
+          isPublished: true,
+          scheduledAt: null,
+          updatedAt: new Date(),
+          ...(post?.type === "spark" ? { expiresAt: new Date(Date.now() + SPARK_LIFETIME_MS) } : {}),
+        }).where(eq(postsTable.id, postId));
         logger.info({ postId }, "Scheduled post published");
       } catch (err) {
         logger.error({ err, postId }, "Failed to publish scheduled post");

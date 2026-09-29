@@ -4,12 +4,13 @@ import { and, eq, lte, isNotNull, lt } from "drizzle-orm";
 import { logger } from "../../lib/logger";
 import { addJob } from "../../lib/queue/queue";
 import { expireHighlights } from "../highlights/highlights.routes";
+import { SPARK_LIFETIME_MS } from "../posts/postExpiry";
 
 export async function publishDuePosts(): Promise<void> {
   try {
     const now = new Date();
     const duePosts = await db
-      .select({ id: postsTable.id })
+      .select({ id: postsTable.id, type: postsTable.type })
       .from(postsTable)
       .where(and(eq(postsTable.isPublished, false), eq(postsTable.isDeleted, false), isNotNull(postsTable.scheduledAt), lte(postsTable.scheduledAt, now)));
 
@@ -18,7 +19,13 @@ export async function publishDuePosts(): Promise<void> {
     for (const post of duePosts) {
       const queued = await addJob("publish_scheduled_post", { postId: post.id });
       if (!queued) {
-        await db.update(postsTable).set({ isPublished: true, scheduledAt: null, updatedAt: new Date() }).where(eq(postsTable.id, post.id));
+        const updates = {
+          isPublished: true,
+          scheduledAt: null,
+          updatedAt: new Date(),
+          ...(post.type === "spark" ? { expiresAt: new Date(Date.now() + SPARK_LIFETIME_MS) } : {}),
+        };
+        await db.update(postsTable).set(updates).where(eq(postsTable.id, post.id));
         logger.info({ postId: post.id }, "Scheduled post published directly (no queue)");
       }
     }

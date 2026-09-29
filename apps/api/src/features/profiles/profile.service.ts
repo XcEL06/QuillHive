@@ -12,6 +12,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, lte, isNull, or, sql } from "drizzle-orm";
 import { getCache, setCache, deleteCache } from "../../lib/cache";
+import { visiblePostExpiryCondition } from "../posts/postExpiry";
 
 export async function getUserWithCounts(userId: number, viewerId: number | null) {
   const cacheKey = `user:${userId}:viewer:${viewerId ?? "anon"}`;
@@ -48,7 +49,7 @@ async function _getUserWithCounts(userId: number, viewerId: number | null) {
   const [postsResult] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(postsTable)
-    .where(and(eq(postsTable.authorId, userId), eq(postsTable.isPublished, true)));
+    .where(and(eq(postsTable.authorId, userId), eq(postsTable.isPublished, true), visiblePostExpiryCondition()));
 
   let isFollowing = false;
   if (viewerId && viewerId !== userId) {

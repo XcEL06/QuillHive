@@ -2,9 +2,10 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { postsTable, usersTable } from "@workspace/db/schema";
-import { and, desc, eq, gt, lt, ne, or } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { getViewerId } from "../../lib/auth-types";
 import { logger } from "../../lib/logger";
+import { activeHighlightExpiryCondition } from "../posts/postExpiry";
 
 export const highlightsRouter: Router = Router();
 
@@ -40,7 +41,7 @@ highlightsRouter.get("/", async (_req, res) => {
         eq(postsTable.isHighlight, true),
         eq(postsTable.isDeleted, false),
         eq(postsTable.isPublished, true),
-        or(eq(postsTable.type, "spark"), gt(postsTable.expiresAt, now)),
+        activeHighlightExpiryCondition(now),
       ),
     )
     .orderBy(desc(postsTable.createdAt))
@@ -127,8 +128,14 @@ export async function expireHighlights(): Promise<void> {
       .where(
         and(
           eq(postsTable.isHighlight, true),
-          ne(postsTable.type, "spark"),
-          lt(postsTable.expiresAt as never, now),
+          or(
+            lt(postsTable.expiresAt as never, now),
+            and(
+              eq(postsTable.type, "spark"),
+              isNull(postsTable.expiresAt),
+              lt(postsTable.createdAt, new Date(now.getTime() - 24 * 60 * 60 * 1000)),
+            ),
+          ),
         ),
       )
       .returning({ id: postsTable.id, expiresAt: postsTable.expiresAt });

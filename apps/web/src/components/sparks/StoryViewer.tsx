@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
 import { apiUrl, getStoredToken, mediaUrl } from "@/lib/api";
 import { formatPostTimestamp } from "@/lib/postTimestamp";
+import { useAuthStore } from "@/store/auth";
 
 interface StorySpark {
   id: number;
   content: string;
   mediaUrl?: string | null;
   createdAt?: string | Date | null;
+  viewCount?: number;
 }
 
 interface StoryGroup {
+  authorId: number;
   authorDisplayName: string;
   authorAvatarUrl?: string | null;
   sparks: StorySpark[];
@@ -25,9 +28,12 @@ export function StoryViewer({
 }) {
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [viewCount, setViewCount] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { user } = useAuthStore();
   const current = group.sparks[index];
   const currentTimestamp = current?.createdAt ? formatPostTimestamp(current.createdAt) : null;
+  const isOwner = user?.id === group.authorId;
 
   useEffect(() => {
     if (!current) {
@@ -36,11 +42,24 @@ export function StoryViewer({
     }
 
     setProgress(0);
-    const token = getStoredToken();
-    fetch(apiUrl(`/api/sparks/${current.id}/view`), {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).catch(() => {});
+    setViewCount(current.viewCount ?? 0);
+    let active = true;
+    const refreshViewCount = async () => {
+      const token = getStoredToken();
+      try {
+        const response = await fetch(apiUrl(`/api/sparks/${current.id}/view`), {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) return;
+        const data = await response.json() as { viewCount?: number };
+        if (active && Number.isFinite(data.viewCount)) setViewCount(data.viewCount ?? 0);
+      } catch { /* Viewer counts are best-effort. */ }
+    };
+    void refreshViewCount();
+    const viewCountInterval = isOwner
+      ? window.setInterval(() => void refreshViewCount(), 15_000)
+      : null;
 
     const duration = 5000;
     const stepMs = 50;
@@ -59,9 +78,11 @@ export function StoryViewer({
     }, stepMs);
 
     return () => {
+      active = false;
+      if (viewCountInterval) window.clearInterval(viewCountInterval);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [current, group.sparks.length, index, onClose]);
+  }, [current, group.sparks.length, index, isOwner, onClose]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -124,6 +145,11 @@ export function StoryViewer({
             <time className="block text-xs text-white/70" dateTime={currentTimestamp.dateTime} title={currentTimestamp.title}>
               {currentTimestamp.label}
             </time>
+          )}
+          {isOwner && (
+            <span className="mt-0.5 inline-flex items-center gap-1 text-xs text-white/70" aria-label={`${viewCount} viewers`}>
+              <Eye className="h-3 w-3" /> {viewCount} viewer{viewCount === 1 ? '' : 's'}
+            </span>
           )}
         </div>
       </div>

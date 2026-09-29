@@ -24,32 +24,12 @@ import { GroupMembersList } from '@/components/groups/GroupMembersList';
 import { PinnedPosts } from '@/components/groups/PinnedPosts';
 import { useAuthStore } from '@/store/auth';
 import { apiUrl, mediaUrl } from '@/lib/api';
+import { uploadFile } from '@/lib/uploadFile';
 import { ImageUploadField } from '@/components/media/ImageUploadField';
 
-async function uploadGroupCover(file: File, token: string | null): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const base64 = (reader.result as string).split(',')[1];
-        const res = await fetch(apiUrl('/api/upload'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ filename: file.name, mimeType: file.type, dataBase64: base64, category: 'group' }),
-        });
-        if (!res.ok) throw new Error('Upload failed');
-        const data = await res.json();
-        resolve(mediaUrl(data.url ?? data.secure_url));
-      } catch (error) {
-        reject(error);
-      }
-    };
-    reader.onerror = () => reject(new Error('File read failed'));
-    reader.readAsDataURL(file);
-  });
+async function uploadGroupCover(file: File): Promise<string> {
+  const uploaded = await uploadFile(file, 'group');
+  return uploaded.url;
 }
 
 interface GroupView {
@@ -261,10 +241,15 @@ function GroupsList() {
 
   const handleCoverUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = '';
     if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Please select an image', variant: 'destructive' });
+      return;
+    }
     setIsUploadingCover(true);
     try {
-      const uploadedUrl = await uploadGroupCover(file, token);
+      const uploadedUrl = await uploadGroupCover(file);
       setForm(current => ({ ...current, coverUrl: uploadedUrl }));
     } catch {
       toast({ title: 'Could not upload cover photo', variant: 'destructive' });

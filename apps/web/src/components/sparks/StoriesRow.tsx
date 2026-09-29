@@ -8,7 +8,7 @@ interface StoryGroup {
   authorUsername: string;
   authorDisplayName: string;
   authorAvatarUrl?: string | null;
-  sparks: any[];
+  sparks: Array<{ id: number; content: string; mediaUrl?: string | null; createdAt?: string; viewCount?: number; viewed?: boolean }>;
   hasUnviewed: boolean;
 }
 
@@ -19,20 +19,24 @@ export function StoriesRow({ onOpenViewer }: { onOpenViewer: (group: StoryGroup)
   useEffect(() => {
     let active = true;
     const token = getStoredToken();
-
-    fetch(apiUrl("/api/sparks/active"), {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((response) => (response.ok ? response.json() : { stories: [] }))
-      .then((data) => {
+    const loadStories = async () => {
+      try {
+        const response = await fetch(apiUrl("/api/sparks/active"), {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) throw new Error("Could not load Sparks");
+        const data = await response.json();
         if (active) setGroups(Array.isArray(data?.stories) ? data.stories : []);
-      })
-      .catch(() => {
+      } catch {
         if (active) setGroups([]);
-      });
+      }
+    };
+    void loadStories();
+    const refreshInterval = window.setInterval(() => void loadStories(), 15_000);
 
     return () => {
       active = false;
+      window.clearInterval(refreshInterval);
     };
   }, []);
 

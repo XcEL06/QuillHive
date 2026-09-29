@@ -12,6 +12,7 @@ import { eq, desc, and, sql, gt, isNull, lte, or, inArray } from "drizzle-orm";
 import { getSessionUserId } from "../../lib/auth";
 import { enrichPost } from "../posts/post.service";
 import { calculateRankingScore } from "../posts/ranking.service";
+import { visiblePostExpiryCondition } from "../posts/postExpiry";
 import { usersTable, userTrustScoresTable } from "@workspace/db/schema";
 
 export const topicsRouter = Router();
@@ -99,7 +100,7 @@ topicsRouter.get("/:slug", async (req, res) => {
         sql`${postsTable.id} = ANY(ARRAY[${sql.join(postIds.map(id => sql`${id}`), sql`, `)}])`,
         eq(postsTable.isPublished, true),
         eq(postsTable.isDeleted, false),
-        or(eq(postsTable.type, "spark"), isNull(postsTable.expiresAt), gt(postsTable.expiresAt, new Date())),
+        visiblePostExpiryCondition(),
       ));
     const authorIds = [...new Set(rawPosts.map(p => p.authorId))];
     const [authors, trustScores, activeBoosts] = await Promise.all([
@@ -205,7 +206,7 @@ topicFeedRouter.get("/feed/topic/:slug", async (req, res) => {
       sql`${postsTable.id} = ANY(ARRAY[${sql.join(postIds.map(id => sql`${id}`), sql`, `)}])`,
       eq(postsTable.isPublished, true),
       eq(postsTable.isDeleted, false),
-      or(eq(postsTable.type, "spark"), isNull(postsTable.expiresAt), gt(postsTable.expiresAt, new Date())),
+      visiblePostExpiryCondition(),
     ));
 
   const authorIds = [...new Set(rawPosts.map(p => p.authorId))];

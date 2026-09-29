@@ -6,15 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Upload, FileCheck2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { useT } from "@/lib/i18n";
-
-function fileToBase64(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
+import { uploadFile as uploadFileToServer } from "@/lib/uploadFile";
 
 export default function UploadCenter() {
   const [file, setFile] = useState<File | null>(null);
@@ -22,30 +14,22 @@ export default function UploadCenter() {
   const [uploaded, setUploaded] = useState<{ url: string; moderationStatus?: string } | null>(null);
   const t = useT();
 
-  const uploadFile = async () => {
+  const handleUpload = async () => {
     if (!file) return;
     if (file.size > 50 * 1024 * 1024) {
       toast.error(t('upload.fileExceedsLimit'));
       return;
     }
     setProgress(20);
-    const dataBase64 = await fileToBase64(file);
-    setProgress(60);
-    const token = localStorage.getItem("qh_token");
-    const res = await fetch("/api/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ filename: file.name, mimeType: file.type || "application/octet-stream", dataBase64 }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
+    try {
+      const data = await uploadFileToServer(file);
+      setProgress(100);
+      setUploaded({ url: data.url, moderationStatus: typeof data.moderationStatus === "string" ? data.moderationStatus : undefined });
+      toast.success(t('upload.uploadComplete'));
+    } catch (error) {
       setProgress(0);
-      toast.error(data.error || t('upload.uploadFailed'));
-      return;
+      toast.error(error instanceof Error ? error.message : t('upload.uploadFailed'));
     }
-    setProgress(100);
-    setUploaded(data);
-    toast.success(t('upload.uploadComplete'));
   };
 
   return (
@@ -66,10 +50,10 @@ export default function UploadCenter() {
               <span className="text-xs text-muted-foreground mt-1">
                 {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB • ${file.type || "unknown type"}` : t('upload.fileTypes')}
               </span>
-              <input type="file" className="sr-only" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+              <input type="file" className="sr-only" onChange={e => { setFile(e.target.files?.[0] ?? null); setProgress(0); setUploaded(null); e.currentTarget.value = ''; }} />
             </label>
             <Progress value={progress} />
-            <Button className="rounded-xl" onClick={uploadFile} disabled={!file || progress === 100}>
+            <Button className="rounded-xl" onClick={handleUpload} disabled={!file || progress === 100}>
               {t('upload.uploadBtn')}
             </Button>
             {uploaded && (

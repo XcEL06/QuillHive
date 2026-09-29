@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Paperclip, X, Loader2, FileText, Image as ImageIcon, Music, Video, File } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { apiUrl, getStoredToken } from '@/lib/api';
+import { uploadFile } from '@/lib/uploadFile';
 
 export interface Attachment {
   url: string;
@@ -28,19 +28,6 @@ const ACCEPTED_DOCUMENTS = [
 
 function isAcceptedMimeType(mimeType: string): boolean {
   return mimeType.startsWith('image/') || mimeType.startsWith('video/') || mimeType.startsWith('audio/') || ACCEPTED_DOCUMENTS.includes(mimeType);
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const base64 = result.includes(',') ? result.split(',')[1] : result;
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 }
 
 export function attachmentIcon(mime: string) {
@@ -82,28 +69,9 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
           toast({ title: 'File too large', description: `${file.name} exceeds 50MB.`, variant: 'destructive' });
           continue;
         }
-        const dataBase64 = await fileToBase64(file);
-        const token = getStoredToken() || '';
-        const res = await fetch(apiUrl('/api/upload'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            filename: file.name,
-            mimeType: file.type,
-            dataBase64,
-            category: 'post',
-          }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || `Upload failed: ${res.status}`);
-        }
-        const data = await res.json();
+        const data = await uploadFile(file, 'post');
         next.push({
-          url: apiUrl(data.url || `/api/file/${data.id}`),
+          url: data.url,
           mimeType: file.type,
           filename: file.name,
           sizeBytes: file.size,

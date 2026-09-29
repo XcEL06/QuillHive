@@ -25,7 +25,8 @@ import {
   ShieldCheck, AlertTriangle, BarChart3, MessageCircle, Users, Zap, Rocket, TrendingUp, Clock, Flame, Camera,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
-import { apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
+import { apiFetch, apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
+import { uploadFile } from '@/lib/uploadFile';
 import { ImageUploadField } from '@/components/media/ImageUploadField';
 import { useT } from '@/lib/i18n';
 import { ReputationTimeline } from '@/components/trust/ReputationTimeline';
@@ -171,46 +172,27 @@ export default function Profile() {
 
   async function handleImageUpload(file: File, type: 'avatar' | 'cover') {
     const setLoading = type === 'avatar' ? setUploadingAvatar : setUploadingCover;
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Please select an image', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Image must be under 10 MB', variant: 'destructive' });
+      return;
+    }
     setLoading(true);
     try {
-      const dataBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = String(reader.result || '');
-          resolve(result.includes(',') ? result.split(',')[1] : result);
-        };
-        reader.onerror = () => reject(reader.error ?? new Error('File read failed'));
-        reader.readAsDataURL(file);
-      });
-
-      const res = await fetch(apiUrl('/api/upload'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          filename: file.name,
-          mimeType: file.type,
-          dataBase64,
-          category: 'profile',
-        }),
-      });
-
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      const url = mediaUrl(data.url ?? data.secure_url);
+      const uploaded = await uploadFile(file, 'profile');
+      const url = uploaded.url;
       const field = type === 'avatar' ? 'avatarUrl' : 'coverUrl';
 
-      const profileRes = await fetch(apiUrl('/api/users/me/profile'), {
+      const profileRes = await apiFetch('/api/users/me/profile', {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: url }),
       });
-      if (!profileRes.ok) throw new Error('Profile update failed');
+      const updatedUser = await profileRes.json().catch(() => null);
+      if (!profileRes.ok) throw new Error(updatedUser?.error || 'Profile update failed');
 
       queryClient.setQueryData(['/api/users/' + username], (previous: ExtendedProfileData | undefined) => (
         previous
@@ -219,13 +201,17 @@ export default function Profile() {
       ));
       const authUser = useAuthStore.getState().user;
       if (authUser && isMe) {
-        useAuthStore.setState({ user: { ...authUser, [field]: url } });
+        useAuthStore.setState({ user: { ...authUser, ...updatedUser, [field]: url } });
       }
 
       toast({ title: `${type === 'avatar' ? 'Profile' : 'Cover'} photo updated` });
       void refetch();
-    } catch {
-      toast({ title: 'Upload failed. Please try again.', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Upload failed',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
@@ -530,7 +516,9 @@ export default function Profile() {
               accept="image/*"
               className="hidden"
               onChange={(e) => {
-                const file = e.target.files?.[0];
+                const input = e.currentTarget;
+                const file = input.files?.[0];
+                input.value = '';
                 if (file) handleImageUpload(file, 'cover');
               }}
             />
@@ -561,7 +549,9 @@ export default function Profile() {
                     accept="image/*"
                     className="hidden"
                     onChange={(e) => {
-                      const file = e.target.files?.[0];
+                      const input = e.currentTarget;
+                      const file = input.files?.[0];
+                      input.value = '';
                       if (file) handleImageUpload(file, 'avatar');
                     }}
                   />

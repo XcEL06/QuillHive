@@ -2,12 +2,13 @@ import { useRef, useState } from 'react';
 import { Image as ImageIcon, Loader2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
+import { mediaUrl } from '@/lib/api';
+import { uploadFile, type UploadCategory } from '@/lib/uploadFile';
 
 interface ImageUploadFieldProps {
   value: string;
   onChange: (url: string) => void;
-  category: string;
+  category: UploadCategory;
   label: string;
   previewClassName?: string;
 }
@@ -27,26 +28,14 @@ export function ImageUploadField({ value, onChange, category, label, previewClas
     }
     setUploading(true);
     try {
-      const dataBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = String(reader.result || '');
-          resolve(result.includes(',') ? result.split(',')[1] : result);
-        };
-        reader.onerror = () => reject(reader.error ?? new Error('File read failed'));
-        reader.readAsDataURL(file);
+      const uploaded = await uploadFile(file, category);
+      onChange(uploaded.url);
+    } catch (error) {
+      toast({
+        title: 'Upload failed',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
       });
-      const token = getStoredToken();
-      const response = await fetch(apiUrl('/api/upload'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ filename: file.name, mimeType: file.type, dataBase64, category }),
-      });
-      if (!response.ok) throw new Error('Upload failed');
-      const data = await response.json();
-      onChange(mediaUrl(data.url ?? data.secure_url));
-    } catch {
-      toast({ title: 'Upload failed. Please try again.', variant: 'destructive' });
     } finally {
       setUploading(false);
     }
