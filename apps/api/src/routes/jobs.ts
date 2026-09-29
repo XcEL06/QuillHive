@@ -143,12 +143,15 @@ router.get("/", async (req, res) => {
   const limit = 20;
   const now = new Date();
 
-  const conds = [
+  const publicListing = and(
     eq(jobsTable.isActive, true),
     eq(jobsTable.isApproved, true),
     eq(jobsTable.moderationStatus, "published"),
     or(isNull(jobsTable.expiresAt), gt(jobsTable.expiresAt, now)),
-  ];
+  );
+  const conds = viewerId
+    ? [or(publicListing, eq(jobsTable.authorId, viewerId))!]
+    : [publicListing!];
   if (type) conds.push(eq(jobsTable.type, type));
   if (category) conds.push(eq(jobsTable.category, category));
 
@@ -168,17 +171,38 @@ router.get("/", async (req, res) => {
   return res.json({ jobs: enriched, total: enriched.length, page });
 });
 
+const jobInputSchema = z.object({
+  title: z.string().trim().min(1).max(180),
+  description: z.string().trim().min(1).max(50_000),
+  type: z.string().trim().min(1).max(50),
+  skills: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
+  compensation: z.string().max(200).nullable().optional(),
+  remote: z.boolean().optional(),
+  location: z.string().max(200).nullable().optional(),
+  isPaid: z.boolean().optional(),
+  budget: z.number().nonnegative().nullable().optional(),
+  companyName: z.string().max(200).nullable().optional(),
+  applyUrl: z.string().url().nullable().optional(),
+  applyEmail: z.string().email().nullable().optional(),
+  category: z.string().max(80).nullable().optional(),
+  isActive: z.boolean().optional(),
+}).strict();
+
+const createJobSchema = jobInputSchema.extend({
+  title: z.string().trim().min(1).max(180),
+  description: z.string().trim().min(1).max(50_000),
+  type: z.string().trim().min(1).max(50),
+});
+
 router.post("/", async (req, res) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
 
-  const {
-    title, description, type, skills, compensation, remote, location,
-    isPaid, budget, companyName, applyUrl, applyEmail, category,
-  } = req.body;
-  if (!title || !description || !type) {
-    return res.status(400).json({ error: "Title, description, and type are required" });
-  }
+  const parsed = createJobSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid opportunity" });
+  const data = parsed.data;
+  const { title, description, type, skills, compensation, remote, location,
+    isPaid, budget, companyName, applyUrl, applyEmail, category, isActive } = data;
 
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60_000);
   const isSuspicious = SCAM_PATTERNS.some((pattern) => pattern.test(`${title} ${description}`));
@@ -198,6 +222,7 @@ router.post("/", async (req, res) => {
     applyUrl: applyUrl || null,
     applyEmail: applyEmail || null,
     category: category || null,
+    isActive: isActive ?? true,
     expiresAt,
     isApproved: !isSuspicious,
     moderationStatus: isSuspicious ? "under_review" : "published",
@@ -233,21 +258,7 @@ router.post("/", async (req, res) => {
   });
 });
 
-const updateJobSchema = z.object({
-  title: z.string().trim().min(1).max(180).optional(),
-  description: z.string().trim().min(1).max(50_000).optional(),
-  type: z.string().trim().min(1).max(50).optional(),
-  skills: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
-  compensation: z.string().max(200).nullable().optional(),
-  remote: z.boolean().optional(),
-  location: z.string().max(200).nullable().optional(),
-  isPaid: z.boolean().optional(),
-  budget: z.number().nonnegative().nullable().optional(),
-  companyName: z.string().max(200).nullable().optional(),
-  applyUrl: z.string().url().nullable().optional(),
-  applyEmail: z.string().email().nullable().optional(),
-  category: z.string().max(80).nullable().optional(),
-}).strict().refine(data => Object.keys(data).length > 0, "At least one field is required");
+const updateJobSchema = jobInputSchema.partial().refine(data => Object.keys(data).length > 0, "At least one field is required");
 
 router.patch("/:id", async (req, res) => {
   const viewerId = getViewerId(req);

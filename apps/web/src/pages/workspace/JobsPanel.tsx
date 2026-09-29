@@ -5,19 +5,19 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Briefcase, MapPin, DollarSign, Clock, Plus, Star, Pencil,
+  Briefcase, MapPin, DollarSign, Clock, Plus, Star, Pencil, Calendar,
   Sparkles, Zap, ChevronRight, Target,
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { formatDistanceToNow } from 'date-fns';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getStoredToken } from '@/lib/api';
+import { apiUrl, getStoredToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { formatAccountAge } from '@/lib/accountAge';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { ApplyOpportunityActions } from '@/components/opportunities/ApplyOpportunityActions';
 
-type JobType = 'all' | 'job' | 'commission' | 'collaboration';
+type JobType = 'all' | 'freelance' | 'micro_contract' | 'full_time' | 'collaboration' | 'syndicate_funding';
 
 interface MatchedJob {
   id: number;
@@ -131,20 +131,23 @@ export function JobsPanel() {
   const [typeFilter, setTypeFilter] = useState<JobType>('all');
   const matchMap = new Map<number, { score: number; reasons: string[] }>();
 
-  const { data, isLoading } = useGetJobs(
+  const { data, isLoading, isError, refetch } = useGetJobs(
     { type: typeFilter === 'all' ? undefined : typeFilter as any },
     { request: { headers: token ? { Authorization: `Bearer ${token}` } : {} } }
   );
+  const jobs = Array.isArray(data?.jobs) ? data.jobs : [];
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <Tabs value={typeFilter} onValueChange={v => setTypeFilter(v as JobType)}>
-          <TabsList className="h-8 text-xs">
+          <TabsList className="flex h-auto flex-wrap gap-1 text-xs">
             <TabsTrigger value="all" className="text-xs px-2">All</TabsTrigger>
-            <TabsTrigger value="job" className="text-xs px-2">Jobs</TabsTrigger>
-            <TabsTrigger value="commission" className="text-xs px-2">Commission</TabsTrigger>
+            <TabsTrigger value="freelance" className="text-xs px-2">Freelance</TabsTrigger>
+            <TabsTrigger value="micro_contract" className="text-xs px-2">Contracts</TabsTrigger>
+            <TabsTrigger value="full_time" className="text-xs px-2">Full-Time</TabsTrigger>
             <TabsTrigger value="collaboration" className="text-xs px-2">Collab</TabsTrigger>
+            <TabsTrigger value="syndicate_funding" className="text-xs px-2">Funding</TabsTrigger>
           </TabsList>
         </Tabs>
         {user && (
@@ -170,12 +173,21 @@ export function JobsPanel() {
           </div>
         ))}
 
-        {data?.jobs.map(job => {
+        {!isLoading && isError && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-center" role="alert">
+            <p className="text-sm text-destructive">Could not load opportunities. Please try again.</p>
+            <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => void refetch()}>
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {!isError && jobs.map(job => {
           const j = job as any;
           const isFeatured = !!j.isFeatured && (!j.featuredUntil || new Date(j.featuredUntil) > new Date());
           const matchData = matchMap.get(job.id);
           const expiresAt = j.expiresAt ? new Date(j.expiresAt) : null;
-          const isOwner = job.author.id === user?.id;
+          const isOwner = Number(job.author?.id ?? (job as any).authorId) === Number(user?.id);
 
           const handleDelete = async () => {
             if (!isOwner) return;
@@ -183,7 +195,7 @@ export function JobsPanel() {
             if (!confirmed) return;
             try {
               const token = getStoredToken();
-              const res = await fetch(`/api/jobs/${job.id}`, {
+              const res = await fetch(apiUrl(`/api/jobs/${job.id}`), {
                 method: 'DELETE',
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
               });
@@ -191,7 +203,7 @@ export function JobsPanel() {
                 const error = await res.json().catch(() => ({ error: 'Could not delete opportunity' }));
                 throw new Error(error.error || 'Could not delete opportunity');
               }
-              window.location.reload();
+              await refetch();
             } catch (error) {
               alert(error instanceof Error ? error.message : 'Could not delete opportunity');
             }
@@ -216,6 +228,12 @@ export function JobsPanel() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
+                    {!j.isActive && <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">Inactive</Badge>}
+                    {j.moderationStatus && j.moderationStatus !== 'published' && (
+                      <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-300">
+                        {j.moderationStatus.replace(/_/g, ' ')}
+                      </Badge>
+                    )}
                     {isFeatured && (
                       <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] gap-0.5">
                         <Star className="w-2.5 h-2.5 fill-current" /> Featured
@@ -267,7 +285,7 @@ export function JobsPanel() {
           );
         })}
 
-        {!isLoading && !data?.jobs.length && (
+        {!isLoading && !isError && jobs.length === 0 && (
           <div className="text-center py-12">
             <Briefcase className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">No jobs found in this category.</p>

@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { getStoredToken } from '@/lib/api';
+import { apiUrl, getStoredToken } from '@/lib/api';
+import { useAuthStore } from '@/store/auth';
 import { BackButton } from '@/components/ui/BackButton';
 import {
   Briefcase, DollarSign, Tag, FileCheck, Plus, X,
@@ -28,6 +29,7 @@ export default function PostJob() {
   const [locationPath, setLocation] = useLocation();
   const editId = new URLSearchParams(locationPath.split("?")[1] ?? "").get("edit");
   const { toast } = useToast();
+  const { user } = useAuthStore();
   const token = getStoredToken();
 
   const [title, setTitle]                   = useState('');
@@ -45,6 +47,7 @@ export default function PostJob() {
   const [applyEmail, setApplyEmail]         = useState('');
   const [skillInput, setSkillInput]         = useState('');
   const [skills, setSkills]                 = useState<string[]>([]);
+  const [isActive, setIsActive]             = useState(true);
   const [isSubmitting, setIsSubmitting]     = useState(false);
   const [isLoadingEdit, setIsLoadingEdit]   = useState(Boolean(editId));
 
@@ -54,14 +57,19 @@ export default function PostJob() {
     setIsLoadingEdit(true);
     void (async () => {
       try {
-        const res = await fetch(`/api/jobs/${editId}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        const res = await fetch(apiUrl(`/api/jobs/${editId}`), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
         if (!res.ok) throw new Error("Could not load this opportunity");
         const job: {
+          id?: number; authorId?: number; author?: { id?: number };
           title?: string; type?: string; companyName?: string | null; description?: string;
           budget?: number | string | null; compensation?: string | null; remote?: boolean;
           location?: string | null; applyUrl?: string | null; applyEmail?: string | null; skills?: string[];
+          isActive?: boolean;
         } = await res.json();
         if (cancelled) return;
+        if (!user || Number(job.authorId ?? job.author?.id) !== Number(user.id)) {
+          throw new Error('You can only edit your own opportunities.');
+        }
         setTitle(job.title ?? '');
         setType(job.type ?? 'freelance');
         setCompanyName(job.companyName ?? '');
@@ -71,6 +79,7 @@ export default function PostJob() {
         setApplyUrl(job.applyUrl ?? '');
         setApplyEmail(job.applyEmail ?? '');
         setSkills(Array.isArray(job.skills) ? job.skills : []);
+        setIsActive(job.isActive ?? true);
         const compensation = job.compensation?.match(/^([A-Z]{3})\s+([\d.]+)(?:[–-]([\d.]+))?(\/hr| fixed)$/);
         if (compensation) {
           setCurrency(compensation[1]);
@@ -90,7 +99,7 @@ export default function PostJob() {
       }
     })();
     return () => { cancelled = true; };
-  }, [editId, token, setLocation, toast]);
+  }, [editId, token, user?.id, setLocation, toast]);
 
   const addSkill = () => {
     const s = skillInput.trim();
@@ -107,6 +116,17 @@ export default function PostJob() {
 
     const minVal = budgetMin ? parseFloat(budgetMin) : null;
     const maxVal = budgetMax ? parseFloat(budgetMax) : null;
+    if ((budgetMin && (!Number.isFinite(minVal) || minVal! < 0)) ||
+        (budgetMax && (!Number.isFinite(maxVal) || maxVal! < 0)) ||
+      (maxVal !== null && minVal === null) ||
+      (maxVal !== null && minVal !== null && maxVal < minVal)) {
+      toast({ title: 'Check the budget', description: 'Enter valid non-negative amounts and make sure the maximum is not below the minimum.', variant: 'destructive' });
+      return;
+    }
+    if (title.trim().length > 180 || description.trim().length > 50_000 || skills.length > 30 || skills.some(skill => skill.trim().length > 60)) {
+      toast({ title: 'Check the opportunity details', description: 'Titles are limited to 180 characters, descriptions to 50,000, and skills to 30 entries of 60 characters each.', variant: 'destructive' });
+      return;
+    }
 
     const compensationStr = (() => {
       if (!minVal) return undefined;
@@ -118,10 +138,14 @@ export default function PostJob() {
     const fullDescription = outputCriteria.trim()
       ? `${description.trim()}\n\n**Proof Criterion:** ${outputCriteria.trim()}`
       : description.trim();
+    if (fullDescription.length > 50_000) {
+      toast({ title: 'Description is too long', description: 'The complete description, including proof criteria, must be under 50,000 characters.', variant: 'destructive' });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      const res = await fetch(editId ? `/api/jobs/${editId}` : '/api/jobs', {
+      const res = await fetch(apiUrl(editId ? `/api/jobs/${editId}` : '/api/jobs'), {
         method: editId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
@@ -138,6 +162,7 @@ export default function PostJob() {
           applyEmail:   applyEmail.trim() || null,
           isPaid:       !!minVal && minVal > 0,
           category:     type,
+          isActive,
         }),
       });
       const data: { error?: string; id?: number; message?: string } = await res.json();
@@ -346,6 +371,14 @@ export default function PostJob() {
               <Input id="loc" placeholder="City, Country" value={location} onChange={e => setLocation2(e.target.value)} className="h-10 rounded-xl" />
             </div>
           )}
+
+          <div className="flex items-center justify-between rounded-xl border border-border/60 bg-card px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">Opportunity active</p>
+              <p className="text-xs text-muted-foreground">Inactive opportunities are visible only to you.</p>
+            </div>
+            <Switch checked={isActive} onCheckedChange={setIsActive} />
+          </div>
 
           {/* Apply methods */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
