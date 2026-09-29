@@ -253,7 +253,7 @@ export interface CreateGroupRequest {
   avatarUrl?: string | null;
   /** @nullable */
   coverUrl?: string | null;
-  privacy?: "public" | "private";
+  privacy?: "open" | "private";
   /** @nullable */
   rules?: string | null;
 }

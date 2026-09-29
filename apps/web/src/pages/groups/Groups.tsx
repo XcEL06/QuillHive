@@ -17,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2 } from 'lucide-react';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useT } from '@/lib/i18n';
 
 import { GroupMembersList } from '@/components/groups/GroupMembersList';
@@ -231,23 +231,25 @@ function GroupsList() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const t = useT();
+  const [, setLocation] = useLocation();
   const { token } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', privacy: 'public', coverUrl: '' });
+  const [form, setForm] = useState({ name: '', description: '', privacy: 'open', coverUrl: '' });
   const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   const { data, isLoading } = useGetGroups({ search: search || undefined });
 
   const { mutate: createGroup, isPending: isCreating } = useCreateGroup({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['/api/groups'] });
+      onSuccess: (createdGroup) => {
+        void queryClient.invalidateQueries({ queryKey: ['/api/groups'] });
         toast({ title: t('groups.groupCreated', 'Group created!'), description: t('groups.groupCreatedDesc', 'Your community is live.') });
         setCreateOpen(false);
-        setForm({ name: '', description: '', privacy: 'public', coverUrl: '' });
+        setForm({ name: '', description: '', privacy: 'open', coverUrl: '' });
         if (fileInputRef.current) fileInputRef.current.value = '';
+        setLocation(`/groups/${createdGroup.id}`);
       },
       onError: (error) => toast({
         title: t('groups.createFailed', 'Failed to create group'),
@@ -398,7 +400,7 @@ function GroupsList() {
               <Select value={form.privacy} onValueChange={v => setForm(f => ({ ...f, privacy: v }))}>
                 <SelectTrigger className="mt-1.5 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="public">Public</SelectItem>
+                  <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="private">Private</SelectItem>
                 </SelectContent>
               </Select>
@@ -410,7 +412,7 @@ function GroupsList() {
                   description: form.description || null,
                   category: 'general',
                   coverUrl: form.coverUrl || null,
-                  privacy: form.privacy as 'public' | 'private',
+                  privacy: form.privacy as 'open' | 'private',
                 },
               })}
               disabled={isCreating || isUploadingCover || !form.name.trim()}

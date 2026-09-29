@@ -9,11 +9,14 @@ const router = Router();
 
 export function normalizeGroupCreateInput(input: Record<string, any> = {}) {
   const name = typeof input.name === "string" ? input.name.trim() : "";
-  const privacyValue = typeof input.privacy === "string" ? input.privacy.toLowerCase() : "public";
-  const privacy = privacyValue === "private" ? "private" : "open";
+  const privacyValue = input.privacy == null
+    ? "open"
+    : typeof input.privacy === "string"
+      ? input.privacy.trim().toLowerCase()
+      : "";
 
   if (!name) throw new Error("Name is required");
-  if (privacyValue !== "public" && privacyValue !== "private") throw new Error("Invalid privacy");
+  if (privacyValue !== "open" && privacyValue !== "private") throw new Error("Privacy must be open or private");
 
   const description = typeof input.description === "string" ? input.description.trim() || null : input.description ?? null;
   const category = typeof input.category === "string" && input.category.trim() ? input.category.trim() : "general";
@@ -24,9 +27,21 @@ export function normalizeGroupCreateInput(input: Record<string, any> = {}) {
     category,
     avatarUrl: input.avatarUrl || null,
     coverUrl: input.coverUrl || null,
-    privacy,
+    privacy: privacyValue,
     rules: input.rules || null,
   };
+}
+
+export function groupCreateErrorMessage(error: unknown): string {
+  let current = error;
+  for (let depth = 0; depth < 4 && current && typeof current === "object"; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string" && ["42703", "42P01", "42704", "42883", "42701"].includes(code)) {
+      return "Group creation is temporarily unavailable because the database schema needs an update. Please try again later.";
+    }
+    current = (current as { cause?: unknown }).cause;
+  }
+  return "Could not create group. Please try again.";
 }
 
 function getViewerId(req: any): number | null {
@@ -138,8 +153,7 @@ router.post("/", async (req, res) => {
     const enriched = await enrichGroup(group, viewerId);
     return res.status(201).json(enriched);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Could not create group";
-    return res.status(500).json({ error: message });
+    return res.status(500).json({ error: groupCreateErrorMessage(error) });
   }
 });
 

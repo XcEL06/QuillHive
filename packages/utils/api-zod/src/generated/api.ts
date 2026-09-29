@@ -692,7 +692,7 @@ export const CreateGroupBody = zod.object({
   category: zod.string(),
   avatarUrl: zod.string().nullish(),
   coverUrl: zod.string().nullish(),
-  privacy: zod.enum(["public", "private"]).default("public"),
+  privacy: zod.enum(["open", "private"]).default("open"),
   rules: zod.string().nullish(),
 });
 

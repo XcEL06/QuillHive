@@ -1189,7 +1189,7 @@ components:
           type: ["string", "null"]
         privacy:
           type: string
-          enum: [public, private]
+          enum: [open, private]
         rules:
           type: ["string", "null"]
       required:
