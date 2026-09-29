@@ -138,17 +138,16 @@ function CreatorCard({ creator, checkoutEnabled, onCheckout }: { creator: Creato
             View Profile <ChevronRight className="w-3 h-3" />
           </Button>
         </Link>
-        {checkoutEnabled && listing?.pricingModel === 'fixed' && listing.priceFrom ? (
+        {checkoutEnabled && listing?.pricingModel === 'fixed' && listing.priceFrom && (
           <Button size="sm" className="gap-1 text-xs h-8" onClick={() => onCheckout(listing)}>
             <CreditCard className="w-3 h-3" /> Pay
           </Button>
-        ) : (
-          <Link href={`/profile/${user.username}?action=collaborate`}>
-            <Button size="sm" className="gap-1 text-xs h-8">
-              <Briefcase className="w-3 h-3" /> Request collaboration
-            </Button>
-          </Link>
         )}
+        <Link href={`/profile/${user.username}?action=collaborate`}>
+          <Button size="sm" variant="outline" className="gap-1 text-xs h-8">
+            <Briefcase className="w-3 h-3" /> Request collaboration
+          </Button>
+        </Link>
       </div>
     </div>
   );

@@ -504,7 +504,15 @@ export default function Profile() {
       {/* Cover Photo */}
       <div className="w-full h-48 md:h-72 bg-muted relative md:rounded-b-3xl overflow-hidden shadow-sm">
         {user.coverUrl ? (
-          <img src={mediaUrl(user.coverUrl)} alt="Cover" className="w-full h-full object-cover" />
+          <img
+            src={mediaUrl(user.coverUrl)}
+            alt="Cover"
+            className="w-full h-full object-cover"
+            onError={(event) => {
+              event.currentTarget.onerror = null;
+              event.currentTarget.src = `${import.meta.env.BASE_URL}images/default-cover.png`;
+            }}
+          />
         ) : (
           <img src={`${import.meta.env.BASE_URL}images/default-cover.png`} alt="Default Cover" className="w-full h-full object-cover opacity-80" />
         )}

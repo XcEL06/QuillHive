@@ -131,7 +131,16 @@ async function enrichJob(job: any, viewerId: number | null) {
   return {
     ...job,
     skills: normalizeSkills(job.skills),
-    author: author ? { ...author, trustTier: isNewAccount ? "new" : (trust?.tier ?? "new"), trustScore: trust?.uti ?? 50 } : author,
+    author: author ? {
+      id: author.id,
+      username: author.username,
+      displayName: author.displayName,
+      avatarUrl: author.avatarUrl,
+      createdAt: author.createdAt,
+      headline: author.headline,
+      trustTier: isNewAccount ? "new" : (trust?.tier ?? "new"),
+      trustScore: trust?.uti ?? 50,
+    } : null,
   };
 }
 

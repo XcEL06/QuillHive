@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Paperclip, X, Loader2, FileText, Image as ImageIcon, Music, Video, File } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { uploadFile } from '@/lib/uploadFile';
+import { uploadFile, type UploadCategory } from '@/lib/uploadFile';
 
 export interface Attachment {
   url: string;
@@ -44,9 +44,10 @@ interface AttachmentPickerProps {
   max?: number;
   label?: string;
   compact?: boolean;
+  category?: UploadCategory;
 }
 
-export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS, label = 'Attach files', compact = false }: AttachmentPickerProps) {
+export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS, label = 'Attach files', compact = false, category = 'post' }: AttachmentPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
@@ -69,7 +70,7 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
           toast({ title: 'File too large', description: `${file.name} exceeds 50MB.`, variant: 'destructive' });
           continue;
         }
-        const data = await uploadFile(file, 'post');
+        const data = await uploadFile(file, category);
         next.push({
           url: data.url,
           mimeType: file.type,

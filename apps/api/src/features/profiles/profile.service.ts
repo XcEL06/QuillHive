@@ -34,6 +34,20 @@ export async function invalidateUserCache(userId: number) {
   }
 }
 
+function toPublicPostAuthor(user: any) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl,
+    createdAt: user.createdAt,
+    isOfficialAccount: user.isOfficialAccount,
+    role: user.role,
+    hireMeEnabled: user.hireMeEnabled,
+  };
+}
+
 async function _getUserWithCounts(userId: number, viewerId: number | null) {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user) return null;
@@ -60,7 +74,20 @@ async function _getUserWithCounts(userId: number, viewerId: number | null) {
     isFollowing = follow.length > 0;
   }
 
-  const { passwordHash: _, ...safeUser } = user;
+  const safeUser = { ...user };
+  for (const field of [
+    "passwordHash",
+    "twoFactorSecret",
+    "passwordResetTokenHash",
+    "passwordResetExpires",
+    "signupIpHash",
+    "signupUserAgent",
+    "lastKnownIPHash",
+    "lastKnownCountry",
+    "lastKnownTimezone",
+  ] as const) {
+    delete (safeUser as Partial<typeof user>)[field];
+  }
   return {
     ...safeUser,
     followersCount: followersResult?.count ?? 0,
@@ -111,7 +138,7 @@ export async function enrichPost(post: any, viewerId: number | null) {
     isSaved = !!saved;
   }
 
-  const authorWithCounts = await getUserWithCounts(post.authorId, viewerId);
+  const authorWithCounts = toPublicPostAuthor(await getUserWithCounts(post.authorId, viewerId));
 
   let quotedPost: Record<string, unknown> | null = null;
   if (post.quotedPostId) {
@@ -130,7 +157,7 @@ export async function enrichPost(post: any, viewerId: number | null) {
     if (quoted) {
       quotedPost = {
         ...quoted,
-        author: await getUserWithCounts(quoted.authorId, viewerId),
+        author: toPublicPostAuthor(await getUserWithCounts(quoted.authorId, viewerId)),
       };
     }
   }

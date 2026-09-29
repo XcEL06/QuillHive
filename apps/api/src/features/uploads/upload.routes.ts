@@ -116,7 +116,11 @@ const uploadSchema = z.object({
 });
 
 function uploadsDir() {
-  return path.resolve(process.cwd(), "../../features/quillhive/uploads");
+  return path.resolve(process.env.UPLOADS_DIR?.trim() || path.join(process.cwd(), "uploads"));
+}
+
+function isEphemeralProduction() {
+  return process.env.NODE_ENV === "production" || Boolean(process.env.RENDER) || Boolean(process.env.RAILWAY_ENVIRONMENT_NAME);
 }
 
 function safeExtension(filename: string) {
@@ -155,7 +159,13 @@ uploadRouter.post("/", requireAuth, validateBody(uploadSchema), async (req: any,
     }
   }
 
-  // Local fs fallback
+  if (isEphemeralProduction() && !process.env.UPLOADS_DIR?.trim()) {
+    return res.status(503).json({
+      error: "Durable file storage is not configured. Configure Cloudinary or set UPLOADS_DIR to a persistent volume before uploading.",
+    });
+  }
+
+  // Local fs storage is suitable for development or explicitly mounted persistent volumes.
   await mkdir(uploadsDir(), { recursive: true });
   const storedName = `${Date.now()}-${randomBytes(8).toString("hex")}${safeExtension(filename)}`;
   const storagePath = path.join(uploadsDir(), storedName);
@@ -211,9 +221,17 @@ uploadRouter.get(
       } catch { /* fall through */ }
     }
 
-    const data = await readFile(file.storagePath);
-    res.setHeader("Content-Type", file.mimeType);
-    res.setHeader("Content-Disposition", `inline; filename="${file.originalName.replace(/"/g, "")}"`);
-    return res.send(data);
+    try {
+      const data = await readFile(file.storagePath);
+      res.setHeader("Content-Type", file.mimeType);
+      res.setHeader("Content-Disposition", `inline; filename="${file.originalName.replace(/"/g, "")}"`);
+      return res.send(data);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        logger.warn({ fileId: file.id }, "uploaded_file_bytes_missing");
+        return res.status(410).json({ error: "This file is no longer available. Please upload it again." });
+      }
+      throw error;
+    }
   },
 );

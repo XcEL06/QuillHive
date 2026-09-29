@@ -49,7 +49,8 @@ Recommended for production:
 - `RESEND_API_KEY` - email delivery (magic links, verification, digests)
 - `EMAIL_PREFERENCE_SECRET` - signing secret for one-click digest unsubscribe links
 - `BULLMQ_REDIS_URL` - Redis connection for weekly emails, notifications, and scheduled jobs
-- `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` - image CDN
+- `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` - durable image/video storage (recommended)
+- `UPLOADS_DIR` - path on a persistent mounted volume for local file storage; production uploads fail clearly if neither this nor Cloudinary is configured
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` - GitHub OAuth
 
 Optional verification providers:

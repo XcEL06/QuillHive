@@ -597,7 +597,7 @@ export default function Settings() {
                     <div>
                       <Label className="mb-2 block">{t('settings.coverPhoto')}</Label>
                       <div className="relative w-full h-32 rounded-xl overflow-hidden bg-muted border border-border group cursor-pointer" onClick={() => coverInputRef.current?.click()}>
-                        {profileForm.coverUrl ? <img src={mediaUrl(profileForm.coverUrl)} alt="Cover" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-muted-foreground"><Camera className="w-8 h-8" /></div>}
+                        {profileForm.coverUrl ? <img src={mediaUrl(profileForm.coverUrl)} alt="Cover" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = `${import.meta.env.BASE_URL}images/default-cover.png`; }} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-muted-foreground"><Camera className="w-8 h-8" /></div>}
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           {isUploadingCover ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Upload className="w-6 h-6 text-white" />}
                         </div>

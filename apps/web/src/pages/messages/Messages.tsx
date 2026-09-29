@@ -17,6 +17,22 @@ import { useSocketEvent, useJoinConversation } from '@/hooks/useSocket';
 import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
 import { getStoredToken } from '@/lib/api';
+import { AttachmentPicker, type Attachment } from '@/components/post/AttachmentPicker';
+import { useToast } from '@/hooks/use-toast';
+
+function renderMessageContent(content: string) {
+  const parts = content.split(/(https?:\/\/[^\s<>]+|\/api\/file\/\d+(?:\?[^\s<>]*)?)/g);
+  return parts.map((part, index) => {
+    if (/^https?:\/\//i.test(part) || /^\/api\/file\/\d+/.test(part)) {
+      return (
+        <a key={index} href={part} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 break-all">
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
 
 interface LocalMessage {
   id: number;
@@ -48,11 +64,13 @@ export default function Messages() {
   usePageTitle('Messages');
   const { user: currentUser } = useAuthStore();
   const t = useT();
+  const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [conversationFilter, setConversationFilter] = useState<'all' | 'unread'>('all');
   const [isNewConvOpen, setIsNewConvOpen] = useState(false);
   const [messageText, setMessageText] = useState('');
+  const [messageAttachments, setMessageAttachments] = useState<Attachment[]>([]);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
   const [paymentProposals, setPaymentProposals] = useState<PaymentProposal[]>([]);
   const [proposalAmount, setProposalAmount] = useState('');
@@ -172,6 +190,7 @@ export default function Messages() {
       onSuccess: (data: unknown) => {
         const msg = data as LocalMessage;
         setMessageText('');
+        setMessageAttachments([]);
         setLocalMessages(prev => {
           if (prev.find((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
@@ -188,8 +207,16 @@ export default function Messages() {
 
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!messageText.trim() || !activeConvId) return;
-    sendMsg({ data: { conversationId: activeConvId, content: messageText } });
+    if ((!messageText.trim() && messageAttachments.length === 0) || !activeConvId) return;
+    const attachmentContent = messageAttachments.map(attachment => (
+      `[Attachment: ${attachment.filename || 'file'}]\n${attachment.url}`
+    )).join('\n\n');
+    const content = [messageText.trim(), attachmentContent].filter(Boolean).join('\n\n');
+    if (content.length > 5_000) {
+      toast({ title: 'Message is too long', description: 'Remove some attachments or shorten your message.', variant: 'destructive' });
+      return;
+    }
+    sendMsg({ data: { conversationId: activeConvId, content } });
   };
 
   const proposePayment = async () => {
@@ -453,7 +480,7 @@ export default function Messages() {
                           )
                         )}
                         <div className={`px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMine ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted/60 text-foreground border border-border/50 rounded-tl-sm'}`}>
-                          <p className="whitespace-pre-wrap">{msg.content}</p>
+                          <p className="whitespace-pre-wrap break-words">{renderMessageContent(msg.content)}</p>
                           <div className="mt-1 flex items-center justify-end gap-1.5 text-[10px] opacity-80">
                             <span>{formatDistanceToNow(new Date(msg.createdAt))}</span>
                             {isMine && (
@@ -501,6 +528,19 @@ export default function Messages() {
 
               {/* Input */}
               <div className="p-4 border-t border-border/50 bg-card shrink-0">
+                <div className="mb-2 flex items-center gap-2">
+                  <AttachmentPicker
+                    attachments={messageAttachments}
+                    onChange={setMessageAttachments}
+                    category="general"
+                    max={5}
+                    compact
+                    label="Attach file"
+                  />
+                  {messageAttachments.length > 0 && (
+                    <span className="text-xs text-muted-foreground">{messageAttachments.length} file{messageAttachments.length === 1 ? '' : 's'} ready</span>
+                  )}
+                </div>
                 <form
                   onSubmit={handleSend}
                   className="flex items-center gap-2 bg-muted/30 p-1.5 rounded-full border border-border/50 focus-within:border-primary/50 transition-colors"
@@ -511,7 +551,7 @@ export default function Messages() {
                     onChange={e => handleTyping(e.target.value)}
                     className="border-0 bg-transparent focus-visible:ring-0 flex-1 px-4"
                   />
-                  <Button type="submit" size="icon" disabled={isSending || !messageText.trim()} className="rounded-full shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <Button type="submit" size="icon" disabled={isSending || (!messageText.trim() && messageAttachments.length === 0)} className="rounded-full shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground">
                     <Send className="w-4 h-4" />
                   </Button>
                 </form>
