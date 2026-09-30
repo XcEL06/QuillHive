@@ -13,6 +13,7 @@ import { getSessionUserId } from "../../lib/auth";
 import { enrichPost } from "../posts/post.service";
 import { calculateRankingScore } from "../posts/ranking.service";
 import { visiblePostExpiryCondition } from "../posts/postExpiry";
+import { postVisibilityCondition } from "../posts/postVisibility";
 import { usersTable, userTrustScoresTable } from "@workspace/db/schema";
 
 export const topicsRouter = Router();
@@ -101,6 +102,7 @@ topicsRouter.get("/:slug", async (req, res) => {
         eq(postsTable.isPublished, true),
         eq(postsTable.isDeleted, false),
         visiblePostExpiryCondition(),
+        postVisibilityCondition(viewerId),
       ));
     const authorIds = [...new Set(rawPosts.map(p => p.authorId))];
     const [authors, trustScores, activeBoosts] = await Promise.all([
@@ -207,6 +209,7 @@ topicFeedRouter.get("/feed/topic/:slug", async (req, res) => {
       eq(postsTable.isPublished, true),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
+      postVisibilityCondition(viewerId),
     ));
 
   const authorIds = [...new Set(rawPosts.map(p => p.authorId))];

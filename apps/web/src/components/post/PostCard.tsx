@@ -745,7 +745,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
   const feeling = feelingTag ? feelingMap[feelingTag.split(':')[1]] : null;
 
   let parsedAttachments: Array<{ url: string; mimeType: string; filename?: string; sizeBytes?: number }> = [];
-  const rawAttachments = (post as EnrichedPost & { attachments?: unknown }).attachments;
+  const rawAttachments: unknown = (post as unknown as { attachments?: unknown }).attachments;
   if (Array.isArray(rawAttachments)) {
     parsedAttachments = rawAttachments;
   } else if (typeof rawAttachments === 'string' && rawAttachments.length > 0) {

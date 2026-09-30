@@ -6,6 +6,7 @@ import { and, desc, eq, gt, isNull, lt, or } from "drizzle-orm";
 import { getViewerId } from "../../lib/auth-types";
 import { logger } from "../../lib/logger";
 import { activeHighlightExpiryCondition } from "../posts/postExpiry";
+import { postVisibilityCondition } from "../posts/postVisibility";
 
 export const highlightsRouter: Router = Router();
 
@@ -42,6 +43,7 @@ highlightsRouter.get("/", async (_req, res) => {
         eq(postsTable.isDeleted, false),
         eq(postsTable.isPublished, true),
         activeHighlightExpiryCondition(now),
+        postVisibilityCondition(null),
       ),
     )
     .orderBy(desc(postsTable.createdAt))

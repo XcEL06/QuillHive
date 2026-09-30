@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { getSessionUserId } from "../../lib/auth";
 import * as PostService from "./post.service";
 import { activeSparkCondition, SPARK_LIFETIME_MS, visiblePostExpiryCondition } from "./postExpiry";
+import { postVisibilityCondition } from "./postVisibility";
 import { db } from "@workspace/db";
 import {
   postsTable, likesTable, commentsTable, followsTable,
@@ -63,8 +64,8 @@ export const saveDraft = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
 
-  const { draftId, title, content, type, tags, imageUrl, attachments } = req.body as {
-    draftId?: number; title?: string; content: string; type?: string; tags?: string[]; imageUrl?: string; attachments?: unknown[];
+  const { draftId, title, content, type, visibility, tags, imageUrl, attachments } = req.body as {
+    draftId?: number; title?: string; content: string; type?: string; visibility?: "public" | "followers" | "private"; tags?: string[]; imageUrl?: string; attachments?: unknown[];
   };
 
   const VALID_TYPES = ["post", "article", "story", "novel", "artwork", "spark"];
@@ -82,6 +83,7 @@ export const saveDraft = async (req: Request, res: Response) => {
       title: title ?? null,
       content,
       type: resolvedType,
+      visibility: resolvedType === "spark" ? visibility ?? "public" : "public",
       tags: JSON.stringify(tags ?? []),
       imageUrl: imageUrl ?? null,
       attachments: JSON.stringify(attachments ?? []),
@@ -95,6 +97,7 @@ export const saveDraft = async (req: Request, res: Response) => {
     title: title ?? null,
     content,
     type: resolvedType,
+    visibility: resolvedType === "spark" ? visibility ?? "public" : "public",
     tags: JSON.stringify(tags ?? []),
     imageUrl: imageUrl ?? null,
     attachments: JSON.stringify(attachments ?? []),
@@ -113,6 +116,7 @@ export const listMyDrafts = async (req: Request, res: Response) => {
       id: postsTable.id,
       title: postsTable.title,
       type: postsTable.type,
+      visibility: postsTable.visibility,
       content: postsTable.content,
       updatedAt: postsTable.updatedAt,
       createdAt: postsTable.createdAt,
@@ -157,6 +161,7 @@ export const getDraft = async (req: Request, res: Response) => {
       id: postsTable.id,
       title: postsTable.title,
       type: postsTable.type,
+      visibility: postsTable.visibility,
       content: postsTable.content,
       tags: postsTable.tags,
       imageUrl: postsTable.imageUrl,
@@ -193,6 +198,7 @@ export const listPosts = async (req: Request, res: Response) => {
         eq(postsTable.isPublished, true),
         eq(postsTable.isDeleted, false),
         visiblePostExpiryCondition(),
+        postVisibilityCondition(viewerId),
       ))
       .orderBy(desc(postsTable.createdAt))
       .limit(Math.min(limit, 50));
@@ -232,6 +238,7 @@ export const listRecentSparks = async (req: Request, res: Response) => {
       eq(postsTable.isDeleted, false),
       inArray(postsTable.authorId, authorIds),
       activeSparkCondition(now),
+      postVisibilityCondition(viewerId),
     ))
     .orderBy(desc(postsTable.createdAt));
 
@@ -280,9 +287,16 @@ export const viewSpark = async (req: Request, res: Response) => {
   const [spark] = await db.select({
     id: postsTable.id,
     authorId: postsTable.authorId,
+    visibility: postsTable.visibility,
     createdAt: postsTable.createdAt,
     expiresAt: postsTable.expiresAt,
-  }).from(postsTable).where(and(eq(postsTable.id, id), eq(postsTable.type, "spark"), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false)));
+  }).from(postsTable).where(and(
+    eq(postsTable.id, id),
+    eq(postsTable.type, "spark"),
+    eq(postsTable.isPublished, true),
+    eq(postsTable.isDeleted, false),
+    postVisibilityCondition(viewerId),
+  ));
   if (!spark) return res.status(404).json({ error: "Spark not found" });
   const now = new Date();
   const sparkIsActive = spark.expiresAt
@@ -308,8 +322,9 @@ export const createPost = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
 
-  const { title, titleA, titleB, content, excerpt, type, imageUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt } = req.body;
+  const { title, titleA, titleB, content, excerpt, type, visibility, imageUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt } = req.body;
   if (!content || !type) return res.status(400).json({ error: "Content and type are required" });
+  if (visibility !== undefined && type !== "spark") return res.status(400).json({ error: "Visibility settings are only available for Sparks" });
   if (!(await isFeatureEnabled("post_creation_enabled"))) {
     return res.status(403).json({ error: "post_creation_disabled", message: "Post creation is temporarily disabled." });
   }
@@ -321,7 +336,7 @@ export const createPost = async (req: Request, res: Response) => {
   }
 
   try {
-    const post = await PostService.createPost(viewerId, { title, titleA, titleB, content, excerpt, type, imageUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt });
+    const post = await PostService.createPost(viewerId, { title, titleA, titleB, content, excerpt, type, visibility, imageUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt });
     refreshTrustForUsers(viewerId);
     void deleteCachePattern(`feed:*`);
     void deleteCachePattern(`trending:*`); memDeletePattern("trending:");
@@ -492,6 +507,7 @@ export const getFeed = async (req: Request, res: Response) => {
       eq(postsTable.isPublished, true),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
+      postVisibilityCondition(viewerId),
       ...(mutedIds.length > 0 ? [notInArray(postsTable.authorId, mutedIds)] : []),
       ...(hasSince ? [gt(postsTable.createdAt, since)] : []),
     ))
@@ -742,6 +758,7 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
       eq(savedPostsTable.userId, viewerId),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
+      postVisibilityCondition(viewerId),
     ));
 
   const savedRows = await db
@@ -752,6 +769,7 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
       eq(savedPostsTable.userId, viewerId),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
+      postVisibilityCondition(viewerId),
     ))
     .orderBy(desc(savedPostsTable.createdAt))
     .limit(limit)
@@ -906,6 +924,7 @@ export const getTrending = async (req: Request, res: Response) => {
       eq(postsTable.isPublished, true),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
+      postVisibilityCondition(null),
     ))
     .orderBy(desc(postsTable.createdAt))
     .limit(200);
@@ -979,6 +998,7 @@ export const getMotion = async (req: Request, res: Response) => {
     eq(postsTable.isPublished, true),
     eq(postsTable.isDeleted, false),
     visiblePostExpiryCondition(),
+    postVisibilityCondition(viewerId),
     sql`(${postsTable.type} = 'video' OR ${postsTable.attachments} ILIKE '%"mimeType":"video/%' OR ${postsTable.attachments} ~* '\\.(mp4|mov|webm|m4v|ogv)"')`,
   ];
 

@@ -15,4 +15,5 @@ export const CreatePostRequestType = {
   novel: "novel",
   artwork: "artwork",
   post: "post",
+  spark: "spark",
 } as const;

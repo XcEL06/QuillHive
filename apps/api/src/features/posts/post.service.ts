@@ -23,6 +23,7 @@ import { notify } from "../notifications/notification.service";
 import { calculateRankingScore } from "./ranking.service";
 import { logger } from "../../lib/logger";
 import { SPARK_LIFETIME_MS, visiblePostExpiryCondition } from "./postExpiry";
+import { postVisibilityCondition, type SparkVisibility } from "./postVisibility";
 
 async function getBlockedUserIds(viewerId: number | null): Promise<number[]> {
   if (!viewerId) return [];
@@ -60,6 +61,7 @@ export const stablePostSelection = {
   content: postsTable.content,
   excerpt: postsTable.excerpt,
   type: postsTable.type,
+  visibility: postsTable.visibility,
   imageUrl: postsTable.imageUrl,
   attachments: postsTable.attachments,
   tags: postsTable.tags,
@@ -187,6 +189,7 @@ export async function listPosts(
   const conds = [
     eq(postsTable.isPublished, true),
     visiblePostExpiryCondition(),
+    postVisibilityCondition(viewerId),
   ];
   if (feed === "following" && viewerId) {
     const followingFiltered = followingIds.filter(id => !hiddenAuthorIds.includes(id));
@@ -445,6 +448,7 @@ export async function createPost(
     content: string;
     excerpt?: string;
     type: string;
+    visibility?: SparkVisibility;
     imageUrl?: string;
     attachments?: PostAttachment[];
     tags?: string[];
@@ -514,6 +518,7 @@ export async function createPost(
       content: cleanContent,
       excerpt: data.excerpt ? sanitizePlain(data.excerpt).slice(0, 500) : null,
       type: data.type,
+      visibility: isSpark ? data.visibility ?? "public" : "public",
       imageUrl: data.imageUrl || null,
       attachments: JSON.stringify(sanitizeAttachments(data.attachments)),
       tags: JSON.stringify(tags),
@@ -591,6 +596,7 @@ export async function getPostById(id: number, viewerId: number | null) {
   const [post] = await db.select().from(postsTable).where(and(
     eq(postsTable.id, id),
     visiblePostExpiryCondition(),
+    postVisibilityCondition(viewerId),
   ));
   if (!post) return null;
   return enrichPost(post, viewerId);
@@ -600,6 +606,7 @@ export async function updatePost(id: number, authorId: number, data: Record<stri
   const [post] = await db.select().from(postsTable).where(eq(postsTable.id, id));
   if (!post) return null;
   if (post.authorId !== authorId) throw new Error("Forbidden");
+  if (data.visibility !== undefined && post.type !== "spark") throw new Error("Visibility can only be changed for Sparks");
 
   // Snapshot the previous version BEFORE applying changes (best-effort).
   try {
@@ -638,6 +645,7 @@ export async function updatePost(id: number, authorId: number, data: Record<stri
     updates.aiTextScore = aiTextScore(String(updates.content ?? post.content));
   }
   if (data.isPublished !== undefined) updates.isPublished = data.isPublished;
+  if (data.visibility !== undefined) updates.visibility = data.visibility;
 
   const [updated] = await db.update(postsTable).set(updates).where(eq(postsTable.id, id)).returning();
   if (updates.tags) {

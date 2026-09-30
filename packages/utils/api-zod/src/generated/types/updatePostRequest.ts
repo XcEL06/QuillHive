@@ -15,6 +15,8 @@ export interface UpdatePostRequest {
   excerpt?: string | null;
   /** @nullable */
   imageUrl?: string | null;
+  visibility?: "public" | "followers" | "private";
+  attachments?: Array<Record<string, unknown>>;
   tags?: string[];
   /** @nullable */
   isPublished?: boolean | null;

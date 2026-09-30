@@ -923,9 +923,17 @@ components:
           type: ["string", "null"]
         type:
           type: string
-          enum: [story, poem, novel, artwork, post]
+          enum: [story, poem, novel, artwork, post, spark]
+        visibility:
+          type: string
+          enum: [public, followers, private]
         imageUrl:
           type: ["string", "null"]
+        attachments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
         tags:
           type: array
           items:
@@ -938,8 +946,16 @@ components:
           type: boolean
         isPublished:
           type: boolean
+        visibility:
+          type: string
+          enum: [public, followers, private]
         groupId:
           type: ["integer", "null"]
+        attachments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
         createdAt:
           type: string
           format: date-time
@@ -974,6 +990,9 @@ components:
           enum: [story, poem, novel, artwork, post]
         imageUrl:
           type: ["string", "null"]
+        visibility:
+          type: string
+          enum: [public, followers, private]
         tags:
           type: array
           items:
@@ -1004,6 +1023,11 @@ components:
             type: string
         isPublished:
           type: ["boolean", "null"]
+        attachments:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
 
     PostsListResponse:
       type: object

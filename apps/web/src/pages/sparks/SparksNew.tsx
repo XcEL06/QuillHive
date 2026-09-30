@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/store/auth';
 import { getStoredToken } from '@/lib/api';
@@ -17,6 +18,7 @@ export default function SparksNew() {
   const { toast } = useToast();
 
   const [content, setContent] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'followers' | 'private'>('public');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [publishing, setPublishing] = useState(false);
   const [makingPunchier, setMakingPunchier] = useState(false);
@@ -33,7 +35,7 @@ export default function SparksNew() {
       const res = await fetch('/api/posts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ content: content.trim() || ' ', type: 'spark', attachments, isPublished: true }),
+        body: JSON.stringify({ content: content.trim() || ' ', type: 'spark', visibility, attachments, isPublished: true }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -105,6 +107,16 @@ export default function SparksNew() {
           <div className="flex items-center justify-between px-3 py-2.5 border-t border-border/50">
             <div className="flex items-center gap-1">
               <AttachmentPicker attachments={attachments} onChange={setAttachments} max={20} compact label="Media" />
+              <Select value={visibility} onValueChange={(value: 'public' | 'followers' | 'private') => setVisibility(value)}>
+                <SelectTrigger className="h-8 w-auto min-w-28 rounded-full border-0 bg-muted/50 px-3 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="public">Public</SelectItem>
+                  <SelectItem value="followers">Followers</SelectItem>
+                  <SelectItem value="private">Only me</SelectItem>
+                </SelectContent>
+              </Select>
               <button
                 onClick={handleMakePunchier}
                 disabled={!content.trim() || makingPunchier}

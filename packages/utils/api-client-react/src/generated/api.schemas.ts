@@ -77,6 +77,7 @@ export const PostType = {
   novel: "novel",
   artwork: "artwork",
   post: "post",
+  spark: "spark",
 } as const;
 
 export interface Post {
@@ -89,8 +90,10 @@ export interface Post {
   /** @nullable */
   excerpt?: string | null;
   type: PostType;
+  visibility?: "public" | "followers" | "private";
   /** @nullable */
   imageUrl?: string | null;
+  attachments?: string | Array<Record<string, unknown>> | null;
   tags: string[];
   likesCount: number;
   commentsCount: number;
@@ -139,6 +142,7 @@ export const CreatePostRequestType = {
   novel: "novel",
   artwork: "artwork",
   post: "post",
+  spark: "spark",
 } as const;
 
 export interface CreatePostRequest {
@@ -148,8 +152,10 @@ export interface CreatePostRequest {
   /** @nullable */
   excerpt?: string | null;
   type: CreatePostRequestType;
+  visibility?: "public" | "followers" | "private";
   /** @nullable */
   imageUrl?: string | null;
+  attachments?: Array<Record<string, unknown>>;
   tags?: string[];
   isPublished: boolean;
   /** @nullable */
@@ -165,6 +171,8 @@ export interface UpdatePostRequest {
   excerpt?: string | null;
   /** @nullable */
   imageUrl?: string | null;
+  visibility?: "public" | "followers" | "private";
+  attachments?: Array<Record<string, unknown>>;
   tags?: string[];
   /** @nullable */
   isPublished?: boolean | null;

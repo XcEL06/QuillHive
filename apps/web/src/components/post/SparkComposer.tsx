@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { useT } from '@/lib/i18n';
 import { AttachmentPicker, type Attachment } from './AttachmentPicker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const SPARK_MAX = 280;
 
@@ -31,6 +32,7 @@ export function SparkComposer({ onPosted, prompt, placeholder }: { onPosted?: ()
 
   const [content, setContent] = useState('');
   const [feeling, setFeeling] = useState<string | null>(null);
+  const [visibility, setVisibility] = useState<'public' | 'followers' | 'private'>('public');
   const [feelingOpen, setFeelingOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -49,6 +51,7 @@ export function SparkComposer({ onPosted, prompt, placeholder }: { onPosted?: ()
         const isFirstPost = (user?.postsCount ?? 1) === 0;
         setContent('');
         setFeeling(null);
+        setVisibility('public');
         setAttachments([]);
         setExpanded(false);
         queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
@@ -85,6 +88,7 @@ export function SparkComposer({ onPosted, prompt, placeholder }: { onPosted?: ()
         content: content.trim() || ' ',
         type: 'spark' as import('@workspace/api-client-react').CreatePostRequestType,
         tags,
+        visibility,
         isPublished: true,
         ...({ attachments } as object),
       },
@@ -135,6 +139,16 @@ export function SparkComposer({ onPosted, prompt, placeholder }: { onPosted?: ()
                     label=""
                     compact
                   />
+                  <Select value={visibility} onValueChange={(value: 'public' | 'followers' | 'private') => setVisibility(value)}>
+                    <SelectTrigger className="h-8 w-auto min-w-28 rounded-full border-0 bg-muted/50 px-3 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="public">Public</SelectItem>
+                      <SelectItem value="followers">Followers</SelectItem>
+                      <SelectItem value="private">Only me</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     variant="ghost"

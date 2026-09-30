@@ -260,6 +260,9 @@ export default function Profile() {
   const [viewItem, setViewItem] = useState<PortfolioItem | null>(null);
   const [profileContentPosts, setProfileContentPosts] = useState<ProfilePost[]>([]);
   const [profileContentLoading, setProfileContentLoading] = useState(false);
+  const [profileContentPage, setProfileContentPage] = useState(1);
+  const [profileContentHasMore, setProfileContentHasMore] = useState(false);
+  const [profileContentLoadingMore, setProfileContentLoadingMore] = useState(false);
 
   // Creator profile state
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile>({ skills: [], links: [], verified: false, isAvailableForHire: false, availableFor: [] });
@@ -315,13 +318,17 @@ export default function Profile() {
     if (data?.user?.id) {
       fetchPortfolio(data.user.id);
       setProfileContentLoading(true);
-      fetch(`/api/users/${encodeURIComponent(data.user.username)}/posts?limit=100`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-        .then(r => r.ok ? r.json() : { posts: [] })
+      setProfileContentPage(1);
+      setProfileContentPosts([]);
+      fetch(`/api/users/${encodeURIComponent(data.user.username)}/posts?page=1&limit=30`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+        .then(r => { if (!r.ok) throw new Error('Could not load profile posts'); return r.json(); })
         .then(d => {
           const posts = Array.isArray(d?.posts) ? d.posts : [];
           setProfileContentPosts(posts.filter((post: ProfilePost) => post.authorId === data.user.id));
+          setProfileContentPage(Number(d?.page) || 1);
+          setProfileContentHasMore(Boolean(d?.hasMore));
         })
-        .catch(() => setProfileContentPosts([]))
+        .catch(() => { setProfileContentPosts([]); setProfileContentHasMore(false); })
         .finally(() => setProfileContentLoading(false));
       fetch(`/api/trust/${data.user.id}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
         .then(r => r.ok ? r.json() : null)
@@ -347,7 +354,31 @@ export default function Profile() {
         .then((d: CreatorPublicStats | null) => { if (d) setCreatorPublicStats(d); })
         .catch(() => {});
     }
-  }, [data?.user?.id]);
+  }, [data?.user?.id, data?.user?.username, token]);
+
+  const loadMoreProfilePosts = async () => {
+    if (!data?.user?.username || profileContentLoadingMore || !profileContentHasMore) return;
+    const nextPage = profileContentPage + 1;
+    setProfileContentLoadingMore(true);
+    try {
+      const response = await fetch(`/api/users/${encodeURIComponent(data.user.username)}/posts?page=${nextPage}&limit=30`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error('Could not load more posts');
+      const result = await response.json();
+      const nextPosts = Array.isArray(result?.posts) ? result.posts.filter((post: ProfilePost) => post.authorId === data.user.id) : [];
+      setProfileContentPosts(current => {
+        const existingIds = new Set(current.map(post => post.id));
+        return [...current, ...nextPosts.filter((post: ProfilePost) => !existingIds.has(post.id))];
+      });
+      setProfileContentPage(Number(result?.page) || nextPage);
+      setProfileContentHasMore(Boolean(result?.hasMore));
+    } catch (error) {
+      toast({ title: 'Could not load more posts', description: error instanceof Error ? error.message : 'Please retry.', variant: 'destructive' });
+    } finally {
+      setProfileContentLoadingMore(false);
+    }
+  };
 
   const openEditCreator = () => {
     setCreatorForm({
@@ -493,6 +524,7 @@ export default function Profile() {
     ? data.educationHistory
     : [];
   const artworkPosts = recentPosts.filter(p => p.type === 'artwork');
+  const allUserPosts = profileContentPosts.filter(post => post.type !== 'spark');
   const sparkPosts = profileContentPosts.filter(post => post.type === 'spark');
   const motionPosts = profileContentPosts.filter(hasVideoAttachment);
 
@@ -862,14 +894,6 @@ export default function Profile() {
             {[
               { value: 'posts', label: t('profile.recentPosts', 'Recent Posts') },
               { value: 'sparks', label: 'Sparks' },
-              { value: 'motion', label: 'Motion' },
-              { value: 'portfolio', label: t('profile.portfolio', 'Portfolio') },
-              { value: 'gallery', label: t('profile.gallery', 'Gallery') },
-              { value: 'experience', label: t('profile.experience', 'Experience') },
-              { value: 'education', label: t('profile.education', 'Education') },
-              ...(isMe || serviceListings.length > 0 ? [{ value: 'services', label: t('profile.servicesTab', 'Services') }] : []),
-              ...(isMe ? [{ value: 'reputation', label: t('profile.reputation', 'Reputation') }] : []),
-              ...(isMe ? [{ value: 'boosts', label: t('profile.boosts', 'My Boosts') }] : []),
             ].map(tab => (
               <TabsTrigger key={tab.value} value={tab.value} className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none px-0 pb-3 pt-2 text-base data-[state=active]:text-foreground text-muted-foreground font-medium whitespace-nowrap">
                 {tab.label}
@@ -878,13 +902,18 @@ export default function Profile() {
           </TabsList>
 
           <TabsContent value="posts" className="space-y-6 focus-visible:outline-none">
-            {recentPosts.length === 0 ? (
+            {profileContentLoading && profileContentPosts.length === 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-2xl" />)}
+              </div>
+            ) : allUserPosts.length === 0 ? (
               <p className="text-muted-foreground text-center py-10 bg-muted/20 rounded-2xl">{t('profile.noPostsYet', 'This person has no posts yet.')}</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {recentPosts.map((post) => <PostCard key={post.id} post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} />)}
+                {allUserPosts.map((post) => <PostCard key={post.id} post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} />)}
               </div>
             )}
+            {profileContentHasMore && <div className="text-center"><Button variant="outline" onClick={() => void loadMoreProfilePosts()} disabled={profileContentLoadingMore}>{profileContentLoadingMore ? 'Loading…' : 'Load more posts'}</Button></div>}
           </TabsContent>
 
           <TabsContent value="sparks" className="space-y-6 focus-visible:outline-none">
@@ -899,6 +928,7 @@ export default function Profile() {
                 {sparkPosts.map(post => <PostCard key={post.id} post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} />)}
               </div>
             )}
+            {profileContentHasMore && <div className="text-center"><Button variant="outline" onClick={() => void loadMoreProfilePosts()} disabled={profileContentLoadingMore}>{profileContentLoadingMore ? 'Loading…' : 'Load more Sparks'}</Button></div>}
           </TabsContent>
 
           <TabsContent value="motion" className="space-y-6 focus-visible:outline-none">

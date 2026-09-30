@@ -21,6 +21,7 @@ export const postsTable = pgTable("posts", {
   attachments: text("attachments").notNull().default("[]"),
   tags: text("tags").notNull().default("[]"),
   isPublished: boolean("is_published").notNull().default(true),
+  visibility: text("visibility").notNull().default("public"),
   scheduledAt: timestamp("scheduled_at"),
   expiresAt: timestamp("expires_at"),
   viewedBy: jsonb("viewed_by").default(sql`'[]'::jsonb`),

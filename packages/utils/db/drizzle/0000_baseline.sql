@@ -174,6 +174,7 @@ CREATE TABLE "posts" (
 	"attachments" text DEFAULT '[]' NOT NULL,
 	"tags" text DEFAULT '[]' NOT NULL,
 	"is_published" boolean DEFAULT true NOT NULL,
+	"visibility" text DEFAULT 'public' NOT NULL,
 	"scheduled_at" timestamp,
 	"expires_at" timestamp,
 	"is_highlight" boolean DEFAULT false NOT NULL,

@@ -14,8 +14,10 @@ export interface CreatePostRequest {
   /** @nullable */
   excerpt?: string | null;
   type: CreatePostRequestType;
+  visibility?: "public" | "followers" | "private";
   /** @nullable */
   imageUrl?: string | null;
+  attachments?: Array<Record<string, unknown>>;
   tags?: string[];
   isPublished: boolean;
   /** @nullable */

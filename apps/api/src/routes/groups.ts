@@ -4,6 +4,7 @@ import { groupsTable, groupMembersTable, groupJoinRequestsTable, groupBansTable,
 import { eq, and, sql, ilike, desc, gt, isNull, or } from "drizzle-orm";
 import { getSessionUserId } from "../lib/auth";
 import { enrichPost } from "../features/profiles/profile.service";
+import { postVisibilityCondition } from "../features/posts/postVisibility";
 
 const router = Router();
 
@@ -55,7 +56,7 @@ async function enrichGroup(group: any, viewerId: number | null) {
     .from(groupMembersTable).where(eq(groupMembersTable.groupId, group.id));
 
   const [postsResult] = await db.select({ count: sql<number>`count(*)::int` })
-    .from(postsTable).where(and(eq(postsTable.groupId, group.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false)));
+    .from(postsTable).where(and(eq(postsTable.groupId, group.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId)));
 
   let isMember = false;
   let memberRole: string | null = null;
@@ -219,7 +220,7 @@ router.get("/:id/posts", async (req, res) => {
   }
 
   const posts = await db.select().from(postsTable)
-    .where(and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false)))
+    .where(and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId)))
     .orderBy(desc(postsTable.createdAt))
     .limit(limit).offset((page - 1) * limit);
 

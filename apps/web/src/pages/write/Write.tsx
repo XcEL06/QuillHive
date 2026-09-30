@@ -122,6 +122,7 @@ export default function Write() {
     const { user } = useAuthStore.getState();
     return (user as any)?.postsCount > 0 ? 'post' : 'spark';
   });
+  const [visibility, setVisibility] = useState<'public' | 'followers' | 'private'>('public');
   const [tagsStr, setTagsStr] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [originalImageUrl, setOriginalImageUrl] = useState('');
@@ -271,6 +272,7 @@ export default function Write() {
 
         setTitle(post.title ?? '');
         setType(post.type === 'blog' || post.type === 'note' ? 'post' : post.type || 'post');
+        setVisibility(post.visibility === 'followers' || post.visibility === 'private' ? post.visibility : 'public');
         setTagsStr(Array.isArray(post.tags)
           ? post.tags.join(', ')
           : typeof post.tags === 'string'
@@ -360,6 +362,7 @@ export default function Write() {
         const d = data.draft;
         if (d.title) setTitle(d.title);
         if (d.type) setType(d.type === 'blog' || d.type === 'note' ? 'post' : d.type);
+        setVisibility(d.visibility === 'followers' || d.visibility === 'private' ? d.visibility : 'public');
         if (d.tags) {
           try { setTagsStr(JSON.parse(d.tags).join(', ')); } catch { setTagsStr(d.tags); }
         }
@@ -393,6 +396,7 @@ export default function Write() {
       const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
       if (d.title) setTitle(d.title);
       if (d.type) setType(d.type);
+      setVisibility(d.visibility === 'followers' || d.visibility === 'private' ? d.visibility : 'public');
       if (d.tagsStr) setTagsStr(d.tagsStr);
       if (d.imageUrl) setImageUrl(d.imageUrl);
       if (Array.isArray(d.postAttachments)) setPostAttachments(d.postAttachments);
@@ -418,6 +422,7 @@ export default function Write() {
       try {
         const draft = JSON.stringify({
           title, type, tagsStr,
+          visibility,
           imageUrl: imageUrl?.startsWith('data:') ? '' : imageUrl,
           postAttachments,
           content, savedAt: Date.now(),
@@ -428,7 +433,7 @@ export default function Write() {
       } catch { }
     }, 30_000);
     return () => window.clearInterval(interval);
-  }, [editor, title, type, tagsStr, imageUrl, postAttachments, DRAFT_KEY]);
+  }, [editor, title, type, visibility, tagsStr, imageUrl, postAttachments, DRAFT_KEY]);
 
   const saveDraftSilently = async (): Promise<boolean> => {
     if (!editor || !token || editPostId) return false;
@@ -445,6 +450,7 @@ export default function Write() {
       title: title || undefined,
       content: draftContent,
       type: type as any,
+      visibility: type === 'spark' ? visibility : 'public',
       tags: tagsStr.split(',').map((tag) => tag.trim()).filter(Boolean),
       imageUrl: imageUrl || undefined,
       attachments: postAttachments,
@@ -498,7 +504,7 @@ export default function Write() {
       void saveDraftSilently();
     }, 3_000);
     return () => window.clearTimeout(timer);
-  }, [editor, title, content, tagsStr, type, imageUrl, postAttachments, token, serverDraftId]);
+  }, [editor, title, content, tagsStr, type, visibility, imageUrl, postAttachments, token, serverDraftId]);
 
   const checkOriginality = async (content: string): Promise<{ ok: boolean; warning: string | null }> => {
     if (!token || content.replace(/<[^>]+>/g, '').trim().length < 100) return { ok: true, warning: null };
@@ -587,6 +593,7 @@ export default function Write() {
           body: JSON.stringify({
             title,
             content,
+            ...(type === 'spark' ? { visibility } : {}),
             excerpt: editor.getText().trim().slice(0, 500),
             ...(imageUrl !== originalImageUrl && imageUrl ? { imageUrl } : {}),
             attachments: postAttachments,
@@ -621,6 +628,7 @@ export default function Write() {
       titleB: enableAB ? (titleB || undefined) : undefined,
       content,
       type: type as any,
+      ...(type === 'spark' ? { visibility } : {}),
       imageUrl: imageUrl || undefined,
       attachments: postAttachments,
       tags: tagsStr.split(',').map(t => t.trim()).filter(Boolean),
@@ -899,6 +907,20 @@ export default function Write() {
               </>
               )}
             </div>
+
+            {type === 'spark' && (
+              <div className="space-y-2 col-span-1 md:col-span-2">
+                <Label>Spark audience</Label>
+                <Select value={visibility} onValueChange={(value: 'public' | 'followers' | 'private') => setVisibility(value)}>
+                  <SelectTrigger className="rounded-xl bg-background"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="public">Public</SelectItem>
+                    <SelectItem value="followers">Followers</SelectItem>
+                    <SelectItem value="private">Only me</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Title / A-B Testing */}
             <div className="space-y-2">
