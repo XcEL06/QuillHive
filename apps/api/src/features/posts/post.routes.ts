@@ -22,19 +22,19 @@ const feedQuerySchema = z.object({
 const trendingQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(50).optional(),
 });
-const VALID_POST_TYPES = ["post", "article", "story", "novel", "artwork", "spark"] as const;
-const postBodySchema = z.object({
-  title: z.string().max(180).optional(),
-  titleA: z.string().max(180).optional(),
-  titleB: z.string().max(180).optional(),
+const VALID_POST_TYPES = ["post", "article", "story", "poem", "novel", "artwork", "spark"] as const;
+export const postBodySchema = z.object({
+  title: z.string().max(180).nullable().optional(),
+  titleA: z.string().max(180).nullable().optional(),
+  titleB: z.string().max(180).nullable().optional(),
   content: z.string().min(1).max(50_000),
-  excerpt: z.string().max(500).optional(),
+  excerpt: z.string().max(500).nullable().optional(),
   type: z.enum(VALID_POST_TYPES),
   visibility: z.enum(["public", "followers", "private"]).optional(),
-  imageUrl: z.string().url().optional(),
+  imageUrl: z.string().url().nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(12).optional(),
   isPublished: z.boolean().optional(),
-  groupId: z.number().int().positive().optional(),
+  groupId: z.number().int().positive().nullable().optional(),
   seriesId: z.number().int().positive().optional(),
   quotedPostId: z.number().int().positive().optional(),
   scheduledAt: z.string().optional(),

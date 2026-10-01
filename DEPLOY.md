@@ -52,6 +52,7 @@ Recommended for production:
 - `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` - durable image/video storage (recommended)
 - `UPLOADS_DIR` - path on a persistent mounted volume for local file storage; production uploads fail clearly if neither this nor Cloudinary is configured
 - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` - GitHub OAuth
+- `API_URL` - public API origin used for provider callback URLs; set the GitHub OAuth App callback URL to `${API_URL}/api/auth/oauth/github/callback`. `APP_URL` should remain the frontend origin for the post-login redirect.
 
 Optional verification providers:
 - `IDENTITY_VERIFICATION_PROVIDER_KEY` - required only when `identity_verification_enabled` is enabled

@@ -29,6 +29,16 @@ interface ChecklistItem {
 
 type FeedSource = 'explore' | 'following';
 type FeedAlgorithm = 'algorithmic' | 'chronological';
+type FeedPost = import('@workspace/api-client-react').Post;
+
+function normalizePostsResponse(value: unknown): FeedPost[] | null {
+  if (Array.isArray(value)) return value as FeedPost[];
+  if (value && typeof value === 'object' && 'posts' in value) {
+    const posts = (value as { posts?: unknown }).posts;
+    return Array.isArray(posts) ? posts as FeedPost[] : null;
+  }
+  return null;
+}
 
 interface SuggestedCreator {
   id?: number;
@@ -508,16 +518,16 @@ function AuthenticatedHome() {
     try {
       const res = await apiFetch(`/api/feed?type=${algo}&limit=20`);
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load the feed.'));
-      const json = await res.json() as { posts?: unknown };
-      if (!Array.isArray(json.posts)) throw new Error('The feed returned an invalid response.');
-      setFeedPosts(json.posts as import('@workspace/api-client-react').Post[]);
+      const posts = normalizePostsResponse(await res.json());
+      if (!posts) throw new Error('The feed returned an invalid response.');
+      setFeedPosts(posts);
     } catch (error) {
       try {
         const res = await apiFetch('/api/posts?limit=20');
         if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load posts.'));
-        const json = await res.json() as { posts?: unknown };
-        if (!Array.isArray(json.posts)) throw new Error('Posts returned an invalid response.');
-        setFeedPosts(json.posts as import('@workspace/api-client-react').Post[]);
+        const posts = normalizePostsResponse(await res.json());
+        if (!posts) throw new Error('Posts returned an invalid response.');
+        setFeedPosts(posts);
       } catch (fallbackError) {
         setFeedPosts([]);
         const primaryMessage = error instanceof Error ? error.message : 'Could not load the feed.';
@@ -533,7 +543,7 @@ function AuthenticatedHome() {
     if (feedSource === 'explore') fetchAlgorithmicFeed('algorithmic');
   }, [feedSource, token]);
 
-  const apiPosts = Array.isArray(data?.posts) ? data.posts : [];
+  const apiPosts = normalizePostsResponse(data) ?? [];
   const displayPosts =
     feedSource === 'explore' ? (feedPosts ?? apiPosts) : apiPosts;
   const isDisplayLoading =

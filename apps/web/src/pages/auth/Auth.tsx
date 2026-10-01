@@ -107,6 +107,21 @@ export default function Auth() {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
 
+    const oauthError = url.searchParams.get("error");
+    if (oauthError) {
+      const messages: Record<string, string> = {
+        provider_not_configured: `${url.searchParams.get("provider") === "github" ? "GitHub" : "OAuth provider"} sign-in is not configured. Contact the site administrator.`,
+        oauth_cancelled: "GitHub sign-in was cancelled.",
+        oauth_failed: "GitHub sign-in could not be completed. Please try again.",
+        no_email: "GitHub did not provide a verified email address. Add a verified email to your GitHub account and try again.",
+        oauth_error: "GitHub sign-in failed. Please try again.",
+      };
+      toast.error(messages[oauthError] || "Sign-in failed. Please try again.");
+      url.searchParams.delete("error");
+      url.searchParams.delete("provider");
+      window.history.replaceState({}, "", url.toString());
+    }
+
     if (url.pathname === "/auth/oauth-complete") {
       if (oauthHandled.current) return;
       oauthHandled.current = true;
@@ -403,10 +418,10 @@ export default function Auth() {
                   {!isLogin && (inviteCode || refSource) && (
                     <p className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground" role="status" aria-live="polite">
                       {inviteCode ? (
-                        inviteStatus === "checking" ? "Checking this invite link…" :
-                        inviteStatus === "valid" ? "Invite link verified. The referral will be applied when you create your account." :
-                        inviteStatus === "invalid" ? "This invite link is invalid, expired, or already used. You can still create an account without it." :
-                        "We could not verify this invite right now. It will be checked again when you create your account."
+                        <><strong>Invite {inviteCode}</strong>: {inviteStatus === "checking" ? "checking this link…" :
+                          inviteStatus === "valid" ? "verified; this referral will be applied when you create your account." :
+                          inviteStatus === "invalid" ? "invalid, expired, or already used. You can still create an account without it." :
+                          "could not be verified right now; it will be checked again when you create your account."}</>
                       ) : "Referral source detected. It will be saved when you create your account."}
                     </p>
                   )}

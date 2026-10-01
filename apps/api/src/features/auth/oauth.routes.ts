@@ -42,15 +42,15 @@ function configFor(p: Provider): ProviderConfig {
 }
 
 function callbackUrl(req: Request, provider: Provider): string {
-  const baseUrl = process.env.API_URL || `${req.protocol}://${req.get("host")}`;
+  const baseUrl = (process.env.API_URL || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
   return `${baseUrl}/api/auth/oauth/${provider}/callback`;
 }
 
 function frontendUrl(): string {
-  return process.env.APP_URL
+  return (process.env.APP_URL
     ?? process.env.FRONTEND_URL
     ?? process.env.PUBLIC_APP_URL
-    ?? "http://localhost:5173";
+    ?? "http://localhost:5173").replace(/\/+$/, "");
 }
 
 const KNOWN_PROVIDERS: Provider[] = ["google", "github"];
@@ -59,11 +59,11 @@ oauthRouter.get("/:provider/start", (req, res: Response) => {
   const provider = req.params.provider as Provider;
   if (!KNOWN_PROVIDERS.includes(provider)) return res.status(404).send("Unknown provider");
   const cfg = configFor(provider);
-  if (!cfg.clientId) {
-    return res.status(503).json({
-      error: "provider_not_configured",
-      message: `Set ${provider.toUpperCase()}_CLIENT_ID (and SECRET) to enable ${provider} login.`,
-    });
+  if (!cfg.clientId || !cfg.clientSecret) {
+    const target = new URL("/login", frontendUrl());
+    target.searchParams.set("error", "provider_not_configured");
+    target.searchParams.set("provider", provider);
+    return res.redirect(target.toString());
   }
   const state = randomBytes(16).toString("base64url");
   res.cookie(`oauth_state_${provider}`, state, {
@@ -84,7 +84,21 @@ oauthRouter.get("/:provider/start", (req, res: Response) => {
 
 async function handleGithubCallback(req: Request, res: Response): Promise<void> {
   const cfg = configFor("github");
-  if (!cfg.clientId) { res.status(503).send("GitHub OAuth not configured"); return; }
+  if (!cfg.clientId || !cfg.clientSecret) {
+    const target = new URL("/login", frontendUrl());
+    target.searchParams.set("error", "provider_not_configured");
+    target.searchParams.set("provider", "github");
+    res.redirect(target.toString());
+    return;
+  }
+
+  if (req.query.error) {
+    res.clearCookie("oauth_state_github");
+    const target = new URL("/login", frontendUrl());
+    target.searchParams.set("error", "oauth_cancelled");
+    res.redirect(target.toString());
+    return;
+  }
 
   const code = String((req.query.code ?? req.body?.code) || "");
   const state = String((req.query.state ?? req.body?.state) || "");
@@ -115,7 +129,9 @@ async function handleGithubCallback(req: Request, res: Response): Promise<void> 
 
     const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
     if (!tokenData.access_token) {
-      return res.redirect(`${appUrl}/login?error=oauth_failed`);
+      const target = new URL("/login", appUrl);
+      target.searchParams.set("error", "oauth_failed");
+      return res.redirect(target.toString());
     }
 
     const ghProfile = await fetch("https://api.github.com/user", {
@@ -146,7 +162,9 @@ async function handleGithubCallback(req: Request, res: Response): Promise<void> 
     }
 
     if (!email) {
-      return res.redirect(`${appUrl}/login?error=no_email`);
+      const target = new URL("/login", appUrl);
+      target.searchParams.set("error", "no_email");
+      return res.redirect(target.toString());
     }
 
     const providerAccountId = String(ghProfile.id);
@@ -198,7 +216,9 @@ async function handleGithubCallback(req: Request, res: Response): Promise<void> 
   } catch (error) {
     console.error("GitHub OAuth error:", error);
     const appUrl = frontendUrl();
-    return res.redirect(`${appUrl}/login?error=oauth_error`);
+    const target = new URL("/login", appUrl);
+    target.searchParams.set("error", "oauth_error");
+    return res.redirect(target.toString());
   }
 }
 

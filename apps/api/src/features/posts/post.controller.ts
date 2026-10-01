@@ -68,7 +68,7 @@ export const saveDraft = async (req: Request, res: Response) => {
     draftId?: number; title?: string; content: string; type?: string; visibility?: "public" | "followers" | "private"; tags?: string[]; imageUrl?: string; attachments?: unknown[];
   };
 
-  const VALID_TYPES = ["post", "article", "story", "novel", "artwork", "spark"];
+  const VALID_TYPES = ["post", "article", "story", "poem", "novel", "artwork", "spark"];
   const resolvedType = type === "blog" || type === "note" ? "post" : type && VALID_TYPES.includes(type) ? type : "post";
 
   if (draftId) {
