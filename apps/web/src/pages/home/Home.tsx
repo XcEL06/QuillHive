@@ -3,7 +3,6 @@ import { useGetPosts } from '@workspace/api-client-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { PostCard } from '@/components/post/PostCard';
-import { SparkComposer } from '@/components/post/SparkComposer';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -614,8 +613,6 @@ function AuthenticatedHome() {
         )}
 
         {/* Topics Grid (Topics mode) */}
-        {token && <SparkComposer />}
-
         <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}

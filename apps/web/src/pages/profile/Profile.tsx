@@ -890,7 +890,7 @@ export default function Profile() {
 
         {/* Profile Tabs */}
         <Tabs defaultValue="posts" className="w-full">
-          <TabsList className="w-full justify-start border-b border-border rounded-none bg-transparent p-0 mb-8 h-auto gap-8 overflow-x-auto hide-scrollbar">
+          <TabsList className="sticky top-16 z-20 w-full justify-start border-b border-border rounded-none bg-background/95 p-0 mb-8 h-auto gap-8 overflow-x-auto hide-scrollbar backdrop-blur">
             {[
               { value: 'posts', label: t('profile.recentPosts', 'Recent Posts') },
               { value: 'sparks', label: 'Sparks' },
