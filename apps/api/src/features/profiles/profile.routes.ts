@@ -12,11 +12,13 @@ import { requireAuth } from "../../middleware/admin";
 const authStrictLimit = rateLimit({ windowMs: 15 * 60_000, max: 30 });
 const registerStrictLimit = rateLimit({ windowMs: 60 * 60_000, max: 30 });
 
-const registerSchema = z.object({
+export const registerSchema = z.object({
   username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/),
   email: z.string().email().max(254),
   password: z.string().min(8).max(128),
   displayName: z.string().min(1).max(120),
+  inviteCode: z.string().trim().max(32).optional(),
+  ref: z.string().trim().max(80).optional(),
 });
 
 const loginSchema = z.object({

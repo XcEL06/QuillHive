@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "crypto";
 import { db } from "@workspace/db";
 import { inviteCodesTable, usersTable } from "@workspace/db/schema";
-import { eq, and, isNull, or, count } from "drizzle-orm";
+import { eq, and, gt, isNull, or, count } from "drizzle-orm";
 import { requireAuth } from "../../middleware/admin";
 
 interface AuthedReq extends Request {
@@ -67,8 +67,8 @@ invitesRouter.get("/validate/:code", async (req: Request, res: Response) => {
         eq(inviteCodesTable.code, code),
         eq(inviteCodesTable.isActive, true),
         or(
-          isNull(inviteCodesTable.usedBy),
           isNull(inviteCodesTable.expiresAt),
+          and(gt(inviteCodesTable.expiresAt, new Date()), isNull(inviteCodesTable.usedBy)),
         ),
       ),
     );
@@ -81,17 +81,32 @@ invitesRouter.get("/validate/:code", async (req: Request, res: Response) => {
 
 export async function consumeInvite(code: string, newUserId: number): Promise<number | null> {
   const upper = code.toUpperCase();
+  const now = new Date();
   const [invite] = await db
     .select()
     .from(inviteCodesTable)
-    .where(and(eq(inviteCodesTable.code, upper), eq(inviteCodesTable.isActive, true)));
+    .where(and(
+      eq(inviteCodesTable.code, upper),
+      eq(inviteCodesTable.isActive, true),
+      or(
+        isNull(inviteCodesTable.expiresAt),
+        and(gt(inviteCodesTable.expiresAt, now), isNull(inviteCodesTable.usedBy)),
+      ),
+    ));
   if (!invite) return null;
 
   if (invite.expiresAt !== null) {
-    await db
+    const [claimed] = await db
       .update(inviteCodesTable)
       .set({ usedBy: newUserId, usedAt: new Date() })
-      .where(eq(inviteCodesTable.id, invite.id));
+      .where(and(
+        eq(inviteCodesTable.id, invite.id),
+        eq(inviteCodesTable.isActive, true),
+        gt(inviteCodesTable.expiresAt, now),
+        isNull(inviteCodesTable.usedBy),
+      ))
+      .returning({ id: inviteCodesTable.id });
+    if (!claimed) return null;
   }
 
   // Non-blocking: tiered referral reward notifications

@@ -8,7 +8,7 @@ export function postVisibilityCondition(viewerId: number | null) {
 
   if (viewerId !== null) {
     visibleToViewer.push(
-      and(eq(postsTable.visibility, "private"), eq(postsTable.authorId, viewerId))!,
+      eq(postsTable.authorId, viewerId),
       and(
         eq(postsTable.visibility, "followers"),
         sql`EXISTS (

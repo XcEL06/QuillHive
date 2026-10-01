@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/store/auth";
+import { copyTextToClipboard, getPostShareUrl } from "@/lib/api";
 
 interface ShareSheetProps {
   postId: number;
@@ -14,11 +15,6 @@ interface ShareSheetProps {
 interface ConvSummary {
   id: number;
   participantName: string;
-}
-
-function getAppUrl(): string {
-  const env = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
-  return env.VITE_APP_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:5000");
 }
 
 export function ShareSheet({ postId, title, trigger }: ShareSheetProps) {
@@ -32,7 +28,7 @@ export function ShareSheet({ postId, title, trigger }: ShareSheetProps) {
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
   const [messageSent, setMessageSent] = useState(false);
 
-  const url = `${getAppUrl()}/post/${postId}`;
+  const url = getPostShareUrl(postId);
   const shareText = title ? `${title} - via QuillHive` : "Read this on QuillHive";
 
   // Fire-and-forget share-click telemetry (anonymous, no PII)
@@ -51,7 +47,7 @@ export function ShareSheet({ postId, title, trigger }: ShareSheetProps) {
 
   const copy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(url);
+      await copyTextToClipboard(url);
       setCopied(true);
       toast({ title: "Link copied" });
       trackShare("copy");

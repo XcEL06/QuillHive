@@ -12,6 +12,34 @@ export function apiUrl(path: string): string {
   return `${API_BASE_URL}${path}`;
 }
 
+export function getPostShareUrl(postId: number): string {
+  const configuredAppUrl = (import.meta.env.VITE_APP_URL as string | undefined)?.trim().replace(/\/+$/, "");
+  const appUrl = configuredAppUrl || (typeof window !== "undefined" ? window.location.origin : "http://localhost:5173");
+  return `${appUrl}/post/${postId}`;
+}
+
+export async function copyTextToClipboard(text: string): Promise<void> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+  } catch {
+    // Fall back to document copy for browsers without clipboard permission.
+  }
+
+  const input = document.createElement("textarea");
+  input.value = text;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("Clipboard copy was not available");
+}
+
 /** Resolve URLs returned by the API, including local uploaded-file URLs. */
 export function mediaUrl(path: string | null | undefined): string {
   if (!path) return "";

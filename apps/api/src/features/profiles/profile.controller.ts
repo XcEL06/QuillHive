@@ -167,11 +167,13 @@ export const register = async (req: Request, res: Response) => {
   }).returning();
 
   // Consume invite code (optional) and link referredBy
+  let inviteApplied = !inviteCode;
   if (inviteCode) {
     try {
       const inviterId = await consumeInvite(inviteCode, user.id);
       if (inviterId) {
         await db.update(usersTable).set({ referredBy: inviterId }).where(eq(usersTable.id, user.id));
+        inviteApplied = true;
       }
     } catch {
       // never block registration on invite issues
@@ -214,6 +216,7 @@ export const register = async (req: Request, res: Response) => {
     emailError: emailResult.ok ? undefined : emailResult.error,
     verificationToken: process.env.NODE_ENV === "production" ? undefined : verificationToken,
     verificationUrl: process.env.NODE_ENV === "production" ? undefined : verificationUrl,
+    inviteApplied,
     user: userWithCounts,
   });
 };

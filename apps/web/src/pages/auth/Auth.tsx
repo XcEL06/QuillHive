@@ -31,12 +31,14 @@ function friendlyError(msg: string): string {
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(() => {
     if (typeof window === "undefined") return true;
-    return window.location.pathname !== "/signup" && new URLSearchParams(window.location.search).get("mode") !== "signup";
+    const mode = new URLSearchParams(window.location.search).get("mode");
+    return window.location.pathname !== "/signup" && mode !== "signup" && mode !== "register";
   });
   const [, setLocation] = useLocation();
   const { setAuth, user, refreshUser } = useAuthStore();
   const [inviteCode, setInviteCode] = useState("");
   const [refSource, setRefSource] = useState("");
+  const [inviteStatus, setInviteStatus] = useState<"checking" | "valid" | "invalid" | "unavailable" | null>(null);
 
   // Guards: prevent StrictMode double-fire of one-shot effects
   const oauthHandled = useRef(false);
@@ -63,9 +65,17 @@ export default function Auth() {
     if (inv) {
       setInviteCode(inv);
       setIsLogin(false);
+      setInviteStatus("checking");
+      fetch(apiUrl(`/api/invites/validate/${encodeURIComponent(inv)}`))
+        .then(async response => {
+          if (!response.ok) throw new Error("Invite validation failed");
+          return response.json() as Promise<{ valid?: boolean }>;
+        })
+        .then(result => setInviteStatus(result.valid ? "valid" : "invalid"))
+        .catch(() => setInviteStatus("unavailable"));
     }
     if (ref) setRefSource(ref);
-    if (window.location.pathname === "/signup" || params.get("mode") === "signup") setIsLogin(false);
+    if (window.location.pathname === "/signup" || params.get("mode") === "signup" || params.get("mode") === "register") setIsLogin(false);
   }, []);
 
   const [email, setEmail] = useState("");
@@ -295,13 +305,16 @@ export default function Auth() {
           data = { error: `Something went wrong (status ${res.status}). Please try again.` };
         }
         if (!res.ok) throw new Error(data.error || t("auth.registrationFailed", "Registration failed"));
+        const inviteNotApplied = Boolean(inviteCode && data.inviteApplied === false);
         if (data.verificationRequired) {
           setPendingVerificationToken(data.verificationToken || "");
           setVerificationToken(data.verificationToken || "");
-          toast.success(t("auth.accountCreatedVerify", "Account created. Verify your email to activate sign in."));
+          if (inviteNotApplied) toast.error("Account created, but this invite could not be applied. Ask for a current invite link.");
+          else toast.success(t("auth.accountCreatedVerify", "Account created. Verify your email to activate sign in."));
         } else {
           storeAuth(data);
-          toast.success(t("auth.welcomeToQuillhive", "Welcome to QuillHive!"));
+          if (inviteNotApplied) toast.error("Account created, but this invite could not be applied. Ask for a current invite link.");
+          else toast.success(t("auth.welcomeToQuillhive", "Welcome to QuillHive!"));
           setLocation("/onboarding");
         }
       }
@@ -387,6 +400,16 @@ export default function Auth() {
             <Card className="border-border/50 shadow-xl shadow-black/5 rounded-3xl overflow-hidden">
               <CardContent className="p-8">
                 <form onSubmit={handleSubmit} className="space-y-4">
+                  {!isLogin && (inviteCode || refSource) && (
+                    <p className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground" role="status" aria-live="polite">
+                      {inviteCode ? (
+                        inviteStatus === "checking" ? "Checking this invite link…" :
+                        inviteStatus === "valid" ? "Invite link verified. The referral will be applied when you create your account." :
+                        inviteStatus === "invalid" ? "This invite link is invalid, expired, or already used. You can still create an account without it." :
+                        "We could not verify this invite right now. It will be checked again when you create your account."
+                      ) : "Referral source detected. It will be saved when you create your account."}
+                    </p>
+                  )}
                   {!isLogin && (
                     <>
                       <div className="space-y-2">

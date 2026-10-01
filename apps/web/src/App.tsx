@@ -84,6 +84,7 @@ const PUBLIC_ROUTES = [
   "/community-guidelines",
   "/forgot-password",
   "/library",
+  "/post",
   "/pricing",
   "/privacy",
   "/register",
@@ -288,7 +289,7 @@ function Router() {
         <AuthGuard><Profile /></AuthGuard>
       </Route>
       <Route path="/post/:id">
-        <AuthGuard><PostDetail /></AuthGuard>
+        <PostDetail />
       </Route>
       <Route path="/messages">
         <AuthGuard><Messages /></AuthGuard>

@@ -8,7 +8,7 @@ import { readingTimeLabel } from '@/lib/readingTime';
 import { useLikePost, useDeletePost, type Post } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
-import { apiUrl, mediaUrl } from '@/lib/api';
+import { apiUrl, mediaUrl, copyTextToClipboard, getPostShareUrl } from '@/lib/api';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -497,13 +497,16 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
     });
   };
 
-  const handleCopyLink = () => {
-    const url = `${window.location.origin}/post/${post.id}`;
-    navigator.clipboard.writeText(url).then(() => {
+  const handleCopyLink = async () => {
+    const url = getPostShareUrl(post.id);
+    try {
+      await copyTextToClipboard(url);
       setCopied(true);
       toast({ title: 'Link copied!', description: 'Post link copied to clipboard.' });
       setTimeout(() => setCopied(false), 2000);
-    });
+    } catch {
+      toast({ title: 'Could not copy link', variant: 'destructive' });
+    }
   };
 
   const handleQuote = () => {
