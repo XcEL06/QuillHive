@@ -270,7 +270,7 @@ router.patch("/users/:id/role", requireSuperAdmin, async (req: any, res) => {
   return res.json(updated);
 });
 
-router.post("/users/:id/ban", async (req: any, res) => {
+router.post("/users/:id/ban", requirePermission("ban_user"), async (req: any, res) => {
   const id = parseInt(req.params.id);
   if (req.currentUser.id === id) return res.status(400).json({ error: "Cannot ban yourself" });
   if (!checkRateLimit(req.currentUser.id, "ban")) return res.status(429).json({ error: "Too many ban actions. Try again in a minute." });
@@ -284,7 +284,7 @@ router.post("/users/:id/ban", async (req: any, res) => {
   return res.json({ ...updated, action: newBanned ? "banned" : "unbanned" });
 });
 
-router.delete("/users/:id", async (req: any, res) => {
+router.delete("/users/:id", requirePermission("delete_user"), async (req: any, res) => {
   const id = parseInt(req.params.id);
   if (req.currentUser.id === id) return res.status(400).json({ error: "Cannot delete yourself" });
   const [target] = await db.select().from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.isDeleted, false)));
@@ -399,7 +399,7 @@ router.post("/posts/:id/grant-boost", requirePermission("manage_boosts"), async 
   return res.status(201).json({ ok: true, boost, boostEndsAt });
 });
 
-router.delete("/posts/:id", async (req: any, res) => {
+router.delete("/posts/:id", requirePermission("delete_post"), async (req: any, res) => {
   const id = parseInt(req.params.id);
   if (!checkRateLimit(req.currentUser.id, "delete_post")) return res.status(429).json({ error: "Too many delete actions. Try again in a minute." });
   const [post] = await db.select().from(postsTable).where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
@@ -409,7 +409,7 @@ router.delete("/posts/:id", async (req: any, res) => {
   return res.json({ success: true });
 });
 
-router.patch("/posts/:id/unpublish", async (req: any, res) => {
+router.patch("/posts/:id/unpublish", requirePermission("unpublish_post"), async (req: any, res) => {
   const id = parseInt(req.params.id);
   const [updated] = await db.update(postsTable).set({ isPublished: false, updatedAt: new Date() }).where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false))).returning({ id: postsTable.id, isPublished: postsTable.isPublished });
   if (!updated) return res.status(404).json({ error: "Post not found" });
@@ -579,7 +579,7 @@ router.get("/insights", async (req, res) => {
   });
 });
 
-router.patch("/users/:id/reach", async (req: any, res) => {
+router.patch("/users/:id/reach", requirePermission("shadowban_user"), async (req: any, res) => {
   const id = parseInt(req.params.id);
   const { reachMultiplier, visibilityPenalty } = req.body;
   if (reachMultiplier !== undefined && (reachMultiplier < 0 || reachMultiplier > 1)) {
@@ -1022,23 +1022,23 @@ router.delete("/translation-cache", requireSuperAdmin, async (req: any, res) => 
   const id = req.query.id ? Number(req.query.id) : null;
   if (id) {
     await db.delete(translationCacheTable).where(eq(translationCacheTable.id, id));
-    await auditLog(req.user.id, "translation_cache_invalidate", "translation_cache", id);
+    await auditLog(req.currentUser.id, "translation_cache_invalidate", "translation_cache", id);
     return res.json({ ok: true, deleted: 1 });
   }
   // Full flush
   const before = await db.select({ count: sql<number>`count(*)::int` }).from(translationCacheTable);
   await db.delete(translationCacheTable);
-  await auditLog(req.user.id, "translation_cache_flush_all", "translation_cache");
+  await auditLog(req.currentUser.id, "translation_cache_flush_all", "translation_cache");
   return res.json({ ok: true, deleted: before[0]?.count ?? 0 });
 });
 
-router.post("/users/:id/official", async (req: any, res) => {
+router.post("/users/:id/official", requireSuperAdmin, async (req: any, res) => {
   const userId = Number(req.params.id);
   if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: "Invalid user id" });
   const { isOfficialAccount } = req.body;
   if (typeof isOfficialAccount !== "boolean") return res.status(400).json({ error: "isOfficialAccount must be boolean" });
   await db.update(usersTable).set({ isOfficialAccount } as any).where(eq(usersTable.id, userId));
-  await auditLog(req.user.id, isOfficialAccount ? "grant_official" : "revoke_official", "user", userId);
+  await auditLog(req.currentUser.id, isOfficialAccount ? "grant_official" : "revoke_official", "user", userId);
   return res.json({ ok: true });
 });
 

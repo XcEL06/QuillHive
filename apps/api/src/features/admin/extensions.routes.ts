@@ -4,7 +4,7 @@ import {
   jobsTable, postsTable, groupsTable, featuredSlotsTable, adminLogsTable,
 } from "@workspace/db/schema";
 import { eq, and, gt, isNull, or, desc } from "drizzle-orm";
-import { requireAdmin, requireSuperAdmin } from "../../middleware/admin";
+import { requireAdmin, requirePermission, requireSuperAdmin } from "../../middleware/admin";
 
 interface AuthedReq extends Request { currentUser: { id: number } }
 
@@ -30,7 +30,7 @@ adminExtensionsRouter.get("/groups", async (_req: Request, res: Response) => {
 });
 
 // Jobs
-adminExtensionsRouter.patch("/jobs/:id/approve", async (req: Request, res: Response) => {
+adminExtensionsRouter.patch("/jobs/:id/approve", requirePermission("manage_jobs"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   await db.update(jobsTable).set({ isApproved: true, isActive: true, moderationStatus: "published" }).where(eq(jobsTable.id, id));
@@ -38,7 +38,7 @@ adminExtensionsRouter.patch("/jobs/:id/approve", async (req: Request, res: Respo
   res.json({ ok: true });
 });
 
-adminExtensionsRouter.patch("/jobs/:id/feature", async (req: Request, res: Response) => {
+adminExtensionsRouter.patch("/jobs/:id/feature", requirePermission("manage_jobs"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   const featuredUntil = new Date(Date.now() + 30 * 24 * 60 * 60_000);
@@ -47,7 +47,7 @@ adminExtensionsRouter.patch("/jobs/:id/feature", async (req: Request, res: Respo
   res.json({ ok: true, featuredUntil });
 });
 
-adminExtensionsRouter.patch("/jobs/:id/reject", async (req: Request, res: Response) => {
+adminExtensionsRouter.patch("/jobs/:id/reject", requirePermission("manage_jobs"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   await db.update(jobsTable).set({ isActive: false, moderationStatus: "rejected" }).where(eq(jobsTable.id, id));
@@ -56,7 +56,7 @@ adminExtensionsRouter.patch("/jobs/:id/reject", async (req: Request, res: Respon
 });
 
 // Posts - sponsor / unsponsor
-adminExtensionsRouter.patch("/posts/:id/sponsor", async (req: Request, res: Response) => {
+adminExtensionsRouter.patch("/posts/:id/sponsor", requirePermission("manage_content"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   const sponsorName = String(req.body?.sponsorName ?? "").slice(0, 120);
@@ -74,7 +74,7 @@ adminExtensionsRouter.patch("/posts/:id/sponsor", async (req: Request, res: Resp
   res.json({ ok: true });
 });
 
-adminExtensionsRouter.patch("/posts/:id/unsponsor", async (req: Request, res: Response) => {
+adminExtensionsRouter.patch("/posts/:id/unsponsor", requirePermission("manage_content"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   await db
@@ -86,7 +86,7 @@ adminExtensionsRouter.patch("/posts/:id/unsponsor", async (req: Request, res: Re
 });
 
 // Groups
-adminExtensionsRouter.patch("/groups/:id/verify", async (req: Request, res: Response) => {
+adminExtensionsRouter.patch("/groups/:id/verify", requirePermission("manage_groups"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   await db.update(groupsTable).set({ isVerified: true }).where(eq(groupsTable.id, id));
@@ -94,7 +94,7 @@ adminExtensionsRouter.patch("/groups/:id/verify", async (req: Request, res: Resp
   res.json({ ok: true });
 });
 
-adminExtensionsRouter.patch("/groups/:id/promote", async (req: Request, res: Response) => {
+adminExtensionsRouter.patch("/groups/:id/promote", requirePermission("manage_groups"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   const promotedUntil = new Date(Date.now() + 30 * 24 * 60 * 60_000);
@@ -114,7 +114,7 @@ adminExtensionsRouter.patch("/groups/:id/promote", async (req: Request, res: Res
   res.json({ ok: true, promotedUntil });
 });
 
-adminExtensionsRouter.patch("/groups/:id/unpromote", async (req: Request, res: Response) => {
+adminExtensionsRouter.patch("/groups/:id/unpromote", requirePermission("manage_groups"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   await db.update(groupsTable).set({ isPromoted: false, promotedUntil: null }).where(eq(groupsTable.id, id));
@@ -189,7 +189,7 @@ adminExtensionsRouter.post("/featured-slots", requireSuperAdmin, async (req: Req
   res.json({ slot: row });
 });
 
-adminExtensionsRouter.delete("/featured-slots/:id", async (req: Request, res: Response) => {
+adminExtensionsRouter.delete("/featured-slots/:id", requireSuperAdmin, async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
   await db.update(featuredSlotsTable).set({ isActive: false }).where(eq(featuredSlotsTable.id, id));
