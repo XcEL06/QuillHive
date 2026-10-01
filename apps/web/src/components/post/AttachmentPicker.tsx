@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Paperclip, X, Loader2, FileText, Image as ImageIcon, Music, Video, File } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadFile, type UploadCategory } from '@/lib/uploadFile';
+import { mediaUrl } from '@/lib/api';
 
 export interface Attachment {
   url: string;
@@ -50,6 +51,7 @@ interface AttachmentPickerProps {
 export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS, label = 'Attach files', compact = false, category = 'post' }: AttachmentPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [failedPreviews, setFailedPreviews] = useState<Set<string>>(() => new Set());
   const { toast } = useToast();
 
   const handleFiles = async (files: FileList | null) => {
@@ -123,11 +125,17 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
                 key={`${a.url}-${i}`}
                 className="relative group bg-muted rounded-lg border border-border overflow-hidden flex items-center gap-2 pr-2"
               >
-                {isImage ? (
-                  <img src={a.url} alt={a.filename || ''} className="w-12 h-12 object-cover" />
+                {isImage && !failedPreviews.has(a.url) ? (
+                  <img
+                    src={mediaUrl(a.url)}
+                    alt={a.filename || ''}
+                    className="w-12 h-12 object-cover"
+                    onError={() => setFailedPreviews(current => new Set(current).add(a.url))}
+                  />
                 ) : (
-                  <div className="w-12 h-12 flex items-center justify-center bg-primary/10 text-primary">
+                  <div className={`h-12 ${isImage ? 'w-24' : 'w-12'} flex flex-col items-center justify-center gap-0.5 bg-primary/10 text-primary`}>
                     <Icon className="w-5 h-5" />
+                    {isImage && <span className="text-[9px] text-destructive">Preview unavailable</span>}
                   </div>
                 )}
                 <span className="text-xs text-foreground truncate max-w-[140px]">{a.filename || 'file'}</span>

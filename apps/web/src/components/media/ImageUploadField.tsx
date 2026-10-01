@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image as ImageIcon, Loader2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -16,7 +16,10 @@ interface ImageUploadFieldProps {
 export function ImageUploadField({ value, onChange, category, label, previewClassName = 'h-32' }: ImageUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => setPreviewError(false), [value]);
 
   const handleChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -49,9 +52,17 @@ export function ImageUploadField({ value, onChange, category, label, previewClas
         {label}
       </Button>
       {value ? (
-        <div className={`relative rounded-xl overflow-hidden bg-muted ${previewClassName}`}>
-          <img src={mediaUrl(value)} alt="Preview" className="w-full h-full object-cover" />
-        </div>
+        previewError ? (
+          <div className={`flex flex-col items-center justify-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-center ${previewClassName}`} role="alert">
+            <ImageIcon className="w-6 h-6 text-destructive" />
+            <p className="text-xs text-destructive">Upload completed, but the image preview could not be loaded.</p>
+            <Button type="button" size="sm" variant="outline" onClick={() => inputRef.current?.click()}>Choose another image</Button>
+          </div>
+        ) : (
+          <div className={`relative rounded-xl overflow-hidden bg-muted ${previewClassName}`}>
+            <img src={mediaUrl(value)} alt="Preview" className="w-full h-full object-cover" onError={() => setPreviewError(true)} />
+          </div>
+        )
       ) : (
         <div className={`rounded-xl border border-dashed border-border flex items-center justify-center text-muted-foreground ${previewClassName}`}>
           <ImageIcon className="w-6 h-6" />

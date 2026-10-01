@@ -101,6 +101,8 @@ export default function Profile() {
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [coverImageError, setCoverImageError] = useState(false);
+  const [avatarImageError, setAvatarImageError] = useState(false);
 
   async function handleImageUpload(file: File, type: 'avatar' | 'cover') {
     const setLoading = type === 'avatar' ? setUploadingAvatar : setUploadingCover;
@@ -152,6 +154,11 @@ export default function Profile() {
   const { data: rawData, isLoading, refetch } = useGetUserByUsername(username);
   const data = rawData as ExtendedProfileData | undefined;
   const { mutate: toggleFollow, isPending: isFollowing } = useFollowUser({ mutation: { onSuccess: () => refetch() } });
+
+  useEffect(() => {
+    setCoverImageError(false);
+    setAvatarImageError(false);
+  }, [data?.user?.coverUrl, data?.user?.avatarUrl]);
 
   const [endorsements, setEndorsements] = useState<Record<string, number>>({});
 
@@ -340,16 +347,17 @@ export default function Profile() {
       </div>
       {/* Cover Photo */}
       <div className="w-full h-48 md:h-72 bg-muted relative md:rounded-b-3xl overflow-hidden shadow-sm">
-        {user.coverUrl ? (
+        {user.coverUrl && !coverImageError ? (
           <img
             src={mediaUrl(user.coverUrl)}
             alt="Cover"
             className="w-full h-full object-cover"
-            onError={(event) => {
-              event.currentTarget.onerror = null;
-              event.currentTarget.src = `${import.meta.env.BASE_URL}images/default-cover.png`;
-            }}
+            onError={() => setCoverImageError(true)}
           />
+        ) : user.coverUrl && coverImageError ? (
+          <div className="flex h-full w-full items-center justify-center bg-muted text-sm text-destructive" role="alert">
+            Cover image could not be loaded.
+          </div>
         ) : (
           <img src={`${import.meta.env.BASE_URL}images/default-cover.png`} alt="Default Cover" className="w-full h-full object-cover opacity-80" />
         )}
@@ -382,10 +390,11 @@ export default function Profile() {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
           <div className="flex items-end gap-4">
             <Avatar className="relative w-32 h-32 md:w-40 md:h-40 border-4 border-background shadow-xl">
-              <AvatarImage src={mediaUrl(user.avatarUrl)} />
+              <AvatarImage src={mediaUrl(user.avatarUrl)} onError={() => setAvatarImageError(true)} />
               <AvatarFallback className="text-4xl bg-primary/10 text-primary font-serif">
                 {user.displayName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
+              {avatarImageError && <span className="absolute inset-x-0 bottom-8 bg-destructive/90 px-1 py-0.5 text-center text-[9px] font-medium text-white">Photo unavailable</span>}
               {isMe && (
                 <>
                   <input
