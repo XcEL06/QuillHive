@@ -6,10 +6,10 @@ import { getPostAnalytics, getUserAnalytics, getGeographyAnalytics } from "./ana
 import { getTopicPerformance, getReadDepthAnalytics, getWeeklyReport } from "./topicAnalytics.service";
 import { getCreatorGrowthScore, getOpportunityReadiness } from "./growthScore.service";
 import { getContentIntelligence } from "./contentIntelligence.service";
+import { getUserTrustScore } from "../trust/trust.service";
 import { db } from "@workspace/db";
 import {
   usersTable,
-  userTrustScoresTable,
   writingStreaksTable,
   userAchievementsTable,
   postsTable,
@@ -35,9 +35,8 @@ analyticsRouter.get("/creator/:username/stats", async (req, res) => {
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-  const [trustRow, streakRow, achRow, postRow, portRow, weeklyFollRow] = await Promise.all([
-    db.select({ tier: userTrustScoresTable.tier, uti: userTrustScoresTable.uti, creatorLevel: userTrustScoresTable.creatorLevel })
-      .from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, user.id)).limit(1),
+  const [trustScore, streakRow, achRow, postRow, portRow, weeklyFollRow] = await Promise.all([
+    getUserTrustScore(user.id),
     db.select({ currentStreak: writingStreaksTable.currentStreak, longestStreak: writingStreaksTable.longestStreak })
       .from(writingStreaksTable).where(eq(writingStreaksTable.userId, user.id)).limit(1),
     db.select({ n: sql<number>`count(*)::int` })
@@ -52,9 +51,9 @@ analyticsRouter.get("/creator/:username/stats", async (req, res) => {
   ]);
 
   return res.json({
-    creatorLevel: trustRow[0]?.creatorLevel ?? "new_voice",
-    trustTier: trustRow[0]?.tier ?? "neutral",
-    uti: Math.round(trustRow[0]?.uti ?? 0),
+    creatorLevel: trustScore?.creatorLevel ?? "new_voice",
+    trustTier: trustScore?.tier ?? "neutral",
+    uti: Math.round(trustScore?.uti ?? 0),
     writingStreak: streakRow[0]?.currentStreak ?? 0,
     longestStreak: streakRow[0]?.longestStreak ?? 0,
     achievementCount: Number(achRow[0]?.n ?? 0),

@@ -13,6 +13,7 @@ import {
 import { eq, and, lte, isNull, or, sql } from "drizzle-orm";
 import { getCache, setCache, deleteCache } from "../../lib/cache";
 import { visiblePostExpiryCondition } from "../posts/postExpiry";
+import { getUserTrustScore } from "../trust/trust.service";
 
 export async function getUserWithCounts(userId: number, viewerId: number | null) {
   const cacheKey = `user:${userId}:viewer:${viewerId ?? "anon"}`;
@@ -250,12 +251,8 @@ export async function enrichPost(post: any, viewerId: number | null) {
 
   let authorCreatorLevel: string | null = null;
   try {
-    const { userTrustScoresTable } = await import("@workspace/db/schema");
-    const [trustRow] = await db
-      .select({ creatorLevel: userTrustScoresTable.creatorLevel })
-      .from(userTrustScoresTable)
-      .where(eq(userTrustScoresTable.userId, post.authorId));
-    authorCreatorLevel = trustRow?.creatorLevel ?? null;
+    const trustScore = await getUserTrustScore(post.authorId);
+    authorCreatorLevel = trustScore?.creatorLevel ?? null;
   } catch { /* non-fatal */ }
 
   // Parse CTA buttons (stored as JSONB)

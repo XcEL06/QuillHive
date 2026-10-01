@@ -11,6 +11,8 @@ QuillHive has one canonical trust measure: **Trust Score (UTI)**, a 0-100 score 
 
 The formula is `UTI = CVS * 0.35 + BCS * 0.25 + CTS * 0.20 + average(CIS) * 0.20`, clamped to 0-100.
 
+Platform trust exception: super-admin and official accounts are classified as Luminary with a 100 UTI for trust display and distribution eligibility. Their CVS, BCS, CTS, and CIS values remain based only on recorded activity; this exception does not create views or other engagement events.
+
 There are no neutral defaults. A new account with no posts or activity has CVS, BCS, CTS, CIS, and UTI of 0 and starts as `new_voice`. Missing data is not treated as average performance.
 
 ## Creator Levels

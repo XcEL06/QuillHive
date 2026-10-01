@@ -197,7 +197,13 @@ export async function calculateCIS(postId: number): Promise<number> {
 
 export async function calculateUTI(userId: number): Promise<{ uti: number; cvs: number; bcs: number; cts: number; avgCis: number; tier: string; creatorLevel: string; visibilityMultiplier: number }> {
   try {
-    const [cvs, bcs, cts] = await Promise.all([calculateCVS(userId), calculateBCS(userId), calculateCTS(userId)]);
+    const [[cvs, bcs, cts], [account]] = await Promise.all([
+      Promise.all([calculateCVS(userId), calculateBCS(userId), calculateCTS(userId)]),
+      db.select({ role: usersTable.role, isOfficialAccount: usersTable.isOfficialAccount })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1),
+    ]);
     const userPosts = await db
       .select({ id: postsTable.id })
       .from(postsTable)
@@ -210,7 +216,10 @@ export async function calculateUTI(userId: number): Promise<{ uti: number; cvs: 
       avgCis = clamp(safeRatio(cisScores.reduce((sum, score) => sum + clamp(score), 0), cisScores.length));
     }
 
-    const uti = clamp(cvs * 0.35 + bcs * 0.25 + cts * 0.2 + avgCis * 0.2);
+    const isPlatformTrusted = account?.role === "super_admin" || account?.isOfficialAccount === true;
+    const uti = isPlatformTrusted
+      ? 100
+      : clamp(cvs * 0.35 + bcs * 0.25 + cts * 0.2 + avgCis * 0.2);
     const creatorLevel = getCreatorLevel(uti);
     const tier = legacyTierFromLevel(creatorLevel);
     const visibilityMultiplier = visibilityForTier(uti, tier);
@@ -299,7 +308,24 @@ export async function recordBehaviorEvent(userId: number, eventType: string, sev
 }
 
 export async function getUserTrustScore(userId: number) {
-  const [score] = await db.select().from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, userId));
+  const [[score], [account]] = await Promise.all([
+    db.select().from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, userId)),
+    db.select({ role: usersTable.role, isOfficialAccount: usersTable.isOfficialAccount })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1),
+  ]);
+
+  if (account?.role === "super_admin" || account?.isOfficialAccount === true) {
+    const platformTrust = {
+      uti: 100,
+      tier: "trusted",
+      creatorLevel: "luminary",
+      visibilityMultiplier: 1.2,
+    };
+    return score ? { ...score, ...platformTrust } : { userId, ...DEFAULT_SCORES, ...platformTrust };
+  }
+
   return score ?? null;
 }
 
