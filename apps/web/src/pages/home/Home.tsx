@@ -617,7 +617,7 @@ function AuthenticatedHome() {
         </div>
 
         {(feedSource === 'explore' || feedSource === 'following') && (
-          <div className="sticky top-16 z-20 -mx-4 md:-mx-6 border-b border-border/50 bg-background/95 px-4 md:px-6 backdrop-blur">
+          <div className="sticky top-16 z-40 -mx-4 md:-mx-6 border-b border-border/50 bg-background/95 px-4 md:px-6 backdrop-blur">
             <StoriesRow onOpenViewer={setActiveStoryGroup} />
           </div>
         )}

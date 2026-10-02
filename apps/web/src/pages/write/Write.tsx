@@ -30,6 +30,7 @@ import { useT } from '@/lib/i18n';
 import { ImageUploadField } from '@/components/media/ImageUploadField';
 import { BackButton } from '@/components/ui/BackButton';
 import { apiUrl } from '@/lib/api';
+import { useFeature } from '@/lib/features';
 
 type AiPanel = 'assist' | 'caption' | 'improve' | 'ideas' | 'titles' | 'hashtags' | null;
 
@@ -99,6 +100,7 @@ export default function Write() {
   const { toast } = useToast();
   const t = useT();
   const { user, token } = useAuthStore();
+  const aiToolsAvailable = useFeature('ai_tools_enabled') && (user?.role === 'admin' || user?.role === 'super_admin');
   const queryClient = useQueryClient();
   const challengeId = (() => {
     const search = typeof window !== 'undefined' ? window.location.search : '';
@@ -1051,7 +1053,7 @@ export default function Write() {
             <Button size="icon" variant="ghost" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={editor.isActive('blockquote') ? 'bg-muted' : ''}>
               <Quote className="w-4 h-4" />
             </Button>
-            <div className="ml-auto flex items-center gap-1 flex-wrap">
+            {aiToolsAvailable && <div className="ml-auto flex items-center gap-1 flex-wrap">
               <Button size="sm" variant="ghost" onClick={() => { setAiPanel('titles'); setAiResult(''); }} className="rounded-full text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30">
                 <Type className="w-3.5 h-3.5" /> {t('write.aiTitles', 'Titles')}
               </Button>
@@ -1070,7 +1072,7 @@ export default function Write() {
               <Button size="sm" variant="ghost" onClick={() => { setAiPanel('ideas'); setAiResult(''); }} className="rounded-full text-xs gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
                 <Lightbulb className="w-3.5 h-3.5" /> {t('write.aiIdeas')}
               </Button>
-            </div>
+            </div>}
           </div>
 
           {/* Editor */}
@@ -1098,7 +1100,7 @@ export default function Write() {
       </div>
 
       {/* AI Panel - Writing Assist */}
-      <Dialog open={aiPanel === 'assist'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
+      <Dialog open={aiToolsAvailable && aiPanel === 'assist'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
         <DialogContent className="sm:max-w-lg border-border/50 rounded-2xl shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-serif">
@@ -1134,7 +1136,7 @@ export default function Write() {
       </Dialog>
 
       {/* AI Panel - Caption Generator */}
-      <Dialog open={aiPanel === 'caption'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
+      <Dialog open={aiToolsAvailable && aiPanel === 'caption'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
         <DialogContent className="sm:max-w-lg border-border/50 rounded-2xl shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-serif">
@@ -1165,7 +1167,7 @@ export default function Write() {
       </Dialog>
 
       {/* AI Panel - Improve Content */}
-      <Dialog open={aiPanel === 'improve'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
+      <Dialog open={aiToolsAvailable && aiPanel === 'improve'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
         <DialogContent className="sm:max-w-lg border-border/50 rounded-2xl shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-serif">
@@ -1209,7 +1211,7 @@ export default function Write() {
       </Dialog>
 
       {/* AI Panel - Idea Generator */}
-      <Dialog open={aiPanel === 'ideas'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
+      <Dialog open={aiToolsAvailable && aiPanel === 'ideas'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
         <DialogContent className="sm:max-w-lg border-border/50 rounded-2xl shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-serif">
@@ -1246,7 +1248,7 @@ export default function Write() {
       </Dialog>
 
       {/* AI Panel - Title Suggestions */}
-      <Dialog open={aiPanel === 'titles'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
+      <Dialog open={aiToolsAvailable && aiPanel === 'titles'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
         <DialogContent className="sm:max-w-lg border-border/50 rounded-2xl shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-serif">
@@ -1285,7 +1287,7 @@ export default function Write() {
       </Dialog>
 
       {/* AI Panel - Hashtag Suggestions */}
-      <Dialog open={aiPanel === 'hashtags'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
+      <Dialog open={aiToolsAvailable && aiPanel === 'hashtags'} onOpenChange={(o) => { if (!o) setAiPanel(null); }}>
         <DialogContent className="sm:max-w-lg border-border/50 rounded-2xl shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl font-serif">

@@ -6,6 +6,11 @@ import type { AdminProps } from "./types";
 import { useAdminFetch } from "../hooks/useAdminFetch";
 
 const FLAG_METADATA: Record<string, { label: string; description: string; category: "Core" | "Future" }> = {
+  ai_tools_enabled: {
+    label: "AI Tools",
+    description: "Allow AI writing assistance and translation for administrators. Off by default.",
+    category: "Future",
+  },
   service_checkout_enabled: {
     label: "Creator Service Checkout",
     description: "Allow buyers to pay for fixed-price creator services through Flutterwave and credit creator earnings.",

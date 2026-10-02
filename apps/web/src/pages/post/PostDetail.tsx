@@ -36,6 +36,7 @@ import { MoreLikeThis } from '@/components/post/MoreLikeThis';
 import { ImageLightbox } from '@/components/post/ImageLightbox';
 import { BackButton } from '@/components/ui/BackButton';
 import { useRecordRead } from '@/hooks/useReadingStreak';
+import { useFeature } from '@/lib/features';
 import { PollComposer, type DraftPoll } from '@/components/post/PollComposer';
 import { LiveReadCounter } from '@/components/post/LiveReadCounter';
 
@@ -329,6 +330,7 @@ export default function PostDetail() {
   const [showBoostModal, setShowBoostModal] = useState(false);
   const [cwAcknowledged, setCwAcknowledged] = useState(false);
   const { user } = useAuthStore();
+  const aiToolsAvailable = useFeature('ai_tools_enabled') && (user?.role === 'admin' || user?.role === 'super_admin');
 
   const { data: post, isLoading: isLoadingPost } = useGetPost(postId);
   const progress = useReadingProgress(postId, { enabled: !!post });
@@ -484,7 +486,7 @@ export default function PostDetail() {
 
             <div className="flex gap-2 items-center flex-wrap justify-end">
               <ReaderModeToggle active={readerMode} onToggle={() => setReaderMode((v) => !v)} />
-              <TranslateButton postId={post.id} sourceText={sourceText} onTranslated={setTranslated} />
+              {aiToolsAvailable && <TranslateButton postId={post.id} sourceText={sourceText} onTranslated={setTranslated} />}
               {isOwner && (
                 <>
                   <Button

@@ -28,6 +28,7 @@ import { PostOptionsMenu, type PostOptionAction, type PostOptionPost } from './P
 import { ToastAction } from '@/components/ui/toast';
 import { ImageLightbox } from './ImageLightbox';
 import { formatPostTimestamp } from '@/lib/postTimestamp';
+import { useFeature } from '@/lib/features';
 
 type CtaButton = { label: string; url: string; style: 'primary' | 'secondary' | 'outline' };
 
@@ -337,6 +338,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
   const [, setLocation] = useLocation();
   const { user: currentUser } = useAuthStore();
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
+  const aiToolsAvailable = useFeature('ai_tools_enabled') && isAdmin;
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -981,7 +983,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
 
         <Link href={`/post/${post.id}`} className="block group" onClick={handleAbClickTrack}>
 
-          {lang !== 'en' && (
+          {aiToolsAvailable && lang !== 'en' && (
             <button
               type="button"
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleTranslate(); }}

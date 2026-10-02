@@ -34,6 +34,7 @@ const DEFAULT_FLAGS: Partial<Record<string, boolean>> = {
   // Maintenance is an explicit opt-in state. A missing setting must not
   // take the public app offline.
   maintenance_mode:   false,
+  ai_tools_enabled:       false,
   motion_enabled:          false,
   chains_enabled:          false,
   series_enabled:          false,

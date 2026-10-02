@@ -14,6 +14,7 @@ import { useGetUserPosts, getGetUserPostsQueryKey } from '@workspace/api-client-
 import { useToast } from '@/hooks/use-toast';
 import { getStoredToken } from '@/lib/api';
 import { contactEmail } from '@/lib/contact';
+import { BoostModal } from '@/components/boost/BoostModal';
 
 type BoostPlan = 'starter' | 'growth' | 'spotlight';
 
@@ -102,58 +103,33 @@ function BoostRequestDialog({
   initialPlan,
   initialPostId,
   posts,
+  onCheckout,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialPlan: BoostPlan;
   initialPostId?: number | null;
   posts: UserPost[];
+  onCheckout: (post: UserPost, plan: BoostPlan) => void;
 }) {
-  const { toast } = useToast();
-  const token = getStoredToken();
   const [selectedPostId, setSelectedPostId] = useState<string>(initialPostId ? String(initialPostId) : '');
   const [selectedPlan, setSelectedPlan] = useState<BoostPlan>(initialPlan);
-  const [message, setMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setSelectedPlan(initialPlan);
       setSelectedPostId(initialPostId ? String(initialPostId) : '');
-      setMessage('');
     }
   }, [open, initialPlan, initialPostId]);
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     if (!selectedPostId) {
-      toast({ title: 'Select a post to boost', variant: 'destructive' });
       return;
     }
-    setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/boost/request', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ postId: Number(selectedPostId), plan: selectedPlan }),
-      });
-      const data = await res.json() as { error?: string };
-      if (!res.ok) {
-        toast({ title: data.error ?? 'Request failed', variant: 'destructive' });
-        return;
-      }
-      toast({
-        title: '🚀 Boost request submitted!',
-        description: 'Your boost will activate as soon as payment is verified.',
-      });
-      onOpenChange(false);
-    } catch {
-      toast({ title: 'Failed to submit boost request', variant: 'destructive' });
-    } finally {
-      setIsSubmitting(false);
-    }
+    const selectedPost = posts.find(post => String(post.id) === selectedPostId);
+    if (!selectedPost) return;
+    onCheckout(selectedPost, selectedPlan);
+    onOpenChange(false);
   };
 
   const planInfo = VISIBILITY_PLANS.find(p => p.key === selectedPlan);
@@ -163,10 +139,10 @@ function BoostRequestDialog({
       <DialogContent className="rounded-2xl border-border/50 sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Rocket className="w-5 h-5 text-violet-500" /> Request a Boost
+            <Rocket className="w-5 h-5 text-violet-500" /> Choose a post to boost
           </DialogTitle>
           <DialogDescription>
-            Select a post and boost type. Once payment is verified, your boost activates instantly.
+            Select a post and campaign. You will continue directly to secure payment.
           </DialogDescription>
         </DialogHeader>
 
@@ -220,21 +196,6 @@ function BoostRequestDialog({
             )}
           </div>
 
-          {/* Optional message */}
-          <div className="space-y-1.5">
-            <Label>
-              Message to our team{' '}
-              <span className="text-muted-foreground font-normal">(optional)</span>
-            </Label>
-            <Textarea
-              value={message}
-              onChange={e => setMessage(e.target.value)}
-              placeholder="Tell us about your post or your growth goals…"
-              className="rounded-xl resize-none text-sm"
-              rows={3}
-              maxLength={500}
-            />
-          </div>
         </div>
 
         <DialogFooter className="gap-2">
@@ -243,10 +204,10 @@ function BoostRequestDialog({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={isSubmitting || !selectedPostId}
+            disabled={!selectedPostId}
             className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-500 text-white border-0"
           >
-            {isSubmitting ? 'Submitting…' : 'Submit Request'}
+            Continue to payment
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -257,6 +218,7 @@ function BoostRequestDialog({
 export default function Pricing() {
   const { user } = useAuthStore();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [checkout, setCheckout] = useState<{ postId: number; postTitle: string; plan: BoostPlan } | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<BoostPlan>('growth');
   const [preselectedPostId, setPreselectedPostId] = useState<number | null>(null);
   const [requestForm, setRequestForm] = useState({ name: '', email: '', message: '' });
@@ -348,7 +310,7 @@ export default function Pricing() {
                         variant={plan.featured ? 'default' : 'outline'}
                         onClick={() => openDialog(plan.key)}
                       >
-                        <Rocket className="w-4 h-4 mr-2" /> Request {plan.name}
+                        <Rocket className="w-4 h-4 mr-2" /> Boost a post
                       </Button>
                     ) : (
                       <Button className="w-full rounded-xl" variant="outline" asChild>
@@ -372,7 +334,7 @@ export default function Pricing() {
           </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {([
-              { icon: Rocket, color: 'text-violet-500 bg-violet-500/10', title: 'You request', desc: 'Pick a post and a boost type. Add an optional note for our team.' },
+              { icon: Rocket, color: 'text-violet-500 bg-violet-500/10', title: 'Choose a campaign', desc: 'Pick a post and boost type, then continue straight to checkout.' },
               { icon: Eye, color: 'text-blue-500 bg-blue-500/10', title: 'Verification', desc: 'Secure payment verification confirms your campaign and starts the boost immediately.' },
               { icon: TrendingUp, color: 'text-emerald-500 bg-emerald-500/10', title: 'Boost activates', desc: 'Your post gets elevated placement in Discover, Trending, and Featured sections.' },
               { icon: Users, color: 'text-orange-500 bg-orange-500/10', title: 'You grow', desc: 'More eyes on your work means more followers, feedback, and opportunities.' },
@@ -497,10 +459,9 @@ export default function Pricing() {
 
         {/* FAQ / Note */}
         <div className="rounded-2xl bg-primary/5 border border-primary/20 p-8 text-center mb-12">
-          <h3 className="text-xl font-serif font-bold mb-3">How does requesting work?</h3>
+          <h3 className="text-xl font-serif font-bold mb-3">How does payment work?</h3>
           <p className="text-muted-foreground max-w-xl mx-auto mb-6">
-            Click "Request" on any plan, complete payment, and your boost activates as soon as verification succeeds.
-            The admin review tools remain available for moderation, but they are not a blocker to campaign activation.
+            Choose a post and campaign, complete payment, and your boost activates as soon as verification succeeds.
           </p>
           <a
             href={`mailto:${contactEmail()}?subject=Pricing Enquiry`}
@@ -600,7 +561,16 @@ export default function Pricing() {
         initialPlan={selectedPlan}
         initialPostId={preselectedPostId}
         posts={userPosts}
+        onCheckout={(post, plan) => setCheckout({ postId: post.id, postTitle: post.title ?? '', plan })}
       />
+      {checkout && (
+        <BoostModal
+          postId={checkout.postId}
+          postTitle={checkout.postTitle}
+          defaultPlan={checkout.plan}
+          onClose={() => setCheckout(null)}
+        />
+      )}
     </PublicLayout>
   );
 }

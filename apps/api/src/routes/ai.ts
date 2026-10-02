@@ -6,6 +6,8 @@ import { and, eq } from "drizzle-orm";
 import { createHash } from "crypto";
 import { getRedis } from "../lib/redis";
 import { logger } from "../lib/logger";
+import { isFeatureEnabled } from "../lib/featureFlags";
+import { requireAdmin } from "../middleware/admin";
 
 const router = Router();
 const AI_DAILY_LIMIT = Number.parseInt(process.env.AI_DAILY_LIMIT ?? "50", 10);
@@ -51,6 +53,20 @@ async function aiDailyRateLimit(req: any, res: any, next: any) {
   return next();
 }
 
+router.use(async (_req, res, next) => {
+  if (!(await isFeatureEnabled("ai_tools_enabled"))) {
+    return res.status(404).json({ error: "AI tools are disabled" });
+  }
+  next();
+});
+router.use(requireAdmin);
+router.use((req, res, next) => {
+  const role = (req as any).currentUser?.role;
+  if (role !== "admin" && role !== "super_admin") {
+    return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
+});
 router.use(aiDailyRateLimit);
 
 function getViewerId(req: any): number | null {
