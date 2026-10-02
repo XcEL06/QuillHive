@@ -773,150 +773,63 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
         {post.isOfficialPost && <OfficialPostBanner category={post.postCategory} />}
 
         {/* Header */}
-        <div className="flex items-start justify-between mb-4">
-          <Link href={`/profile/${post.author.username}`} className="flex items-center gap-3 group">
-            <Avatar className="h-10 w-10 border border-border group-hover:border-primary transition-colors">
+        <div className="mb-4 flex items-center gap-3 min-w-0">
+          <Link href={`/profile/${post.author.username}`} className="shrink-0">
+            <Avatar className="h-10 w-10 border border-border transition-colors group-hover:border-primary">
               <AvatarImage src={post.author.avatarUrl || ''} />
               <AvatarFallback className="bg-primary/10 text-primary">{post.author.displayName.substring(0, 2)}</AvatarFallback>
             </Avatar>
-            <div>
-              <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors flex items-center flex-wrap gap-1">
-                {post.author.displayName}
-                <OfficialBadge isOfficial={post.authorIsOfficial} />
-                <SuperUserBadge isSuperUser={post.authorIsSuperUser} />
-                <TrustBadge tier={post.authorTrustTier} isAdmin={isAdmin} />
-                <CreatorLevelBadge level={post.authorCreatorLevel} size="xs" />
-                {post.authorHireEnabled && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
-                    ⚡ Open for Projects
-                  </span>
-                )}
-                {(post.authorStreakDays ?? 0) >= 3 && (
-                  <span
-                    className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-orange-500 bg-orange-500/10 rounded-full px-1.5 py-0.5"
-                    title={`${post.authorStreakDays}-day posting streak`}
-                  >
-                    🔥 {post.authorStreakDays}
-                  </span>
-                )}
-              </h3>
-              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <span>
-                  @{post.author.username} · {postTimestamp && (
-                    <time dateTime={postTimestamp.dateTime} title={postTimestamp.title}>{postTimestamp.label}</time>
-                  )}
-                </span>
-                {!isSpark && readingTimeLabel(post.content || post.excerpt || '') && (
-                  <span className="inline-flex items-center gap-0.5">
-                    · <Clock className="w-3 h-3" /> {readingTimeLabel(post.content || post.excerpt || '')}
-                  </span>
-                )}
-                {isSpark && feeling && (
-                  <span className="inline-flex items-center gap-0.5">· {feeling.emoji} {feeling.label}</span>
-                )}
-              </p>
-            </div>
           </Link>
 
-          <PostOptionsMenu
-            post={optionPost}
-            currentUserId={currentUser?.id}
-            isOwner={isOwner}
-            isSaved={post.isSaved}
-            onAction={handlePostOptionAction}
-            onDeletePermanently={handleDeleteWithUndo}
-          />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5 text-sm">
+              <Link href={`/profile/${post.author.username}`} className="min-w-0 truncate font-semibold text-foreground hover:text-primary transition-colors">
+                {post.author.displayName}
+              </Link>
+
+              {post.authorCreatorLevel === 'luminary' ? (
+                <CreatorLevelBadge level={post.authorCreatorLevel} size="xs" />
+              ) : (
+                <>
+                  <OfficialBadge isOfficial={post.authorIsOfficial} />
+                  <SuperUserBadge isSuperUser={post.authorIsSuperUser} />
+                  <TrustBadge tier={post.authorTrustTier} isAdmin={isAdmin} />
+                </>
+              )}
+
+              <span className="text-muted-foreground">•</span>
+              {postTimestamp && (
+                <time className="text-xs text-muted-foreground" dateTime={postTimestamp.dateTime} title={postTimestamp.title}>{postTimestamp.label}</time>
+              )}
+            </div>
+          </div>
+
+          <div className="shrink-0">
+            <PostOptionsMenu
+              post={optionPost}
+              currentUserId={currentUser?.id}
+              isOwner={isOwner}
+              isSaved={post.isSaved}
+              onAction={handlePostOptionAction}
+              onDeletePermanently={handleDeleteWithUndo}
+            />
+          </div>
         </div>
 
         {/* Content */}
         <Link href={`/post/${post.id}`} className="block group" onClick={handleAbClickTrack}>
-          <div className="mb-3">
-            <div className="flex items-center gap-2 mb-2 flex-wrap">
-              {post.isTrending && (
-                <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 uppercase tracking-wider inline-flex items-center gap-1" data-testid="badge-trending">
-                  <TrendingUp className="w-3 h-3" /> Trending
-                </Badge>
-              )}
-              {isBoostActive && (
-                <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-semibold bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30 uppercase tracking-wider inline-flex items-center gap-1" data-testid="badge-boosted">
-                  <Rocket className="w-3 h-3" /> Boosted{boostTimeLeft ? ` · ${boostTimeLeft}` : ''}
-                </Badge>
-              )}
-              {isFirst24h && !post.isBoosted && (
-                <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 uppercase tracking-wider inline-flex items-center gap-1">
-                  <Zap className="w-3 h-3" /> First 24h
-                </Badge>
-              )}
-              {(post as any).isFeatured && (
-                <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-semibold bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400 border-amber-200 dark:border-amber-800 inline-flex items-center gap-1" data-testid="badge-featured">
-                  ✦ Featured
-                </Badge>
-              )}
-              {post.isSponsored && (
-                <Badge variant="outline" className="px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 uppercase tracking-wider" data-testid="badge-sponsored">
-                  Sponsored
-                </Badge>
-              )}
-              <Badge variant="outline" className={`capitalize px-2.5 py-0.5 font-medium ${getTypeColor(post.type)} inline-flex items-center gap-1`}>
-                {isSpark && <Zap className="w-3 h-3 fill-current" />}
-                {isSpark ? 'Spark' : (
-                  { artwork: 'Motion', blog: 'Post', article: 'Post', post: 'Post', story: 'Story', poem: 'Story', novel: 'Story', note: 'Spark' }[post.type as string] ?? post.type
-                )}
-              </Badge>
-              {(post.editedCount ?? 0) > 0 && (
-                <Badge variant="outline" className="px-2 py-0.5 text-[10px] text-muted-foreground border-border/60 inline-flex items-center gap-1" data-testid="badge-edited">
-                  <History className="w-3 h-3" /> Edited
-                </Badge>
-              )}
-              {post.trustScore && <TrustIndicator tier={post.trustScore.tier} />}
-              {post.reason && post.reason !== 'following_creator' && (() => {
-                const reasonMap: Record<string, { icon: React.ReactNode; color: string }> = {
-                  trending_in_topic:  { icon: <TrendingUp className="w-3 h-3" />, color: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30' },
-                  popular_in_topic:   { icon: <Rocket className="w-3 h-3" />,     color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/30' },
-                  high_engagement:    { icon: <Zap className="w-3 h-3" />,        color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30' },
-                  rising_fast:        { icon: <TrendingUp className="w-3 h-3" />, color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30' },
-                  popular_this_week:  { icon: <Star className="w-3 h-3" />,       color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30' },
-                  readers_loved_this: { icon: <Trophy className="w-3 h-3" />,     color: 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30' },
-                  similar_interests:  { icon: <Sparkles className="w-3 h-3" />,   color: 'bg-primary/10 text-primary border-primary/30' },
-                };
-                const entry = reasonMap[post.reason] ?? { icon: <Sparkles className="w-3 h-3" />, color: 'bg-muted text-muted-foreground border-border/60' };
-                return (
-                  <Badge
-                    variant="outline"
-                    className={`px-2 py-0.5 text-[10px] font-medium ${entry.color} inline-flex items-center gap-1 cursor-pointer`}
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowWhyDialog(true); }}
-                    title={t("trust.whySeeing", "Why am I seeing this?")}
-                  >
-                    {entry.icon}
-                    {t(`trust.${post.reason}`, post.reason.replace(/_/g, ' '))}
-                  </Badge>
-                );
-              })()}
-            </div>
-            {!isSpark && (post.title || abDisplayedTitle) && (
-              <h2 className="text-xl md:text-2xl font-serif font-bold text-foreground mb-2 group-hover:text-primary transition-colors">
-                {abDisplayedTitle || post.title}
-              </h2>
-            )}
-          </div>
-
-          {post.imageUrl && (
-            <div className="mb-4 rounded-xl overflow-hidden bg-muted aspect-video relative">
-              <ImageLightbox
-                src={post.imageUrl}
-                alt={post.title || "Post image"}
-                className="h-full w-full"
-                imageClassName="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
-              />
-            </div>
+          {!isSpark && (post.title || abDisplayedTitle) && (
+            <h2 className="mb-2 text-lg font-bold text-foreground line-clamp-2 group-hover:text-primary transition-colors">
+              {abDisplayedTitle || post.title}
+            </h2>
           )}
 
           {isSpark ? (
-            <p className="text-base text-foreground whitespace-pre-wrap leading-relaxed mb-2">
+            <p className="mb-3 text-sm leading-6 text-foreground whitespace-pre-wrap">
               {renderHashtags(showTranslated && translatedContent ? translatedContent : post.content || '')}
             </p>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground">
+            <div className="mb-3 text-sm leading-6 text-muted-foreground">
               <AnimatePresence mode="wait">
                 {showTranslated && translatedContent ? (
                   <motion.p
@@ -942,6 +855,23 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
                   </motion.div>
                 )}
               </AnimatePresence>
+            </div>
+          )}
+
+          {post.imageUrl && (
+            <div className="relative mb-4 overflow-hidden rounded-lg bg-muted aspect-[16/9]">
+              <ImageLightbox
+                src={post.imageUrl}
+                alt={post.title || "Post image"}
+                className="h-full w-full"
+                imageClassName="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+              />
+              {isBoostActive && (
+                <div className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/15 px-2 py-1 backdrop-blur-sm">
+                  <Sparkles className="h-3 w-3 text-violet-400" />
+                  <span className="text-[10px] font-medium text-violet-200">Boosted</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -1073,105 +1003,53 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
         )}
 
         {/* Actions */}
-        <div className="flex items-center gap-1 pt-4 border-t border-border/50">
-          {/* Curate (optimistic like) */}
-          <button
-            onClick={() => {
-              const wasLiked = optimisticLiked;
-              setOptimisticLiked(!wasLiked);
-              setOptimisticLikes((c) => Math.max(0, c + (wasLiked ? -1 : 1)));
-              toggleLike({ id: post.id });
-            }}
-            disabled={isLiking}
-            title={optimisticLiked ? 'Remove curation' : 'Curate this work'}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-              optimisticLiked
-                ? 'text-rose-500 bg-rose-500/10'
-                : 'text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10'
-            }`}
-            data-testid={`button-like-${post.id}`}
-          >
-            <Heart className={`w-4 h-4 ${optimisticLiked ? 'fill-current' : ''}`} />
-            {optimisticLikes > 0 ? (
-              <span>{optimisticLikes}</span>
-            ) : (
-              <span className="text-[11px]">{optimisticLiked ? 'Curated' : 'Curate'}</span>
-            )}
-          </button>
-
-          {/* Comment */}
-          <button
-            onClick={() => setShowComments(s => !s)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"
-          >
-            <MessageCircle className={`w-4 h-4 ${showComments ? 'fill-primary/20 text-primary' : ''}`} />
-            <span>{post.commentsCount}</span>
-          </button>
-
-          {/* Repost */}
-          <button
-            onClick={handleRepost}
-            disabled={isReposting}
-            title="Repost"
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-              post.isReposted
-                ? 'text-emerald-500 bg-emerald-500/10'
-                : 'text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10'
-            }`}
-          >
-            <Repeat2 className="w-4 h-4" />
-            {(post.repostsCount ?? 0) > 0 && <span>{post.repostsCount}</span>}
-          </button>
-
-          {/* Share */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all">
-                <Share2 className="w-4 h-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-xl">
-              <DropdownMenuItem onClick={handleCopyLink} className="cursor-pointer gap-2">
-                <Copy className="w-4 h-4" /> Copy link
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Quote */}
-          <button
-            onClick={handleQuote}
-            title="Quote"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"
-          >
-            <QuoteIcon className="w-4 h-4" />
-          </button>
-
-          {/* Save / Bookmark */}
-          <button
-            onClick={handleSave}
-            disabled={isSaving}
-            title={post.isSaved ? 'Remove from saved' : 'Save post'}
-            className={`ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-              post.isSaved
-                ? 'text-primary bg-primary/10'
-                : 'text-muted-foreground hover:text-primary hover:bg-primary/10'
-            }`}
-          >
-            <Bookmark className={`w-4 h-4 ${post.isSaved ? 'fill-current' : ''}`} />
-          </button>
-
-          {/* Boost (owner only) */}
-          {isOwner && (
+        <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/40 pt-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
             <button
-              onClick={() => setBoostOpen(true)}
-              title="Boost this post"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium text-orange-500 bg-orange-500/8 hover:bg-orange-500/15 border border-orange-500/20 transition-all"
-              data-testid={`button-boost-${post.id}`}
+              onClick={() => {
+                const wasLiked = optimisticLiked;
+                setOptimisticLiked(!wasLiked);
+                setOptimisticLikes((c) => Math.max(0, c + (wasLiked ? -1 : 1)));
+                toggleLike({ id: post.id });
+              }}
+              disabled={isLiking}
+              title={optimisticLiked ? 'Remove curation' : 'Curate this work'}
+              className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-all ${
+                optimisticLiked
+                  ? 'text-rose-500 bg-rose-500/10'
+                  : 'hover:text-rose-500 hover:bg-rose-500/10'
+              }`}
+              data-testid={`button-like-${post.id}`}
             >
-              <Rocket className="w-4 h-4" />
-              <span className="hidden sm:inline text-xs font-semibold">Boost</span>
+              <Heart className={`h-4 w-4 ${optimisticLiked ? 'fill-current' : ''}`} />
+              {optimisticLikes > 0 && <span>{optimisticLikes}</span>}
             </button>
-          )}
+
+            <button
+              onClick={() => setShowComments(s => !s)}
+              className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 hover:text-primary hover:bg-primary/10 transition-all"
+            >
+              <MessageCircle className={`h-4 w-4 ${showComments ? 'fill-primary/20 text-primary' : ''}`} />
+              {post.commentsCount > 0 && <span>{post.commentsCount}</span>}
+            </button>
+
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              title={post.isSaved ? 'Remove from saved' : 'Save post'}
+              className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-all ${
+                post.isSaved
+                  ? 'text-primary bg-primary/10'
+                  : 'hover:text-primary hover:bg-primary/10'
+              }`}
+            >
+              <Bookmark className={`h-4 w-4 ${post.isSaved ? 'fill-current' : ''}`} />
+            </button>
+          </div>
+
+          <span className="text-[11px] text-muted-foreground">
+            {readingTimeLabel(post.content || post.excerpt || '') || '1 min'} read
+          </span>
         </div>
 
         {/* Visibility signal (owner only or if viewsCount available) */}
