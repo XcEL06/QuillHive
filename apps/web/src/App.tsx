@@ -224,6 +224,18 @@ function FeatureRoute({
   return <>{children}</>;
 }
 
+function StudioRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuthStore();
+  const enabled = useFeature("motion_enabled");
+  const role = (user as any)?.role;
+
+  if (!enabled || !["admin", "super_admin"].includes(role ?? "")) {
+    return <Redirect to="/" />;
+  }
+
+  return <>{children}</>;
+}
+
 function MaintenanceNotice() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-6">
@@ -314,10 +326,10 @@ function Router() {
         <Redirect to="/workspace?tab=work" />
       </Route>
       <Route path="/motion/upload">
-        <AuthGuard><FeatureRoute flag="motion_enabled"><MotionUpload /></FeatureRoute></AuthGuard>
+        <AuthGuard><StudioRoute><MotionUpload /></StudioRoute></AuthGuard>
       </Route>
       <Route path="/motion">
-        <AuthGuard><FeatureRoute flag="motion_enabled"><Motion /></FeatureRoute></AuthGuard>
+        <AuthGuard><StudioRoute><Motion /></StudioRoute></AuthGuard>
       </Route>
       <Route path="/notifications">
         <AuthGuard><Notifications /></AuthGuard>

@@ -5,6 +5,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useFeature } from '@/lib/features';
+import { useAuthStore } from '@/store/auth';
 
 interface CreateTypeSelectorProps {
   open: boolean;
@@ -43,9 +44,11 @@ function OptionCard({ opt, onClose }: { opt: CreateOption; onClose: () => void }
 }
 
 function SelectorContent({ onClose }: { onClose: () => void }) {
+  const { user } = useAuthStore();
   const motionEnabled = useFeature("motion_enabled");
   const pollsEnabled = useFeature("polls_enabled");
   const chainsEnabled = useFeature("chains_enabled");
+  const canAccessStudio = motionEnabled && ["admin", "super_admin"].includes((user as any)?.role ?? "");
 
   const CREATE_OPTIONS = [
     {
@@ -66,7 +69,7 @@ function SelectorContent({ onClose }: { onClose: () => void }) {
       lightBg: 'bg-amber-50 dark:bg-amber-950/40',
       border: 'border-amber-200 dark:border-amber-800',
     },
-    ...(motionEnabled ? [{
+    ...(canAccessStudio ? [{
       href: '/motion/upload',
       icon: Film,
       label: 'Motion',

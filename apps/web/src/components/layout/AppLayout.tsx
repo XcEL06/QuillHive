@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel,
+  DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { getInitials } from "@/lib/utils";
 import { useGetNotifications } from "@workspace/api-client-react";
@@ -48,6 +48,7 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
   const chainsEnabled = useFeature("chains_enabled");
   const [location, navigate] = useLocation();
   const { user, logout } = useAuthStore();
+  const canAccessStudio = !!user && motionEnabled && ["admin", "super_admin"].includes((user as any)?.role ?? "");
   const { theme, toggleTheme } = useTheme();
   const [liveNotifCount, setLiveNotifCount] = useState(0);
   const [liveMessageCount, setLiveMessageCount] = useState(0);
@@ -123,7 +124,7 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
     { href: "/network", icon: Users, label: "Network" },
     { href: "/notifications", icon: Bell, label: "Alerts", showBadge: "notif" as const },
     { href: "__create__", icon: PenLine, label: "Create", primary: true },
-    ...(motionEnabled ? [{ href: "/motion", icon: Film, label: "Studio" }] : []),
+    ...(canAccessStudio ? [{ href: "/motion", icon: Film, label: "Studio" }] : []),
     { href: "/groups", icon: Users, label: "Groups" },
     { href: "/workspace", icon: Briefcase, label: "Workspace" },
     { href: "/workspace?tab=collaborate", icon: Handshake, label: "Exchange" },
@@ -250,7 +251,6 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
                   </div>
                   <DropdownMenuSeparator />
 
-                  <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider px-3 py-1">Profile & Content</DropdownMenuLabel>
                   <DropdownMenuItem asChild>
                     <Link href={`/profile/${user.username}`} className="cursor-pointer w-full flex items-center gap-2">
                       <UserIcon className="w-4 h-4" /> My Profile
@@ -266,9 +266,6 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
                       <BarChart3 className="w-4 h-4" /> Growth Dashboard
                     </Link>
                   </DropdownMenuItem>
-
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider px-3 py-1">Creative Tools</DropdownMenuLabel>
                   <DropdownMenuItem asChild>
                     <Link href="/library" className="cursor-pointer w-full flex items-center gap-2">
                       <BookOpen className="w-4 h-4" /> Library
@@ -279,11 +276,13 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
                       <Bookmark className="w-4 h-4" /> Saved Posts
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/motion" className="cursor-pointer w-full flex items-center gap-2">
-                      <Film className="w-4 h-4" /> Studio
-                    </Link>
-                  </DropdownMenuItem>
+                  {canAccessStudio && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/motion" className="cursor-pointer w-full flex items-center gap-2">
+                        <Film className="w-4 h-4" /> Studio
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   {chainsEnabled && (
                     <DropdownMenuItem asChild>
                       <Link href="/chains" className="cursor-pointer w-full flex items-center gap-2">
@@ -291,16 +290,11 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
                       </Link>
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider px-3 py-1">Professional</DropdownMenuLabel>
                   <DropdownMenuItem asChild>
                     <Link href="/promotions" className="cursor-pointer w-full flex items-center gap-2">
                       <Sparkles className="w-4 h-4" /> Promotions
                     </Link>
                   </DropdownMenuItem>
-
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider px-3 py-1">Account</DropdownMenuLabel>
                   <DropdownMenuItem asChild>
                     <Link href="/invite" className="cursor-pointer w-full flex items-center gap-2">
                       <Users className="w-4 h-4" /> Invite Creators
