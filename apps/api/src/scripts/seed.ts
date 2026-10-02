@@ -6,11 +6,12 @@
 import { db } from "@workspace/db";
 import {
   usersTable,
+  sessionsTable,
   topicsTable,
   achievementsTable,
 } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
-import { hashPassword } from "../lib/auth";
+import { eq, sql } from "drizzle-orm";
+import { hashPassword, verifyPassword } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { ACHIEVEMENT_DEFS } from "../features/achievements/achievement.service";
 
@@ -51,17 +52,6 @@ const QUILLHIVE_ACCOUNT = {
   passwordHash: "QuillHiveoff.acct.hq",
 };
 
-// ── Super-admin: careerevive account ────────────────────────────────────────
-const CAREEREVIVE_ADMIN = {
-  username: "careerevive",
-  email: "careerevive@gmail.com",
-  displayName: "CareerEvive Admin",
-  bio: "Platform super-administrator.",
-  role: "super_admin" as const,
-  emailVerified: true,
-  passwordHash: hashPassword("careerevive-admin-placeholder-change-me"),
-};
-
 // ── Seed functions ───────────────────────────────────────────────────────────
 
 async function seedOfficialAccount(): Promise<void> {
@@ -89,26 +79,57 @@ async function seedOfficialAccount(): Promise<void> {
 
 async function seedCareereviveAdmin(): Promise<void> {
   try {
+    const password = process.env.CAREEREVIVE_ADMIN_PASSWORD;
     const [existing] = await db
-      .select({ id: usersTable.id, role: usersTable.role })
+      .select({ id: usersTable.id, role: usersTable.role, passwordHash: usersTable.passwordHash })
       .from(usersTable)
-      .where(eq(usersTable.email, CAREEREVIVE_ADMIN.email));
+      .where(eq(usersTable.email, "careerevive@gmail.com"));
 
+    if (!password || password.length < 16) {
+      if (existing?.passwordHash) {
+        await db.update(usersTable).set({
+          passwordHash: "",
+          authVersion: sql`${usersTable.authVersion} + 1`,
+        }).where(eq(usersTable.id, existing.id));
+        await db.delete(sessionsTable).where(eq(sessionsTable.userId, existing.id));
+      }
+      logger.warn("[Seed] CAREEREVIVE_ADMIN_PASSWORD is missing or shorter than 16 characters; admin seed skipped");
+      return;
+    }
+    const admin = {
+      username: "careerevive",
+      email: "careerevive@gmail.com",
+      displayName: "CareerEvive Admin",
+      bio: "Platform super-administrator.",
+      role: "super_admin" as const,
+      emailVerified: true,
+      passwordHash: hashPassword(password),
+    };
     if (existing) {
-      if (existing.role !== "super_admin") {
+      const passwordChanged = !verifyPassword(password, existing.passwordHash);
+      const roleChanged = existing.role !== "super_admin";
+      if (passwordChanged || roleChanged) {
+        const updates = {
+          ...(passwordChanged ? {
+            passwordHash: admin.passwordHash,
+            authVersion: sql`${usersTable.authVersion} + 1`,
+          } : {}),
+          ...(roleChanged ? { role: "super_admin" as const } : {}),
+        };
         await db
           .update(usersTable)
-          .set({ role: "super_admin" })
+          .set(updates)
           .where(eq(usersTable.id, existing.id));
-        logger.info("[Seed] careerevive@gmail.com promoted to super_admin");
+        if (passwordChanged) await db.delete(sessionsTable).where(eq(sessionsTable.userId, existing.id));
+        logger.info("[Seed] Configured careerevive account promoted to super_admin");
       } else {
-        logger.info("[Seed] careerevive@gmail.com already super_admin - skipping");
+        logger.info("[Seed] Configured careerevive account already super_admin - skipping");
       }
       return;
     }
 
-    await db.insert(usersTable).values(CAREEREVIVE_ADMIN).onConflictDoNothing();
-    logger.info("[Seed] Created super_admin account for careerevive@gmail.com");
+    await db.insert(usersTable).values(admin).onConflictDoNothing();
+    logger.info("[Seed] Created configured careerevive super_admin account");
   } catch (err) {
     logger.warn({ err }, "[Seed] Failed to seed careerevive admin");
   }

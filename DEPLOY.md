@@ -45,6 +45,8 @@ Required for production:
 - `APP_URL` - your production frontend URL (e.g. `https://app.quillhive.com`)
 - `SESSION_SECRET` - session signing secret
 
+To seed or maintain the `careerevive` super-admin account, set `CAREEREVIVE_ADMIN_PASSWORD` to a unique secret of at least 16 characters. Without it, the seed does not create or promote the account and disables password login for any existing seeded account.
+
 Recommended for production:
 - `RESEND_API_KEY` - email delivery (magic links, verification, digests)
 - `EMAIL_PREFERENCE_SECRET` - signing secret for one-click digest unsubscribe links

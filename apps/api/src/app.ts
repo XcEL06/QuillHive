@@ -18,6 +18,7 @@ import { eq, and } from "drizzle-orm";
 import { emitEvent, recordRequest } from "./lib/events";
 import { recordError, recordRequestForAnomaly } from "./lib/alertEngine";
 import { getApiErrorMessage } from "./lib/api-errors";
+import { validateBearerTokenState } from "./middleware/admin";
 
 const app: Express = express();
 app.disable('x-powered-by');
@@ -143,6 +144,7 @@ app.get("/api/features", async (_req, res) => {
   }
 });
 
+app.use("/api", validateBearerTokenState);
 app.use("/api", router);
 
 // Capture API errors → owner intelligence (after routes, before SPA)

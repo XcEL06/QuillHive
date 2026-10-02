@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
 import { createHash, randomBytes } from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, postsTable, commentsTable, followsTable, likesTable } from "@workspace/db/schema";
-import { and, eq, gt } from "drizzle-orm";
-import { hashPassword, getSessionUserId, destroySession } from "../../lib/auth";
+import { usersTable, postsTable, commentsTable, followsTable, likesTable, sessionsTable } from "@workspace/db/schema";
+import { and, eq, gt, sql } from "drizzle-orm";
+import { hashPassword, verifyPassword, getSessionUserId, destroySession } from "../../lib/auth";
 import { createEmailVerification, getPublicAppUrl, sendEmail } from "../email/email.service";
 import { logger } from "../../lib/logger";
+import { disconnectUserSockets } from "../../lib/socket";
 
 function getUserIdFromAuth(req: Request): number | null {
   const auth = req.headers.authorization;
@@ -92,9 +93,32 @@ export const resetPassword = async (req: Request, res: Response) => {
 
   await db.update(usersTable).set({
     passwordHash: hashPassword(password),
+    authVersion: sql`${usersTable.authVersion} + 1`,
     passwordResetTokenHash: null,
     passwordResetExpires: null,
   }).where(eq(usersTable.id, user.id));
+  await db.delete(sessionsTable).where(eq(sessionsTable.userId, user.id));
+  disconnectUserSockets(user.id);
+  return res.json({ success: true });
+};
+
+export const changePassword = async (req: Request, res: Response) => {
+  const userId = getUserIdFromAuth(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const currentPassword = String(req.body?.currentPassword || "");
+  const newPassword = String(req.body?.newPassword || "");
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user || !verifyPassword(currentPassword, user.passwordHash)) {
+    return res.status(400).json({ error: "Current password is incorrect" });
+  }
+
+  await db.update(usersTable).set({
+    passwordHash: hashPassword(newPassword),
+    authVersion: sql`${usersTable.authVersion} + 1`,
+  }).where(eq(usersTable.id, userId));
+  await db.delete(sessionsTable).where(eq(sessionsTable.userId, userId));
+  disconnectUserSockets(userId);
   return res.json({ success: true });
 };
 

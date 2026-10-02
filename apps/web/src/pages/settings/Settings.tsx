@@ -55,7 +55,7 @@ const COUNTRIES = [
 
 export default function Settings() {
   usePageTitle('Settings');
-  const { user, setUser } = useAuthStore();
+  const { user, setUser, logout } = useAuthStore();
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
@@ -102,6 +102,8 @@ export default function Settings() {
   });
   const [isSavingCreatorSettings, setIsSavingCreatorSettings] = useState(false);
   const [isSavingAccountInfo, setIsSavingAccountInfo] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const [workHistory, setWorkHistory] = useState<WorkEntry[]>([]);
   const [educationHistory, setEducationHistory] = useState<EduEntry[]>([]);
@@ -378,6 +380,31 @@ export default function Settings() {
       toast({ title: error?.message || t('settings.failedToSaveProfile'), variant: 'destructive' });
     } finally {
       setIsSavingAccountInfo(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast({ title: t('settings.passwordsDoNotMatch', 'New passwords do not match'), variant: 'destructive' });
+      return;
+    }
+    setIsChangingPassword(true);
+    try {
+      const res = await apiFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || t('settings.passwordChangeFailed', 'Unable to change password'));
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      logout();
+      toast({ title: t('settings.passwordChanged', 'Password changed'), description: t('settings.signInAgain', 'Sign in again with your new password.') });
+      window.location.href = '/login';
+    } catch (error: any) {
+      toast({ title: error?.message || t('settings.passwordChangeFailed', 'Unable to change password'), variant: 'destructive' });
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -736,12 +763,14 @@ export default function Settings() {
                     <div>
                       <h3 className="font-medium mb-4">{t('settings.changePassword')}</h3>
                       <div className="space-y-3">
-                        <div><Label>{t('settings.currentPassword')}</Label><Input type="password" className="mt-1.5 rounded-xl" /></div>
-                        <div><Label>{t('settings.newPassword')}</Label><Input type="password" className="mt-1.5 rounded-xl" /></div>
-                        <div><Label>{t('settings.confirmNewPassword')}</Label><Input type="password" className="mt-1.5 rounded-xl" /></div>
+                        <div><Label>{t('settings.currentPassword')}</Label><Input type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={e => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
+                        <div><Label>{t('settings.newPassword')}</Label><Input type="password" autoComplete="new-password" value={passwordForm.newPassword} onChange={e => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
+                        <div><Label>{t('settings.confirmNewPassword')}</Label><Input type="password" autoComplete="new-password" value={passwordForm.confirmPassword} onChange={e => setPasswordForm(f => ({ ...f, confirmPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
                       </div>
                     </div>
-                    <Button className="rounded-xl" onClick={() => toast({ title: t('settings.comingSoon'), description: t('settings.passwordChangeNotImplemented') })}><Save className="w-4 h-4 mr-2" /> {t('settings.updateAccount')}</Button>
+                    <Button className="rounded-xl" onClick={handleChangePassword} disabled={isChangingPassword || !passwordForm.currentPassword || passwordForm.newPassword.length < 8 || !passwordForm.confirmPassword}>
+                      {isChangingPassword ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} {t('settings.changePassword')}
+                    </Button>
                   </div>
                 </div>
               )}

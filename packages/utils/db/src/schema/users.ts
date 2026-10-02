@@ -8,6 +8,7 @@ export const usersTable = pgTable("users", {
   lastUsernameChangeAt: timestamp("last_username_change_at"),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  authVersion: integer("auth_version").notNull().default(0),
   displayName: text("display_name").notNull(),
   bio: text("bio"),
   headline: text("headline"),
@@ -127,6 +128,15 @@ export const sessionsTable = pgTable("sessions", {
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const revokedTokensTable = pgTable("revoked_tokens", {
+  id: serial("id").primaryKey(),
+  tokenHash: text("token_hash").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  idxRevokedTokensExpiresAt: index("idx_revoked_tokens_expires_at").on(t.expiresAt),
+}));
 
 export const loginEventsTable = pgTable("login_events", {
   id: serial("id").primaryKey(),

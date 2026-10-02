@@ -1132,9 +1132,6 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
               <DropdownMenuItem onClick={handleCopyLink} className="cursor-pointer gap-2">
                 <Copy className="w-4 h-4" /> Copy link
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => toast({ title: 'Coming soon', description: 'Share to Group is coming.' })} className="cursor-pointer gap-2">
-                <MessageCircle className="w-4 h-4" /> Share to Group
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 

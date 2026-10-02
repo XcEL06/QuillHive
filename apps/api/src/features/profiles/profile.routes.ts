@@ -65,6 +65,10 @@ export const authRouter = Router();
 authRouter.post("/register", registerStrictLimit, preventSpam("register", { max: 5, windowMs: 10 * 60_000, contentField: "email" }), validateBody(registerSchema), ProfileController.register);
 authRouter.post("/signup", registerStrictLimit, preventSpam("signup", { max: 5, windowMs: 10 * 60_000, contentField: "email" }), validateBody(registerSchema), ProfileController.register);
 authRouter.post("/login", authStrictLimit, validateBody(loginSchema), ProfileController.login);
+authRouter.post("/change-password", requireAuth, authStrictLimit, validateBody(z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(8).max(128),
+})), Recovery.changePassword);
 authRouter.post("/logout", ProfileController.logout);
 authRouter.post("/refresh", validateBody(refreshSchema), ProfileController.refresh);
 authRouter.post("/verify-email", validateBody(verifyEmailSchema), ProfileController.verifyEmail);

@@ -1,7 +1,7 @@
 import { Server as HttpServer } from "http";
 import { Server as SocketServer } from "socket.io";
 import { logger } from "./logger";
-import { getSessionUserId, isTokenBlacklisted } from "./auth";
+import { getSessionAuthVersion, getSessionUserId, isTokenBlacklisted } from "./auth";
 import { db } from "@workspace/db";
 import { conversationsTable, conversationParticipantsTable, postsTable, supportTicketsTable, usersTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -74,12 +74,32 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
       next(new Error("Unauthorized"));
       return;
     }
+    const [user] = await db.select({ authVersion: usersTable.authVersion }).from(usersTable).where(eq(usersTable.id, userId));
+    if (!user || getSessionAuthVersion(token!) !== user.authVersion) {
+      next(new Error("Unauthorized"));
+      return;
+    }
     socket.data.userId = userId;
+    socket.data.authToken = token;
     next();
   });
 
   io.on("connection", (socket) => {
     logger.info({ socketId: socket.id }, "Client connected");
+
+    socket.use(async (_event, next) => {
+      const token = socket.data.authToken as string;
+      const userId = getSessionUserId(token);
+      try {
+        if (!userId || await isTokenBlacklisted(token)) throw new Error("Unauthorized");
+        const [user] = await db.select({ authVersion: usersTable.authVersion }).from(usersTable).where(eq(usersTable.id, userId));
+        if (!user || getSessionAuthVersion(token) !== user.authVersion) throw new Error("Unauthorized");
+        next();
+      } catch {
+        socket.disconnect(true);
+        next(new Error("Unauthorized"));
+      }
+    });
 
     socket.on("join:user", (userId: number) => {
       if (userId !== socket.data.userId) return;
@@ -174,6 +194,12 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
   });
 
   return io;
+}
+
+export function disconnectUserSockets(userId: number): void {
+  for (const socket of io?.sockets.sockets.values() ?? []) {
+    if (socket.data.userId === userId) socket.disconnect(true);
+  }
 }
 
 export function emitToUser(userId: number, event: string, data: any) {

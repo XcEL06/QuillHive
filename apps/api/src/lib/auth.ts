@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual, scryptSync } from "crypto";
 import { db } from "@workspace/db";
-import { sessionsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { revokedTokensTable, sessionsTable, usersTable } from "@workspace/db/schema";
+import { and, eq, gt, lt } from "drizzle-orm";
 
 const SCRYPT_PARAMS = { N: 16384, r: 8, p: 1 } as const;
 const SCRYPT_KEYLEN = 64;
@@ -40,32 +40,11 @@ export function verifyPassword(password: string, storedHash: string): boolean {
   }
 }
 
-// ─── In-memory blacklist fallback (used when Redis is unavailable) ────────────
-// Keyed by jti-hash → expiry timestamp (ms). Cleaned up lazily.
-const memBlacklist = new Map<string, number>();
-
-function memBlacklistSet(key: string, ttlSeconds: number): void {
-  memBlacklist.set(key, Date.now() + ttlSeconds * 1000);
-  // Lazy GC: evict expired entries occasionally
-  if (memBlacklist.size > 500) {
-    const now = Date.now();
-    for (const [k, exp] of memBlacklist) {
-      if (now > exp) memBlacklist.delete(k);
-    }
-  }
-}
-
-function memBlacklistHas(key: string): boolean {
-  const exp = memBlacklist.get(key);
-  if (!exp) return false;
-  if (Date.now() > exp) { memBlacklist.delete(key); return false; }
-  return true;
-}
-
 type TokenType = "access" | "refresh";
 
 type TokenPayload = {
   sub: number;
+  ver?: number;
   typ: TokenType;
   iat: number;
   exp: number;
@@ -96,11 +75,12 @@ function hashJti(jti: string): string {
   return createHash("sha256").update(jti).digest("hex");
 }
 
-function createJwt(userId: number, type: TokenType, ttlSeconds: number): string {
+function createJwt(userId: number, type: TokenType, ttlSeconds: number, authVersion = 0): string {
   const now = Math.floor(Date.now() / 1000);
   const header = base64UrlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = base64UrlEncode(JSON.stringify({
     sub: userId,
+    ver: authVersion,
     typ: type,
     iat: now,
     exp: now + ttlSeconds,
@@ -133,8 +113,10 @@ export function createSession(userId: number): string {
 }
 
 export async function createAuthTokens(userId: number, meta?: { userAgent?: string; ipHash?: string }) {
-  const accessToken = createJwt(userId, "access", ACCESS_TOKEN_TTL_SECONDS);
-  const refreshToken = createJwt(userId, "refresh", REFRESH_TOKEN_TTL_SECONDS);
+  const [user] = await db.select({ authVersion: usersTable.authVersion }).from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) throw new Error("Cannot create auth tokens for a missing user");
+  const accessToken = createJwt(userId, "access", ACCESS_TOKEN_TTL_SECONDS, user.authVersion);
+  const refreshToken = createJwt(userId, "refresh", REFRESH_TOKEN_TTL_SECONDS, user.authVersion);
 
   const refreshPayload = verifyJwtSync(refreshToken, "refresh");
   if (refreshPayload) {
@@ -161,6 +143,9 @@ export async function refreshSession(refreshToken: string, meta?: { userAgent?: 
   const payload = verifyJwtSync(refreshToken, "refresh");
   if (!payload) return null;
 
+  const [user] = await db.select({ authVersion: usersTable.authVersion }).from(usersTable).where(eq(usersTable.id, payload.sub));
+  if (!user || (payload.ver ?? 0) !== user.authVersion) return null;
+
   const tokenHash = hashJti(payload.jti);
   const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.tokenHash, tokenHash));
   if (!session) return null;
@@ -182,6 +167,11 @@ export function getSessionUserId(token: string): number | null {
   return verifyJwtSync(token, "access")?.sub ?? null;
 }
 
+export function getSessionAuthVersion(token: string): number | null {
+  const payload = verifyJwtSync(token, "access");
+  return payload ? payload.ver ?? 0 : null;
+}
+
 export async function blacklistToken(token: string): Promise<void> {
   const payload = verifyJwtSync(token, "access");
   if (!payload) return;
@@ -189,15 +179,11 @@ export async function blacklistToken(token: string): Promise<void> {
   if (ttl <= 0) return;
 
   const key = `bl:${hashJti(payload.jti)}`;
-  // Always write to in-memory fallback first (works even without Redis)
-  memBlacklistSet(key, ttl);
-
-  const redis = (await import("./redis")).getRedis();
-  if (redis) {
-    try {
-      await redis.set(key, "1", { ex: ttl });
-    } catch { /* in-memory fallback already active */ }
-  }
+  await db.delete(revokedTokensTable).where(lt(revokedTokensTable.expiresAt, new Date()));
+  await db.insert(revokedTokensTable).values({
+    tokenHash: key,
+    expiresAt: new Date(payload.exp * 1000),
+  }).onConflictDoNothing();
 }
 
 export async function isTokenBlacklisted(token: string): Promise<boolean> {
@@ -205,21 +191,12 @@ export async function isTokenBlacklisted(token: string): Promise<boolean> {
   if (!payload) return false;
 
   const key = `bl:${hashJti(payload.jti)}`;
-  // Check in-memory first (covers Redis-down scenarios)
-  if (memBlacklistHas(key)) return true;
-
-  const redis = (await import("./redis")).getRedis();
-  if (!redis) return false;
   try {
-    const val = await redis.get(key);
-    if (val === "1") {
-      // Sync back to memory so future checks skip Redis
-      const remaining = payload.exp - Math.floor(Date.now() / 1000);
-      if (remaining > 0) memBlacklistSet(key, remaining);
-      return true;
-    }
-    return false;
+    const [revoked] = await db.select({ id: revokedTokensTable.id })
+      .from(revokedTokensTable)
+      .where(and(eq(revokedTokensTable.tokenHash, key), gt(revokedTokensTable.expiresAt, new Date())));
+    return !!revoked;
   } catch {
-    return false;
+    return true;
   }
 }

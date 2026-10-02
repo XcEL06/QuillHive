@@ -9,7 +9,7 @@ import {
   postsTable,
 } from "@workspace/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { requireAuth } from "../../middleware/admin";
+import { optionalAuth, requireAuth } from "../../middleware/admin";
 import { enrichPost } from "../profiles/profile.service";
 
 interface AuthedRequest extends Request {
@@ -32,19 +32,24 @@ async function getActorRole(groupId: number, userId: number): Promise<GroupRole 
   return (member.role as GroupRole) ?? "member";
 }
 
+async function checkGroupReadAccess(groupId: number, viewerId: number | null): Promise<"missing" | "forbidden" | null> {
+  const [group] = await db.select({ privacy: groupsTable.privacy }).from(groupsTable).where(eq(groupsTable.id, groupId));
+  if (!group) return "missing";
+  if (group.privacy === "private" && (!viewerId || !(await getActorRole(groupId, viewerId)))) return "forbidden";
+  return null;
+}
+
 function canModerate(role: GroupRole | null): boolean {
   return role === "admin" || role === "moderator";
 }
 
-groupAdminRouter.get("/:id/pinned", async (req, res: Response) => {
+groupAdminRouter.get("/:id/pinned", optionalAuth, async (req, res: Response) => {
   const groupId = Number(req.params.id);
-  if (!Number.isFinite(groupId)) return res.status(400).json({ error: "Invalid id" });
-  const auth = req.headers.authorization;
-  let viewerId: number | null = null;
-  if (auth?.startsWith("Bearer ")) {
-    const { getSessionUserId } = await import("../../lib/auth");
-    viewerId = getSessionUserId(auth.slice(7));
-  }
+  if (!Number.isInteger(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid id" });
+  const viewerId = (req as any).userId ?? null;
+  const access = await checkGroupReadAccess(groupId, viewerId);
+  if (access === "missing") return res.status(404).json({ error: "Group not found" });
+  if (access === "forbidden") return res.status(403).json({ error: "Forbidden" });
   const pinned = await db
     .select({ post: postsTable, pinnedAt: groupPinnedPostsTable.pinnedAt })
     .from(groupPinnedPostsTable)
@@ -85,9 +90,13 @@ groupAdminRouter.delete("/:id/posts/:postId/pin", requireAuth, async (req, res: 
   return res.json({ ok: true });
 });
 
-groupAdminRouter.get("/:id/members", async (req, res: Response) => {
+groupAdminRouter.get("/:id/members", optionalAuth, async (req, res: Response) => {
   const groupId = Number(req.params.id);
-  if (!Number.isFinite(groupId)) return res.status(400).json({ error: "Invalid id" });
+  if (!Number.isInteger(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid id" });
+  const viewerId = (req as any).userId ?? null;
+  const access = await checkGroupReadAccess(groupId, viewerId);
+  if (access === "missing") return res.status(404).json({ error: "Group not found" });
+  if (access === "forbidden") return res.status(403).json({ error: "Forbidden" });
   const members = await db
     .select({
       id: groupMembersTable.id,

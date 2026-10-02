@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { usersTable, type User } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
-import { getSessionUserId, isTokenBlacklisted } from "./auth";
+import { getSessionAuthVersion, getSessionUserId, isTokenBlacklisted } from "./auth";
 
 export interface AuthenticatedRequest extends Request {
   currentUser: User;
@@ -28,7 +28,7 @@ export async function loadCurrentUser(req: Request): Promise<User | null> {
   if (!userId) return null;
   if (await isTokenBlacklisted(token)) return null;
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!user) return null;
+  if (!user || getSessionAuthVersion(token) !== user.authVersion) return null;
   (req as Partial<AuthenticatedRequest>).currentUser = user;
   return user;
 }
