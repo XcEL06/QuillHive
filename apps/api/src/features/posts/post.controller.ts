@@ -324,6 +324,9 @@ export const createPost = async (req: Request, res: Response) => {
 
   const { title, titleA, titleB, content, excerpt, type, visibility, imageUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt } = req.body;
   if (!content || !type) return res.status(400).json({ error: "Content and type are required" });
+  if (groupId !== undefined && groupId !== null) {
+    return res.status(400).json({ error: "Create community content inside its Group. Workspace opportunities can only be reshared into Groups." });
+  }
   if (visibility !== undefined && type !== "spark") return res.status(400).json({ error: "Visibility settings are only available for Sparks" });
   if (!(await isFeatureEnabled("post_creation_enabled"))) {
     return res.status(403).json({ error: "post_creation_disabled", message: "Post creation is temporarily disabled." });

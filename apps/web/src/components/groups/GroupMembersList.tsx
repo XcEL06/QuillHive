@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
-import { Loader2, Shield, ShieldCheck, User as UserIcon, UserMinus, Ban, Check, X } from "lucide-react";
+import { Loader2, Shield, ShieldCheck, User as UserIcon, UserMinus, Ban, Check, X, Volume2, VolumeX } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/store/auth";
 import { useToast } from "@/hooks/use-toast";
 
-type GroupRole = "admin" | "moderator" | "member";
+type GroupRole = "owner" | "admin" | "moderator" | "member";
 
 interface Member {
   id: number;
   userId: number;
   role: GroupRole;
   joinedAt: string;
+  status: "active" | "pending" | "muted" | "banned";
+  mutedUntil: string | null;
+  trustScoreAtJoin: number | null;
 }
 
 interface GroupMembersListProps {
@@ -51,7 +54,7 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
   }, [groupId, token]);
 
   useEffect(() => {
-    if (myRole !== "admin" || !token) return;
+    if ((myRole !== "admin" && myRole !== "owner") || !token) return;
     void fetch(`/api/groups/${groupId}/join-requests`, { headers: { Authorization: `Bearer ${token}` } })
       .then(res => res.ok ? res.json() as Promise<{ requests?: typeof requests }> : { requests: [] })
       .then(data => setRequests(Array.isArray(data?.requests) ? data.requests : []));
@@ -82,7 +85,9 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
       ...(ban ? { body: JSON.stringify({ userId }) } : {}),
     });
     if (!res.ok) return toast({ title: "Could not update member", variant: "destructive" });
-    setMembers(prev => prev.filter(member => member.userId !== userId));
+    setMembers(prev => ban
+      ? prev.map(member => member.userId === userId ? { ...member, status: "banned" } : member)
+      : prev.filter(member => member.userId !== userId));
     toast({ title: ban ? "Member banned" : "Member removed" });
   };
 
@@ -98,6 +103,28 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
     if (decision === "approve") window.location.reload();
   };
 
+  const setMemberStatus = async (userId: number, status: "active" | "muted") => {
+    if (!token) return;
+    const mutedUntil = status === "muted" ? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() : null;
+    const res = await fetch(`/api/groups/${groupId}/members/${userId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status, mutedUntil }),
+    });
+    if (!res.ok) return toast({ title: "Could not update member status", variant: "destructive" });
+    setMembers(prev => prev.map(member => member.userId === userId ? { ...member, status, mutedUntil } : member));
+  };
+
+  const unbanMember = async (userId: number) => {
+    if (!token) return;
+    const res = await fetch(`/api/groups/${groupId}/bans/${userId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return toast({ title: "Could not unban member", variant: "destructive" });
+    setMembers(prev => prev.map(member => member.userId === userId ? { ...member, status: "active", mutedUntil: null } : member));
+  };
+
   if (loading) {
     return (
       <div className="bg-card border border-border/60 rounded-2xl p-6 text-center">
@@ -106,11 +133,12 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
     );
   }
 
-  const canManage = myRole === "admin";
+  const canManage = myRole === "admin" || myRole === "owner";
+  const canModerate = canManage || myRole === "moderator";
 
   return (
     <div className="space-y-6" data-testid="group-members-list">
-      {myRole === "admin" && requests.length > 0 && (
+      {canManage && requests.length > 0 && (
         <section className="bg-card border border-border/60 rounded-2xl p-4 space-y-3">
           <h3 className="font-semibold">Join requests</h3>
           {requests.map(request => (
@@ -144,19 +172,21 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
               : <UserIcon className="w-4 h-4 text-muted-foreground" />}
             <div className="min-w-0">
               <p className="font-medium text-sm">User #{m.userId}</p>
-              <p className="text-xs text-muted-foreground">{m.role} · joined {new Date(m.joinedAt).toLocaleDateString()}</p>
+              <p className="text-xs text-muted-foreground">{m.role} · joined {new Date(m.joinedAt).toLocaleDateString()} · {m.status}{m.status === "muted" && m.mutedUntil ? ` until ${new Date(m.mutedUntil).toLocaleDateString()}` : ""}</p>
             </div>
           </div>
-          {canManage && (
+          {canModerate && m.status !== "banned" && m.role !== "owner" && (
             <div className="flex items-center gap-2">
-              <Select value={m.role} onValueChange={(v) => updateRole(m.userId, v as GroupRole)}>
+              {canManage && <Select value={m.role} onValueChange={(v) => updateRole(m.userId, v as GroupRole)}>
                 <SelectTrigger className="w-32 h-8 text-xs" data-testid={`select-role-${m.userId}`}><SelectValue /></SelectTrigger>
-                <SelectContent>{ROLES.map(r => <SelectItem key={r} value={r} className="text-xs capitalize">{r}</SelectItem>)}</SelectContent>
-              </Select>
-              <button type="button" title="Remove member" onClick={() => void removeMember(m.userId)} className="p-2 rounded-lg hover:bg-muted"><UserMinus className="w-4 h-4" /></button>
-              <button type="button" title="Ban member" onClick={() => void removeMember(m.userId, true)} className="p-2 rounded-lg text-destructive hover:bg-destructive/10"><Ban className="w-4 h-4" /></button>
+                <SelectContent>{ROLES.filter(role => role !== "owner").map(r => <SelectItem key={r} value={r} className="text-xs capitalize">{r}</SelectItem>)}</SelectContent>
+              </Select>}
+              {canManage && <button type="button" title="Remove member" onClick={() => void removeMember(m.userId)} className="p-2 rounded-lg hover:bg-muted"><UserMinus className="w-4 h-4" /></button>}
+              <button type="button" title={m.status === "muted" ? "Unmute member" : "Mute member for 24 hours"} onClick={() => void setMemberStatus(m.userId, m.status === "muted" ? "active" : "muted")} className="p-2 rounded-lg hover:bg-muted">{m.status === "muted" ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}</button>
+              {canManage && <button type="button" title="Ban member" onClick={() => void removeMember(m.userId, true)} className="p-2 rounded-lg text-destructive hover:bg-destructive/10"><Ban className="w-4 h-4" /></button>}
             </div>
           )}
+          {canManage && m.status === "banned" && <button type="button" title="Unban member" onClick={() => void unbanMember(m.userId)} className="rounded-lg p-2 hover:bg-muted"><Check className="h-4 w-4" /></button>}
         </div>
       ))}
       </section>

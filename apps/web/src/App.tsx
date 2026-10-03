@@ -312,6 +312,9 @@ function Router() {
       <Route path="/groups/:id">
         <AuthGuard><Groups /></AuthGuard>
       </Route>
+      <Route path="/g/:slug">
+        <AuthGuard><Groups /></AuthGuard>
+      </Route>
       <Route path="/workspace">
         <AuthGuard><Workspace /></AuthGuard>
       </Route>

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, uniqueIndex, jsonb, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { usersTable } from "./users";
@@ -6,28 +6,58 @@ import { postsTable } from "./posts";
 
 export const groupsTable = pgTable("groups", {
   id: serial("id").primaryKey(),
+  slug: text("slug").notNull().default(""),
   name: text("name").notNull(),
   description: text("description"),
+  iconImage: text("icon_image"),
+  coverImage: text("cover_image"),
   avatarUrl: text("avatar_url"),
   coverUrl: text("cover_url"),
   category: text("category").notNull().default("general"),
+  tags: text("tags").array().notNull().default([]),
   creatorId: integer("creator_id").notNull().references(() => usersTable.id),
   privacy: text("privacy").notNull().default("open"),
-  rules: text("rules"),
+  type: text("type").notNull().default("public"),
+  rules: jsonb("rules").$type<string[]>().notNull().default([]),
+  isAnnouncementOnly: boolean("is_announcement_only").notNull().default(false),
+  features: jsonb("features").$type<{ eventsEnabled: boolean }>().notNull().default({ eventsEnabled: false }),
   isVerified: boolean("is_verified").notNull().default(false),
   isPromoted: boolean("is_promoted").notNull().default(false),
   promotedUntil: timestamp("promoted_until"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  slugUnique: uniqueIndex("groups_slug_unique").on(t.slug),
+}));
 
 export const groupMembersTable = pgTable("group_members", {
   id: serial("id").primaryKey(),
   groupId: integer("group_id").notNull().references(() => groupsTable.id),
   userId: integer("user_id").notNull().references(() => usersTable.id),
   role: text("role").notNull().default("member"),
+  status: text("status").notNull().default("active"),
   joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  mutedUntil: timestamp("muted_until"),
+  trustScoreAtJoin: integer("trust_score_at_join"),
 }, (t) => ({
   memberUnique: uniqueIndex("group_members_group_user_unique").on(t.groupId, t.userId),
+  groupStatusIdx: index("group_members_group_status_idx").on(t.groupId, t.status),
+}));
+
+export const groupPostDetailsTable = pgTable("group_post_details", {
+  id: serial("id").primaryKey(),
+  postId: integer("post_id").notNull().references(() => postsTable.id, { onDelete: "cascade" }),
+  groupId: integer("group_id").notNull().references(() => groupsTable.id, { onDelete: "cascade" }),
+  type: text("type").notNull().default("discussion"),
+  poll: jsonb("poll").$type<{ options: string[]; endsAt: string | null; allowMultiple: boolean; votes: Record<string, number[]> } | null>(),
+  question: jsonb("question").$type<{ isAnswered: boolean; bestAnswerId: number | null } | null>(),
+  opportunityId: integer("opportunity_id"),
+  opportunitySnapshot: jsonb("opportunity_snapshot").$type<{ title: string; budget: number | null; currency: string | null; type: string } | null>(),
+  isPinned: boolean("is_pinned").notNull().default(false),
+  isAnnouncement: boolean("is_announcement").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  postUnique: uniqueIndex("group_post_details_post_unique").on(t.postId),
+  groupCreatedIdx: index("group_post_details_group_created_idx").on(t.groupId, t.createdAt),
 }));
 
 export const groupJoinRequestsTable = pgTable("group_join_requests", {

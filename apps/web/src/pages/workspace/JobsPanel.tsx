@@ -16,6 +16,7 @@ import { useAuthStore } from '@/store/auth';
 import { formatAccountAge } from '@/lib/accountAge';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { ApplyOpportunityActions } from '@/components/opportunities/ApplyOpportunityActions';
+import { OpportunityShareDialog } from '@/components/opportunities/OpportunityShareDialog';
 
 type JobType = 'all' | 'freelance' | 'micro_contract' | 'full_time' | 'collaboration' | 'syndicate_funding';
 
@@ -114,6 +115,7 @@ function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: numbe
                   {job.compensation && <span className="text-accent font-medium flex items-center gap-0.5"><DollarSign className="w-3 h-3" />{job.compensation}</span>}
                   <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{job.remote ? 'Remote' : job.location || 'Onsite'}</span>
                 </div>
+                <OpportunityShareDialog opportunityId={job.id} title={job.title} />
                 <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={job.applyUrl || (job.applyEmail ? `mailto:${job.applyEmail}` : undefined)} />
               </div>
             </div>
@@ -257,6 +259,7 @@ export function JobsPanel() {
                     </div>
                   )}
                   <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined)} />
+                  <OpportunityShareDialog opportunityId={job.id} title={job.title} />
                   <ReportDialog targetType="job" targetId={job.id} label="Report" />
                 </div>
 

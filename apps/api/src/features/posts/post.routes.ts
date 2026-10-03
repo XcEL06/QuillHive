@@ -40,7 +40,7 @@ export const postBodySchema = z.object({
   scheduledAt: z.string().optional(),
   attachments: z.array(z.any()).max(20).optional(),
 });
-const updatePostBodySchema = postBodySchema.partial().refine(value => Object.keys(value).length > 0, { message: "At least one field is required" });
+const updatePostBodySchema = postBodySchema.omit({ groupId: true }).partial().refine(value => Object.keys(value).length > 0, { message: "At least one field is required" });
 const commentBodySchema = z.object({ content: z.string().min(1).max(2_000) });
 
 const commentIdParamsSchema = z.object({ id: z.coerce.number().int().positive() });

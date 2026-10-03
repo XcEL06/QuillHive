@@ -13,10 +13,14 @@ vi.mock('@workspace/db', () => ({
   },
 }));
 
-import { canViewGroupPosts, groupCreateErrorMessage, normalizeGroupCreateInput } from '../routes/groups';
+import { canCreateGroupPost, canViewGroupPosts, groupCreateErrorMessage, normalizeGroupCreateInput } from '../routes/groups';
 
 const baselineGroupsSql = readFileSync(
   fileURLToPath(new URL('../../../../packages/utils/db/drizzle/0000_baseline.sql', import.meta.url)),
+  'utf8'
+);
+const communityMigrationSql = readFileSync(
+  fileURLToPath(new URL('../../../../packages/utils/db/drizzle/0021_groups_community_model.sql', import.meta.url)),
   'utf8'
 );
 
@@ -54,19 +58,35 @@ describe('Group create validation', () => {
     });
   });
 
-  it('rejects privacy values outside the groups schema enum', () => {
-    expect(() =>
-      normalizeGroupCreateInput({
-        name: 'Writers Circle',
-        privacy: 'secret',
-      })
-    ).toThrow('Privacy must be open or private');
+  it('supports public, private, and secret community types', () => {
+    expect(normalizeGroupCreateInput({ name: 'Secret Writers', type: 'secret' })).toMatchObject({
+      type: 'secret',
+      privacy: 'private',
+    });
     expect(() =>
       normalizeGroupCreateInput({
         name: 'Writers Circle',
         privacy: 'public',
       })
-    ).toThrow('Privacy must be open or private');
+    ).toThrow('Group type must be public, private, or secret');
+  });
+
+  it('limits descriptions and rules to the community spec', () => {
+    expect(() => normalizeGroupCreateInput({ name: 'Writers', description: 'x'.repeat(281) }))
+      .toThrow('Description must be 280 characters or fewer');
+    expect(() => normalizeGroupCreateInput({ name: 'Writers', rules: ['1', '2', '3', '4', '5', '6'] }))
+      .toThrow('Groups can have up to 5 rules');
+    expect(normalizeGroupCreateInput({ name: 'Writers', rules: ['Respect the room'] }).rules)
+      .toEqual(['Respect the room']);
+  });
+
+  it('keeps group posting limited to active members and permitted post types', () => {
+    expect(canCreateGroupPost({ status: 'active', role: 'member', isAnnouncementOnly: false, type: 'discussion' })).toBe(true);
+    expect(canCreateGroupPost({ status: 'muted', role: 'member', isAnnouncementOnly: false, type: 'discussion' })).toBe(false);
+    expect(canCreateGroupPost({ status: 'muted', mutedUntil: new Date(Date.now() - 1_000), role: 'member', isAnnouncementOnly: false, type: 'discussion' })).toBe(true);
+    expect(canCreateGroupPost({ status: 'active', role: 'member', isAnnouncementOnly: true, type: 'discussion' })).toBe(false);
+    expect(canCreateGroupPost({ status: 'active', role: 'moderator', isAnnouncementOnly: true, type: 'announcement' })).toBe(true);
+    expect(canCreateGroupPost({ status: 'active', role: 'member', isAnnouncementOnly: false, type: 'opportunity' })).toBe(false);
   });
 
   it('requires a non-empty name', () => {
@@ -90,5 +110,14 @@ describe('Group create validation', () => {
     expect(baselineGroupsSql).toContain('"rules" text');
     expect(baselineGroupsSql).toContain('"is_verified" boolean NOT NULL DEFAULT false');
     expect(baselineGroupsSql).toContain('"is_promoted" boolean NOT NULL DEFAULT false');
+  });
+
+  it('migrates group identity, moderation state, and structured post metadata', () => {
+    expect(communityMigrationSql).toContain('"slug" text NOT NULL');
+    expect(communityMigrationSql).toContain('"type" text NOT NULL DEFAULT \'public\'');
+    expect(communityMigrationSql).toContain('"trust_score_at_join" integer');
+    expect(communityMigrationSql).toContain('CREATE TABLE IF NOT EXISTS "group_post_details"');
+    expect(communityMigrationSql).toContain('"opportunity_snapshot" jsonb');
+    expect(communityMigrationSql).toContain('"is_announcement" boolean NOT NULL DEFAULT false');
   });
 });

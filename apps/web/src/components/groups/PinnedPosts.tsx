@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/auth";
 
 interface PinnedPostsProps {
   groupId: number;
-  myRole: "admin" | "moderator" | "member" | null;
+  myRole: "owner" | "admin" | "moderator" | "member" | null;
 }
 
 interface PinnedPost { id: number; [key: string]: unknown }
@@ -39,7 +39,7 @@ export function PinnedPosts({ groupId, myRole }: PinnedPostsProps) {
 
   if (pinned.length === 0) return null;
 
-  const canModerate = myRole === "admin" || myRole === "moderator";
+  const canModerate = myRole === "owner" || myRole === "admin" || myRole === "moderator";
 
   return (
     <div className="mb-6 space-y-3" data-testid="pinned-posts">

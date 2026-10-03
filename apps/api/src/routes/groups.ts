@@ -1,37 +1,77 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { groupsTable, groupMembersTable, groupJoinRequestsTable, groupBansTable, postsTable } from "@workspace/db/schema";
-import { eq, and, sql, ilike, desc, gt, isNull, or } from "drizzle-orm";
+import { groupsTable, groupMembersTable, groupJoinRequestsTable, groupBansTable, groupPostDetailsTable, postsTable, jobsTable, userTrustScoresTable, commentsTable } from "@workspace/db/schema";
+import { eq, and, sql, ilike, desc, inArray } from "drizzle-orm";
 import { getSessionUserId } from "../lib/auth";
 import { loadCurrentUser } from "../lib/auth-types";
 import { enrichPost } from "../features/profiles/profile.service";
 import { postVisibilityCondition } from "../features/posts/postVisibility";
+import { sanitizeRichText } from "../lib/sanitize";
 
 const router = Router();
 
 export function normalizeGroupCreateInput(input: Record<string, any> = {}) {
   const name = typeof input.name === "string" ? input.name.trim() : "";
-  const privacyValue = input.privacy == null
-    ? "open"
-    : typeof input.privacy === "string"
-      ? input.privacy.trim().toLowerCase()
-      : "";
+  const requestedType = typeof input.type === "string" ? input.type.trim().toLowerCase() : "";
+  const legacyPrivacy = typeof input.privacy === "string" ? input.privacy.trim().toLowerCase() : "";
+  const type = requestedType || (legacyPrivacy === "private" ? "private" : legacyPrivacy === "open" || !legacyPrivacy ? "public" : "");
 
   if (!name) throw new Error("Name is required");
-  if (privacyValue !== "open" && privacyValue !== "private") throw new Error("Privacy must be open or private");
+  if (name.length > 80) throw new Error("Group name must be 80 characters or fewer");
+  if (!["public", "private", "secret"].includes(type)) throw new Error("Group type must be public, private, or secret");
 
   const description = typeof input.description === "string" ? input.description.trim() || null : input.description ?? null;
+  if (typeof description === "string" && description.length > 280) throw new Error("Description must be 280 characters or fewer");
   const category = typeof input.category === "string" && input.category.trim() ? input.category.trim() : "general";
+  const rules = Array.isArray(input.rules)
+    ? input.rules
+    : typeof input.rules === "string"
+      ? input.rules.split("\n")
+      : [];
+  const normalizedRules = rules.map((rule: unknown) => String(rule).trim()).filter(Boolean);
+  if (normalizedRules.length > 5 || normalizedRules.some((rule: string) => rule.length > 240)) {
+    throw new Error("Groups can have up to 5 rules, each 240 characters or fewer");
+  }
+  const tags = Array.isArray(input.tags)
+    ? input.tags.filter((tag: unknown): tag is string => typeof tag === "string").map((tag: string) => tag.trim().slice(0, 40)).filter(Boolean).slice(0, 20)
+    : [];
+  const coverImage = input.coverImage || input.coverUrl || null;
+  const iconImage = input.iconImage || input.avatarUrl || null;
 
   return {
     name,
     description,
     category,
-    avatarUrl: input.avatarUrl || null,
-    coverUrl: input.coverUrl || null,
-    privacy: privacyValue,
-    rules: input.rules || null,
+    tags,
+    iconImage,
+    avatarUrl: iconImage,
+    coverImage,
+    coverUrl: coverImage,
+    privacy: type === "public" ? "open" : "private",
+    type,
+    rules: normalizedRules,
+    isAnnouncementOnly: Boolean(input.isAnnouncementOnly),
+    features: { eventsEnabled: false },
   };
+}
+
+export function canCreateGroupPost({ status, role, isAnnouncementOnly, type, mutedUntil }: {
+  status: string;
+  role: string;
+  isAnnouncementOnly: boolean;
+  type: string;
+  mutedUntil?: Date | string | null;
+}): boolean {
+  const muteExpired = status === "muted" && mutedUntil != null && new Date(mutedUntil).getTime() <= Date.now();
+  if (status !== "active" && !muteExpired) return false;
+  if (isAnnouncementOnly) return type === "announcement" && ["owner", "admin", "moderator"].includes(role);
+  if (type === "announcement") return ["owner", "admin", "moderator"].includes(role);
+  return ["discussion", "poll", "question"].includes(type);
+}
+
+function makeGroupSlug(name: string, ownerId: number): string {
+  const base = name.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 64) || "community";
+  return `${base}-${ownerId}-${Date.now().toString(36)}`;
 }
 
 export function groupCreateErrorMessage(error: unknown): string {
@@ -58,7 +98,7 @@ function getViewerId(req: any): number | null {
 
 async function enrichGroup(group: any, viewerId: number | null) {
   const [membersResult] = await db.select({ count: sql<number>`count(*)::int` })
-    .from(groupMembersTable).where(eq(groupMembersTable.groupId, group.id));
+    .from(groupMembersTable).where(and(eq(groupMembersTable.groupId, group.id), inArray(groupMembersTable.status, ["active", "muted"])));
 
   const [postsResult] = await db.select({ count: sql<number>`count(*)::int` })
     .from(postsTable).where(and(eq(postsTable.groupId, group.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId)));
@@ -67,10 +107,15 @@ async function enrichGroup(group: any, viewerId: number | null) {
   let memberRole: string | null = null;
   let hasPendingJoinRequest = false;
   if (viewerId) {
-    const membership = await db.select({ role: groupMembersTable.role }).from(groupMembersTable)
+    const membership = await db.select({ role: groupMembersTable.role, status: groupMembersTable.status, mutedUntil: groupMembersTable.mutedUntil }).from(groupMembersTable)
       .where(and(eq(groupMembersTable.groupId, group.id), eq(groupMembersTable.userId, viewerId)));
-    isMember = membership.length > 0;
-    memberRole = membership[0]?.role ?? (group.creatorId === viewerId ? "admin" : null);
+    isMember = ["active", "muted"].includes(membership[0]?.status ?? "");
+    if (membership[0]?.status === "muted" && membership[0].mutedUntil && membership[0].mutedUntil <= new Date()) {
+      await db.update(groupMembersTable).set({ status: "active", mutedUntil: null })
+        .where(and(eq(groupMembersTable.groupId, group.id), eq(groupMembersTable.userId, viewerId)));
+      isMember = true;
+    }
+    memberRole = isMember ? membership[0]?.role ?? null : group.creatorId === viewerId ? "owner" : null;
     const [request] = await db.select({ id: groupJoinRequestsTable.id }).from(groupJoinRequestsTable)
       .where(and(eq(groupJoinRequestsTable.groupId, group.id), eq(groupJoinRequestsTable.userId, viewerId), eq(groupJoinRequestsTable.status, "pending")));
     hasPendingJoinRequest = Boolean(request);
@@ -78,6 +123,9 @@ async function enrichGroup(group: any, viewerId: number | null) {
 
   return {
     ...group,
+    ownerId: group.creatorId,
+    memberCount: membersResult?.count ?? 0,
+    postCount: postsResult?.count ?? 0,
     membersCount: membersResult?.count ?? 0,
     postsCount: postsResult?.count ?? 0,
     isMember,
@@ -87,7 +135,8 @@ async function enrichGroup(group: any, viewerId: number | null) {
 }
 
 router.get("/", async (req, res) => {
-  const viewerId = getViewerId(req);
+  const viewer = await loadCurrentUser(req);
+  const viewerId = viewer?.id ?? null;
   const search = req.query.search as string | undefined;
   const page = parseInt(req.query.page as string) || 1;
   const limit = 20;
@@ -104,8 +153,13 @@ router.get("/", async (req, res) => {
     )
     .limit(limit)
     .offset((page - 1) * limit);
-  void or; void isNull; void gt;
-  const enriched = await Promise.all(groups.map(g => enrichGroup(g, viewerId)));
+  const secretGroups = viewerId
+    ? await db.select({ groupId: groupMembersTable.groupId }).from(groupMembersTable)
+      .where(and(eq(groupMembersTable.userId, viewerId), inArray(groupMembersTable.status, ["active", "muted"])))
+    : [];
+  const memberGroupIds = new Set(secretGroups.map((row) => row.groupId));
+  const visibleGroups = groups.filter((group) => viewer?.role === "super_admin" || group.type !== "secret" || group.creatorId === viewerId || memberGroupIds.has(group.id));
+  const enriched = await Promise.all(visibleGroups.map(g => enrichGroup(g, viewerId)));
 
   return res.json({ groups: enriched, total: enriched.length, page });
 });
@@ -126,13 +180,20 @@ router.post("/", async (req, res) => {
     const [group] = await db.transaction(async (tx) => {
       const [createdGroup] = await tx.insert(groupsTable).values({
         name: normalized.name,
+        slug: makeGroupSlug(normalized.name, viewerId),
         description: normalized.description,
         category: normalized.category,
+        tags: normalized.tags,
+        iconImage: normalized.iconImage,
+        coverImage: normalized.coverImage,
         avatarUrl: normalized.avatarUrl,
         coverUrl: normalized.coverUrl,
         creatorId: viewerId,
         privacy: normalized.privacy,
+        type: normalized.type,
         rules: normalized.rules,
+        isAnnouncementOnly: normalized.isAnnouncementOnly,
+        features: normalized.features,
       }).returning();
 
       if (!createdGroup) {
@@ -142,7 +203,8 @@ router.post("/", async (req, res) => {
       await tx.insert(groupMembersTable).values({
         groupId: createdGroup.id,
         userId: viewerId,
-        role: "admin",
+        role: "owner",
+        trustScoreAtJoin: (await tx.select({ uti: userTrustScoresTable.uti }).from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, viewerId)))[0]?.uti ?? null,
       }).onConflictDoNothing();
 
       const [membership] = await tx.select({ id: groupMembersTable.id })
@@ -163,12 +225,193 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.get("/:id", async (req, res) => {
-  const viewerId = getViewerId(req);
-  const id = parseInt(req.params.id);
+const groupPostTypes = ["discussion", "poll", "question", "announcement"] as const;
 
-  const [group] = await db.select().from(groupsTable).where(eq(groupsTable.id, id));
+router.post("/:id/posts", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const groupId = Number(req.params.id);
+  if (!Number.isInteger(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid group id" });
+
+  const { content, title, type = "discussion", tags = [], poll } = req.body ?? {};
+  if (typeof content !== "string" || !content.trim() || content.length > 50_000) {
+    return res.status(400).json({ error: "Post content is required and must be 50,000 characters or fewer." });
+  }
+  if (!groupPostTypes.includes(type)) {
+    return res.status(400).json({ error: "Groups support discussions, polls, questions, and announcements. Use an opportunity's share action to bring it into the group." });
+  }
+
+  const [group] = await db.select({ isAnnouncementOnly: groupsTable.isAnnouncementOnly })
+    .from(groupsTable).where(eq(groupsTable.id, groupId));
   if (!group) return res.status(404).json({ error: "Group not found" });
+  const [membership] = await db.select({ role: groupMembersTable.role, status: groupMembersTable.status, mutedUntil: groupMembersTable.mutedUntil })
+    .from(groupMembersTable)
+    .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, viewerId)));
+  if (!membership) return res.status(403).json({ error: "Join this group before posting" });
+  if (!canCreateGroupPost({ status: membership.status, role: membership.role, isAnnouncementOnly: group.isAnnouncementOnly, type, mutedUntil: membership.mutedUntil })) {
+    return res.status(403).json({ error: "You do not have permission to create this post in the group." });
+  }
+  if (membership.status === "muted" && membership.mutedUntil && membership.mutedUntil <= new Date()) {
+    await db.update(groupMembersTable).set({ status: "active", mutedUntil: null })
+      .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, viewerId)));
+  }
+
+  let pollData: { options: string[]; endsAt: string | null; allowMultiple: boolean; votes: Record<string, number[]> } | null = null;
+  if (type === "poll") {
+    const options = Array.isArray(poll?.options)
+      ? poll.options.map((option: unknown) => typeof option === "string" ? option.trim().slice(0, 120) : "").filter(Boolean).slice(0, 10)
+      : [];
+    if (options.length < 2) return res.status(400).json({ error: "Polls need at least two non-empty options." });
+    const endsAt = typeof poll.endsAt === "string" && Number.isFinite(Date.parse(poll.endsAt)) ? poll.endsAt : null;
+    pollData = { options, endsAt, allowMultiple: Boolean(poll.allowMultiple), votes: {} };
+  }
+
+  const cleanContent = sanitizeRichText(content.trim());
+  const [post] = await db.insert(postsTable).values({
+    authorId: viewerId,
+    title: typeof title === "string" ? title.trim().slice(0, 180) || null : null,
+    content: cleanContent,
+    excerpt: cleanContent.replace(/<[^>]*>/g, " ").slice(0, 500),
+    type: "post",
+    visibility: "public",
+    tags: JSON.stringify(Array.isArray(tags) ? tags.filter((tag: unknown): tag is string => typeof tag === "string").map((tag: string) => tag.trim().slice(0, 40)).filter(Boolean).slice(0, 12) : []),
+    groupId,
+    isPublished: true,
+  }).returning();
+  const [details] = await db.insert(groupPostDetailsTable).values({
+    postId: post.id,
+    groupId,
+    type,
+    poll: pollData,
+    question: type === "question" ? { isAnswered: false, bestAnswerId: null } : null,
+    isAnnouncement: type === "announcement",
+  }).returning();
+  return res.status(201).json({ ...(await enrichPost(post, viewerId)), groupDetails: details });
+});
+
+router.post("/:id/opportunities/:opportunityId/reshare", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const groupId = Number(req.params.id);
+  const opportunityId = Number(req.params.opportunityId);
+  if (!Number.isInteger(groupId) || groupId <= 0 || !Number.isInteger(opportunityId) || opportunityId <= 0) {
+    return res.status(400).json({ error: "Invalid group or opportunity id" });
+  }
+
+  const [membership] = await db.select({ status: groupMembersTable.status })
+    .from(groupMembersTable)
+    .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, viewerId)));
+  if (!membership || membership.status !== "active") return res.status(403).json({ error: "Only active group members can reshare opportunities" });
+
+  const [opportunity] = await db.select().from(jobsTable).where(and(
+    eq(jobsTable.id, opportunityId),
+    eq(jobsTable.isActive, true),
+    eq(jobsTable.isApproved, true),
+    eq(jobsTable.moderationStatus, "published"),
+  ));
+  if (!opportunity) return res.status(404).json({ error: "Opportunity not found or unavailable" });
+
+  const snapshot = {
+    title: opportunity.title,
+    budget: opportunity.budget,
+    currency: null,
+    type: opportunity.type,
+  };
+  const [post] = await db.insert(postsTable).values({
+    authorId: viewerId,
+    title: opportunity.title.slice(0, 180),
+    content: `<p>Shared an opportunity: <strong>${sanitizeRichText(opportunity.title)}</strong></p>`,
+    excerpt: opportunity.title.slice(0, 500),
+    type: "post",
+    visibility: "public",
+    groupId,
+    isPublished: true,
+  }).returning();
+  const [details] = await db.insert(groupPostDetailsTable).values({
+    postId: post.id,
+    groupId,
+    type: "opportunity_reshare",
+    opportunityId,
+    opportunitySnapshot: snapshot,
+  }).returning();
+  return res.status(201).json({ ...(await enrichPost(post, viewerId)), groupDetails: details });
+});
+
+router.post("/:id/posts/:postId/vote", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const groupId = Number(req.params.id);
+  const postId = Number(req.params.postId);
+  const optionIndexes = Array.isArray(req.body?.optionIndexes) ? [...new Set(req.body.optionIndexes)] : [];
+  if (!optionIndexes.length || optionIndexes.some((index: unknown) => !Number.isInteger(index))) {
+    return res.status(400).json({ error: "Choose at least one poll option." });
+  }
+
+  const [membership] = await db.select({ status: groupMembersTable.status })
+    .from(groupMembersTable).where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, viewerId)));
+  if (membership?.status !== "active") return res.status(403).json({ error: "Only active members can vote" });
+  const [details] = await db.select().from(groupPostDetailsTable)
+    .where(and(eq(groupPostDetailsTable.groupId, groupId), eq(groupPostDetailsTable.postId, postId)));
+  if (!details || details.type !== "poll" || !details.poll) return res.status(404).json({ error: "Poll not found" });
+
+  const poll = details.poll;
+  if (poll.endsAt && Date.parse(poll.endsAt) <= Date.now()) return res.status(400).json({ error: "This poll has ended" });
+  if (optionIndexes.some((index: number) => index < 0 || index >= poll.options.length)) return res.status(400).json({ error: "Invalid poll option" });
+  if (!poll.allowMultiple && optionIndexes.length > 1) return res.status(400).json({ error: "Choose only one option" });
+
+  const votes: Record<string, number[]> = Object.fromEntries(Object.entries(poll.votes ?? {}).map(([index, userIds]) => [
+    index,
+    userIds.filter((userId) => userId !== viewerId),
+  ]));
+  for (const index of optionIndexes as number[]) votes[String(index)] = [...(votes[String(index)] ?? []), viewerId];
+  await db.update(groupPostDetailsTable).set({ poll: { ...poll, votes } }).where(eq(groupPostDetailsTable.id, details.id));
+  return res.json({
+    myVotes: optionIndexes,
+    voteCounts: poll.options.map((_, index) => votes[String(index)]?.length ?? 0),
+  });
+});
+
+router.post("/:id/posts/:postId/best-answer", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const groupId = Number(req.params.id);
+  const postId = Number(req.params.postId);
+  const commentId = Number(req.body?.commentId);
+  if (!Number.isInteger(commentId) || commentId <= 0) return res.status(400).json({ error: "A valid answer is required" });
+
+  const [details] = await db.select().from(groupPostDetailsTable)
+    .where(and(eq(groupPostDetailsTable.groupId, groupId), eq(groupPostDetailsTable.postId, postId)));
+  if (!details || details.type !== "question" || !details.question) return res.status(404).json({ error: "Question not found" });
+  const [post] = await db.select({ authorId: postsTable.authorId }).from(postsTable)
+    .where(and(eq(postsTable.id, postId), eq(postsTable.groupId, groupId)));
+  if (!post) return res.status(404).json({ error: "Question not found" });
+  const [membership] = await db.select({ role: groupMembersTable.role, status: groupMembersTable.status })
+    .from(groupMembersTable).where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, viewerId)));
+  const canChoose = post.authorId === viewerId || (membership?.status === "active" && ["owner", "admin", "moderator"].includes(membership.role));
+  if (!canChoose) return res.status(403).json({ error: "Only the question author or a group moderator can select the best answer" });
+  const [comment] = await db.select({ id: commentsTable.id }).from(commentsTable)
+    .where(and(eq(commentsTable.id, commentId), eq(commentsTable.postId, postId)));
+  if (!comment) return res.status(404).json({ error: "Answer not found on this question" });
+  const question = { isAnswered: true, bestAnswerId: commentId };
+  await db.update(groupPostDetailsTable).set({ question }).where(eq(groupPostDetailsTable.id, details.id));
+  return res.json({ question });
+});
+
+router.get("/:id", async (req, res) => {
+  const viewer = await loadCurrentUser(req);
+  const viewerId = viewer?.id ?? null;
+  const identifier = String(req.params.id);
+  const id = Number(identifier);
+  const [group] = await db.select().from(groupsTable).where(Number.isInteger(id) && id > 0
+    ? eq(groupsTable.id, id)
+    : eq(groupsTable.slug, identifier));
+  if (!group) return res.status(404).json({ error: "Group not found" });
+
+  if (group.type === "secret" && group.creatorId !== viewerId && viewer?.role !== "super_admin") {
+    const [membership] = viewerId ? await db.select({ id: groupMembersTable.id, status: groupMembersTable.status })
+      .from(groupMembersTable).where(and(eq(groupMembersTable.groupId, group.id), eq(groupMembersTable.userId, viewerId))) : [];
+    if (!membership || !["active", "muted"].includes(membership.status)) return res.status(404).json({ error: "Group not found" });
+  }
 
   const enriched = await enrichGroup(group, viewerId);
   return res.json(enriched);
@@ -179,8 +422,9 @@ router.post("/:id/join", async (req, res) => {
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const id = parseInt(req.params.id);
 
-  const [group] = await db.select({ privacy: groupsTable.privacy }).from(groupsTable).where(eq(groupsTable.id, id));
+  const [group] = await db.select({ privacy: groupsTable.privacy, type: groupsTable.type }).from(groupsTable).where(eq(groupsTable.id, id));
   if (!group) return res.status(404).json({ error: "Group not found" });
+  if (group.type === "secret") return res.status(404).json({ error: "Secret groups are invite-only" });
   const [ban] = await db.select({ id: groupBansTable.id }).from(groupBansTable)
     .where(and(eq(groupBansTable.groupId, id), eq(groupBansTable.userId, viewerId)));
   if (ban) return res.status(403).json({ error: "You are banned from this group" });
@@ -189,7 +433,12 @@ router.post("/:id/join", async (req, res) => {
     .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId)));
 
   let isMember: boolean;
-  if (existing.length > 0) {
+  if (existing[0]?.status === "pending") {
+    await db.delete(groupMembersTable).where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId)));
+    await db.update(groupJoinRequestsTable).set({ status: "cancelled" })
+      .where(and(eq(groupJoinRequestsTable.groupId, id), eq(groupJoinRequestsTable.userId, viewerId), eq(groupJoinRequestsTable.status, "pending")));
+    isMember = false;
+  } else if (existing.length > 0) {
     await db.delete(groupMembersTable)
       .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId)));
     isMember = false;
@@ -197,14 +446,18 @@ router.post("/:id/join", async (req, res) => {
     if (group.privacy === "private") {
       await db.insert(groupJoinRequestsTable).values({ groupId: id, userId: viewerId, status: "pending" })
         .onConflictDoUpdate({ target: [groupJoinRequestsTable.groupId, groupJoinRequestsTable.userId], set: { status: "pending", reviewedBy: null, reviewedAt: null } });
+      const [trust] = await db.select({ uti: userTrustScoresTable.uti }).from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, viewerId));
+      await db.insert(groupMembersTable).values({ groupId: id, userId: viewerId, role: "member", status: "pending", trustScoreAtJoin: trust?.uti ?? null })
+        .onConflictDoUpdate({ target: [groupMembersTable.groupId, groupMembersTable.userId], set: { status: "pending", mutedUntil: null } });
       return res.json({ isMember: false, hasPendingJoinRequest: true });
     }
-    await db.insert(groupMembersTable).values({ groupId: id, userId: viewerId, role: "member" });
+    const [trust] = await db.select({ uti: userTrustScoresTable.uti }).from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, viewerId));
+    await db.insert(groupMembersTable).values({ groupId: id, userId: viewerId, role: "member", trustScoreAtJoin: trust?.uti ?? null });
     isMember = true;
   }
 
   const [membersResult] = await db.select({ count: sql<number>`count(*)::int` })
-    .from(groupMembersTable).where(eq(groupMembersTable.groupId, id));
+    .from(groupMembersTable).where(and(eq(groupMembersTable.groupId, id), inArray(groupMembersTable.status, ["active", "muted"])));
 
   return res.json({ isMember, hasPendingJoinRequest: false, membersCount: membersResult?.count ?? 0 });
 });
@@ -217,23 +470,45 @@ router.get("/:id/posts", async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = 20;
 
-  const [group] = await db.select({ privacy: groupsTable.privacy }).from(groupsTable).where(eq(groupsTable.id, id));
+  const [group] = await db.select({ privacy: groupsTable.privacy, type: groupsTable.type, creatorId: groupsTable.creatorId }).from(groupsTable).where(eq(groupsTable.id, id));
   if (!group) return res.status(404).json({ error: "Group not found" });
+  if (group.type === "secret" && group.creatorId !== viewerId && !isSuperAdmin) {
+    const [secretMembership] = viewerId ? await db.select({ status: groupMembersTable.status }).from(groupMembersTable)
+      .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId))) : [];
+    if (!secretMembership || !["active", "muted"].includes(secretMembership.status)) return res.status(404).json({ error: "Group not found" });
+  }
   if (!canViewGroupPosts(group.privacy, false, isSuperAdmin)) {
     if (!viewerId) return res.status(403).json({ error: "Join this private group to view its posts" });
     const [membership] = await db.select({ id: groupMembersTable.id }).from(groupMembersTable)
-      .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId)));
+      .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId), inArray(groupMembersTable.status, ["active", "muted"])));
     if (!canViewGroupPosts(group.privacy, Boolean(membership), isSuperAdmin)) {
       return res.status(403).json({ error: "Join this private group to view its posts" });
     }
   }
 
-  const posts = await db.select().from(postsTable)
+  const posts = await db.select({ post: postsTable, groupDetails: groupPostDetailsTable }).from(postsTable)
+    .leftJoin(groupPostDetailsTable, eq(groupPostDetailsTable.postId, postsTable.id))
     .where(and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId)))
     .orderBy(desc(postsTable.createdAt))
     .limit(limit).offset((page - 1) * limit);
 
-  const enriched = await Promise.all(posts.map(p => enrichPost(p, viewerId)));
+  const enriched = await Promise.all(posts.map(async ({ post, groupDetails }) => {
+    const poll = groupDetails?.poll;
+    const votes = poll?.votes ?? {};
+    return {
+      ...(await enrichPost(post, viewerId)),
+      groupDetails: groupDetails ? {
+        ...groupDetails,
+        poll: poll ? {
+          options: poll.options,
+          endsAt: poll.endsAt,
+          allowMultiple: poll.allowMultiple,
+          voteCounts: poll.options.map((_, index) => votes[String(index)]?.length ?? 0),
+          myVotes: viewerId ? poll.options.map((_, index) => votes[String(index)]?.includes(viewerId) ? index : -1).filter(index => index >= 0) : [],
+        } : null,
+      } : null,
+    };
+  }));
   return res.json({ posts: enriched, total: enriched.length, page, limit });
 });
 

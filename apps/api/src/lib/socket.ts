@@ -3,7 +3,7 @@ import { Server as SocketServer } from "socket.io";
 import { logger } from "./logger";
 import { getSessionAuthVersion, getSessionUserId, isTokenBlacklisted } from "./auth";
 import { db } from "@workspace/db";
-import { conversationsTable, conversationParticipantsTable, postsTable, supportTicketsTable, usersTable } from "@workspace/db/schema";
+import { conversationsTable, conversationParticipantsTable, postsTable, supportTicketsTable, usersTable, groupMembersTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 
 let io: SocketServer | null = null;
@@ -35,6 +35,14 @@ async function canJoinPost(postId: number): Promise<boolean> {
     .where(and(eq(postsTable.id, postId), eq(postsTable.isDeleted, false)))
     .limit(1);
   return Boolean(post);
+}
+
+async function publishGroupPresence(groupId: number): Promise<void> {
+  if (!io) return;
+  const room = `group:${groupId}`;
+  const sockets = await io.in(room).fetchSockets();
+  const onlineCount = new Set(sockets.map((socket) => socket.data.userId).filter(Number.isInteger)).size;
+  io.to(room).emit("group:presence", { groupId, onlineCount });
 }
 
 export function setupSocket(httpServer: HttpServer): SocketServer {
@@ -85,6 +93,7 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
   });
 
   io.on("connection", (socket) => {
+    socket.data.groupIds = [] as number[];
     logger.info({ socketId: socket.id }, "Client connected");
 
     socket.use(async (_event, next) => {
@@ -110,6 +119,26 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
     socket.on("join:conversation", async (conversationId: number) => {
       if (!Number.isInteger(conversationId) || !(await isConversationParticipant(conversationId, socket.data.userId))) return;
       socket.join(`conversation:${conversationId}`);
+    });
+
+    socket.on("join:group", async (groupId: number) => {
+      if (!Number.isInteger(groupId) || groupId <= 0) return;
+      const [membership] = await db.select({ status: groupMembersTable.status })
+        .from(groupMembersTable)
+        .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, socket.data.userId)));
+      if (!membership || !["active", "muted"].includes(membership.status)) return;
+      const room = `group:${groupId}`;
+      socket.join(room);
+      const groupIds = socket.data.groupIds as number[];
+      if (!groupIds.includes(groupId)) groupIds.push(groupId);
+      await publishGroupPresence(groupId);
+    });
+
+    socket.on("leave:group", async (groupId: number) => {
+      if (!Number.isInteger(groupId) || groupId <= 0) return;
+      socket.leave(`group:${groupId}`);
+      socket.data.groupIds = (socket.data.groupIds as number[]).filter((joinedGroupId) => joinedGroupId !== groupId);
+      await publishGroupPresence(groupId);
     });
 
     socket.on("message:send", async (data: { conversationId: number; message: any }) => {
@@ -171,6 +200,11 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
       } catch (error) {
         logger.warn({ error, postId }, "Failed to update live view count");
       }
+    });
+
+    socket.on("disconnect", () => {
+      const groupIds = socket.data.groupIds as number[];
+      for (const groupId of groupIds) void publishGroupPresence(groupId);
     });
 
     socket.on("leave:post", (postId: number) => {
