@@ -27,6 +27,7 @@ import { GlobalSearch } from "@/components/search/GlobalSearch";
 import { useFeature } from "@/lib/features";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { RouteProgress } from "./RouteProgress";
+import { PageContainer } from "@/components/layout/PageContainer";
 import { mediaUrl } from "@/lib/api";
 
 interface AppLayoutProps {
@@ -341,9 +342,11 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 md:ml-56 pb-20 md:pb-6 min-h-[calc(100vh-4rem)] w-full">
+        <main className="flex-1 md:ml-56 pb-20 md:pb-6 min-h-[calc(100vh-4rem)] w-full max-w-full overflow-hidden">
           {user && <StrikesBanner />}
-          {children}
+          <PageContainer className="w-full max-w-full overflow-hidden">
+            {children}
+          </PageContainer>
         </main>
       </div>
 

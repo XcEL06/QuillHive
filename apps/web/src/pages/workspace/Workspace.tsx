@@ -35,7 +35,7 @@ export default function Workspace() {
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="w-full max-w-4xl mx-auto overflow-hidden px-4 py-6">
         <BackButton />
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight">Workspace</h1>

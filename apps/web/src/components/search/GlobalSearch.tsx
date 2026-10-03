@@ -150,7 +150,7 @@ export function GlobalSearch() {
 
       {/* Results Dropdown */}
       {showDropdown && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-2xl shadow-xl overflow-hidden z-50 min-w-[320px]">
+        <div className="absolute top-full left-0 right-0 mt-2 z-50 w-[calc(100vw-1rem)] max-w-[320px] overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
           {loading && (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
