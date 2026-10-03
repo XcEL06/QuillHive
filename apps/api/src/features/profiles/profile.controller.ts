@@ -282,6 +282,18 @@ export const login = async (req: Request, res: Response) => {
   const loginIntegrity = await recordLoginIntegrity(user.id, req);
   const authTokens = await createAuthTokens(user.id, { userAgent: loginIntegrity.userAgent, ipHash: loginIntegrity.ipHash });
   const userWithCounts = await getUserWithCounts(user.id, null);
+  emitEvent({
+    type: "USER_EVENT",
+    severity: "low",
+    message: `User login: ${user.username}`,
+    metadata: {
+      type: "login",
+      userId: user.id,
+      username: user.username,
+      country: loginIntegrity.country || user.lastKnownCountry || undefined,
+      source: "login",
+    },
+  });
   return res.json({ ...authTokens, user: userWithCounts, loginIntegrity: { status: loginIntegrity.integrityStatus, riskScore: loginIntegrity.riskScore } });
 };
 
@@ -906,6 +918,18 @@ export const updateMyProfile = async (req: Request, res: Response) => {
 
   await db.update(usersTable).set(updates).where(eq(usersTable.id, viewerId));
   await invalidateUserCache(viewerId);
+  const reportedUsername = typeof req.body.username === "string" ? req.body.username.trim() : currentUser.username;
+  emitEvent({
+    type: "USER_EVENT",
+    severity: "low",
+    message: `Profile updated: ${reportedUsername}`,
+    metadata: {
+      type: "profile_update",
+      userId: viewerId,
+      username: reportedUsername,
+      count: Object.keys(updates).filter((key) => key !== "updatedAt").length,
+    },
+  });
   const user = await getUserWithCounts(viewerId, null);
   return res.json(user);
 };

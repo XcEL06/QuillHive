@@ -22,28 +22,17 @@ function nestedUploadValue(data: Record<string, unknown>, keys: string[]): unkno
 
 const MAX_UPLOAD_SIZE = 50 * 1024 * 1024;
 
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result ?? '');
-      const separator = result.indexOf(',');
-      resolve(separator >= 0 ? result.slice(separator + 1) : result);
-    };
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read the selected file.'));
-    reader.readAsDataURL(file);
-  });
-}
-
 export async function uploadFile(file: File, category: UploadCategory = 'general'): Promise<UploadedFile> {
   if (file.size > MAX_UPLOAD_SIZE) throw new Error('File exceeds the 50 MB limit.');
   if (!file.type) throw new Error('Could not determine the file type. Please choose another file.');
 
-  const dataBase64 = await readFileAsBase64(file);
+  const formData = new FormData();
+  formData.append('file', file, file.name);
+  formData.append('category', category);
+
   const response = await apiFetch('/api/upload', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename: file.name, mimeType: file.type, dataBase64, category }),
+    body: formData,
   });
   const data = await response.json().catch(() => null) as (Record<string, unknown> & { id?: number; url?: string; secure_url?: string; error?: string }) | null;
   const detail = data && nestedUploadValue(data, ['error', 'message']);

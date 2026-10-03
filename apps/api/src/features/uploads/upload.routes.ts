@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile, access } from "fs/promises";
 import path from "path";
 import { randomBytes } from "crypto";
 import { Router } from "express";
+import multer from "multer";
 import { z } from "zod";
 import sharp from "sharp";
 import { v2 as cloudinary } from "cloudinary";
@@ -115,38 +116,47 @@ const uploadSchema = z.object({
   category: z.enum(["general", "post", "support", "profile", "moderation", "gallery", "library", "group"]).optional(),
 });
 
-function uploadsDir() {
-  return path.resolve(process.env.UPLOADS_DIR?.trim() || path.join(process.cwd(), "uploads"));
+const uploadMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FILE_SIZE, files: 1 },
+});
+
+const allowedCategories = ["general", "post", "support", "profile", "moderation", "gallery", "library", "group"] as const;
+
+function normalizeCategory(value: unknown): typeof allowedCategories[number] {
+  return allowedCategories.includes(String(value) as typeof allowedCategories[number])
+    ? (String(value) as typeof allowedCategories[number])
+    : "general";
 }
 
-function isEphemeralProduction() {
-  return process.env.NODE_ENV === "production" || Boolean(process.env.RENDER) || Boolean(process.env.RAILWAY_ENVIRONMENT_NAME);
-}
-
-function safeExtension(filename: string) {
-  return path.extname(filename).toLowerCase().replace(/[^a-z0-9.]/g, "") || ".bin";
-}
-
-export const uploadRouter = Router();
-
-uploadRouter.post("/", requireAuth, validateBody(uploadSchema), async (req: any, res) => {
-  const { filename, mimeType, dataBase64, category = "general" } = req.body;
+async function processUpload({
+  fileName,
+  mimeType,
+  buffer,
+  category,
+  userId,
+  res,
+}: {
+  fileName: string;
+  mimeType: string;
+  buffer: Buffer;
+  category: typeof allowedCategories[number];
+  userId: number;
+  res: any;
+}) {
   if (!isAllowedUploadMimeType(mimeType)) return res.status(400).json({ error: "File type is not allowed." });
-  const buffer = Buffer.from(dataBase64, "base64");
   if (buffer.byteLength > MAX_FILE_SIZE) return res.status(413).json({ error: "File exceeds the 50MB limit." });
 
-  const moderationStatus =
-    mimeType.startsWith("image/") || mimeType.startsWith("text/") || mimeType === "application/pdf"
-      ? "approved"
-      : "pending_review";
+  const moderationStatus = mimeType.startsWith("image/") || mimeType.startsWith("text/") || mimeType === "application/pdf"
+    ? "approved"
+    : "pending_review";
 
-  // Try Cloudinary first for images and videos
   if (isCloudinaryConfigured() && (mimeType.startsWith("image/") || mimeType.startsWith("video/"))) {
     try {
       const { url, variants } = await uploadToCloudinary(buffer, mimeType, category);
       const [file] = await db.insert(uploadedFilesTable).values({
-        ownerId: req.currentUser.id,
-        originalName: filename,
+        ownerId: userId,
+        originalName: fileName,
         storagePath: url,
         mimeType,
         sizeBytes: buffer.byteLength,
@@ -165,16 +175,15 @@ uploadRouter.post("/", requireAuth, validateBody(uploadSchema), async (req: any,
     });
   }
 
-  // Local fs storage is suitable for development or explicitly mounted persistent volumes.
   await mkdir(uploadsDir(), { recursive: true });
-  const storedName = `${Date.now()}-${randomBytes(8).toString("hex")}${safeExtension(filename)}`;
+  const storedName = `${Date.now()}-${randomBytes(8).toString("hex")}${safeExtension(fileName)}`;
   const storagePath = path.join(uploadsDir(), storedName);
   await writeFile(storagePath, buffer);
   await generateImageVariants(storagePath, mimeType);
 
   const [file] = await db.insert(uploadedFilesTable).values({
-    ownerId: req.currentUser.id,
-    originalName: filename,
+    ownerId: userId,
+    originalName: fileName,
     storagePath,
     mimeType,
     sizeBytes: buffer.byteLength,
@@ -188,6 +197,57 @@ uploadRouter.post("/", requireAuth, validateBody(uploadSchema), async (req: any,
     : undefined;
 
   return res.status(201).json({ ...file, url: `/api/file/${file.id}`, variants, provider: "local" });
+}
+
+function uploadsDir() {
+  return path.resolve(process.env.UPLOADS_DIR?.trim() || path.join(process.cwd(), "uploads"));
+}
+
+function isEphemeralProduction() {
+  return process.env.NODE_ENV === "production" || Boolean(process.env.RENDER) || Boolean(process.env.RAILWAY_ENVIRONMENT_NAME);
+}
+
+function safeExtension(filename: string) {
+  return path.extname(filename).toLowerCase().replace(/[^a-z0-9.]/g, "") || ".bin";
+}
+
+export const uploadRouter = Router();
+
+uploadRouter.post("/", requireAuth, async (req: any, res, next) => {
+  const contentType = String(req.headers["content-type"] ?? "");
+
+  if (contentType.includes("multipart/form-data")) {
+    return uploadMemory.single("file")(req, res, async (multerError: any) => {
+      if (multerError) {
+        return res.status(400).json({ error: multerError.message || "Upload failed." });
+      }
+
+      const file = req.file as Express.Multer.File | undefined;
+      if (!file) return res.status(400).json({ error: "No file uploaded." });
+
+      return processUpload({
+        fileName: file.originalname || "upload.bin",
+        mimeType: file.mimetype || "application/octet-stream",
+        buffer: file.buffer,
+        category: normalizeCategory(req.body?.category),
+        userId: req.currentUser.id,
+        res,
+      });
+    });
+  }
+
+  return validateBody(uploadSchema)(req, res, async () => {
+    const { filename, mimeType, dataBase64, category = "general" } = req.body;
+    const buffer = Buffer.from(dataBase64, "base64");
+    return processUpload({
+      fileName: filename,
+      mimeType,
+      buffer,
+      category: normalizeCategory(category),
+      userId: req.currentUser.id,
+      res,
+    });
+  });
 });
 
 uploadRouter.get(
