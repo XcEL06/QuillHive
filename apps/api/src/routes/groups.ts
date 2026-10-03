@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { groupsTable, groupMembersTable, groupJoinRequestsTable, groupBansTable, postsTable } from "@workspace/db/schema";
 import { eq, and, sql, ilike, desc, gt, isNull, or } from "drizzle-orm";
 import { getSessionUserId } from "../lib/auth";
+import { loadCurrentUser } from "../lib/auth-types";
 import { enrichPost } from "../features/profiles/profile.service";
 import { postVisibilityCondition } from "../features/posts/postVisibility";
 
@@ -43,6 +44,10 @@ export function groupCreateErrorMessage(error: unknown): string {
     current = (current as { cause?: unknown }).cause;
   }
   return "Could not create group. Please try again.";
+}
+
+export function canViewGroupPosts(privacy: string, isMember: boolean, isSuperAdmin: boolean): boolean {
+  return privacy !== "private" || isMember || isSuperAdmin;
 }
 
 function getViewerId(req: any): number | null {
@@ -205,18 +210,22 @@ router.post("/:id/join", async (req, res) => {
 });
 
 router.get("/:id/posts", async (req, res) => {
-  const viewerId = getViewerId(req);
+  const viewer = await loadCurrentUser(req);
+  const viewerId = viewer?.id ?? null;
+  const isSuperAdmin = viewer?.role === "super_admin";
   const id = parseInt(req.params.id);
   const page = parseInt(req.query.page as string) || 1;
   const limit = 20;
 
   const [group] = await db.select({ privacy: groupsTable.privacy }).from(groupsTable).where(eq(groupsTable.id, id));
   if (!group) return res.status(404).json({ error: "Group not found" });
-  if (group.privacy === "private") {
+  if (!canViewGroupPosts(group.privacy, false, isSuperAdmin)) {
     if (!viewerId) return res.status(403).json({ error: "Join this private group to view its posts" });
     const [membership] = await db.select({ id: groupMembersTable.id }).from(groupMembersTable)
       .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId)));
-    if (!membership) return res.status(403).json({ error: "Join this private group to view its posts" });
+    if (!canViewGroupPosts(group.privacy, Boolean(membership), isSuperAdmin)) {
+      return res.status(403).json({ error: "Join this private group to view its posts" });
+    }
   }
 
   const posts = await db.select().from(postsTable)

@@ -11,6 +11,7 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm";
 import { optionalAuth, requireAuth } from "../../middleware/admin";
 import { enrichPost } from "../profiles/profile.service";
+import { loadCurrentUser } from "../../lib/auth-types";
 
 interface AuthedRequest extends Request {
   currentUser: { id: number };
@@ -32,10 +33,10 @@ async function getActorRole(groupId: number, userId: number): Promise<GroupRole 
   return (member.role as GroupRole) ?? "member";
 }
 
-async function checkGroupReadAccess(groupId: number, viewerId: number | null): Promise<"missing" | "forbidden" | null> {
+async function checkGroupReadAccess(groupId: number, viewerId: number | null, isSuperAdmin = false): Promise<"missing" | "forbidden" | null> {
   const [group] = await db.select({ privacy: groupsTable.privacy }).from(groupsTable).where(eq(groupsTable.id, groupId));
   if (!group) return "missing";
-  if (group.privacy === "private" && (!viewerId || !(await getActorRole(groupId, viewerId)))) return "forbidden";
+  if (group.privacy === "private" && !isSuperAdmin && (!viewerId || !(await getActorRole(groupId, viewerId)))) return "forbidden";
   return null;
 }
 
@@ -46,8 +47,9 @@ function canModerate(role: GroupRole | null): boolean {
 groupAdminRouter.get("/:id/pinned", optionalAuth, async (req, res: Response) => {
   const groupId = Number(req.params.id);
   if (!Number.isInteger(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid id" });
-  const viewerId = (req as any).userId ?? null;
-  const access = await checkGroupReadAccess(groupId, viewerId);
+  const viewer = await loadCurrentUser(req);
+  const viewerId = viewer?.id ?? null;
+  const access = await checkGroupReadAccess(groupId, viewerId, viewer?.role === "super_admin");
   if (access === "missing") return res.status(404).json({ error: "Group not found" });
   if (access === "forbidden") return res.status(403).json({ error: "Forbidden" });
   const pinned = await db
@@ -93,8 +95,9 @@ groupAdminRouter.delete("/:id/posts/:postId/pin", requireAuth, async (req, res: 
 groupAdminRouter.get("/:id/members", optionalAuth, async (req, res: Response) => {
   const groupId = Number(req.params.id);
   if (!Number.isInteger(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid id" });
-  const viewerId = (req as any).userId ?? null;
-  const access = await checkGroupReadAccess(groupId, viewerId);
+  const viewer = await loadCurrentUser(req);
+  const viewerId = viewer?.id ?? null;
+  const access = await checkGroupReadAccess(groupId, viewerId, viewer?.role === "super_admin");
   if (access === "missing") return res.status(404).json({ error: "Group not found" });
   if (access === "forbidden") return res.status(403).json({ error: "Forbidden" });
   const members = await db

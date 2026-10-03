@@ -13,7 +13,7 @@ vi.mock('@workspace/db', () => ({
   },
 }));
 
-import { groupCreateErrorMessage, normalizeGroupCreateInput } from '../routes/groups';
+import { canViewGroupPosts, groupCreateErrorMessage, normalizeGroupCreateInput } from '../routes/groups';
 
 const baselineGroupsSql = readFileSync(
   fileURLToPath(new URL('../../../../packages/utils/db/drizzle/0000_baseline.sql', import.meta.url)),
@@ -21,6 +21,15 @@ const baselineGroupsSql = readFileSync(
 );
 
 describe('Group create validation', () => {
+  it('allows super admins to inspect private group posts without membership', () => {
+    expect(canViewGroupPosts('private', false, true)).toBe(true);
+  });
+
+  it('keeps private group posts closed to regular non-members', () => {
+    expect(canViewGroupPosts('private', false, false)).toBe(false);
+    expect(canViewGroupPosts('private', true, false)).toBe(true);
+  });
+
   it('allows creating a private group without a category', () => {
     const result = normalizeGroupCreateInput({
       name: 'Writers Circle',
