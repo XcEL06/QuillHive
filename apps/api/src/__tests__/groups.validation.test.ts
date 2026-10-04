@@ -85,7 +85,9 @@ describe('Group create validation', () => {
     expect(canCreateGroupPost({ status: 'muted', role: 'member', isAnnouncementOnly: false, type: 'discussion' })).toBe(false);
     expect(canCreateGroupPost({ status: 'muted', mutedUntil: new Date(Date.now() - 1_000), role: 'member', isAnnouncementOnly: false, type: 'discussion' })).toBe(true);
     expect(canCreateGroupPost({ status: 'active', role: 'member', isAnnouncementOnly: true, type: 'discussion' })).toBe(false);
-    expect(canCreateGroupPost({ status: 'active', role: 'moderator', isAnnouncementOnly: true, type: 'announcement' })).toBe(true);
+    expect(canCreateGroupPost({ status: 'active', role: 'moderator', isAnnouncementOnly: true, type: 'announcement' })).toBe(false);
+    expect(canCreateGroupPost({ status: 'active', role: 'admin', isAnnouncementOnly: true, type: 'announcement' })).toBe(true);
+    expect(canCreateGroupPost({ status: 'active', role: 'member', isAnnouncementOnly: false, type: 'opportunity_reshare' })).toBe(true);
     expect(canCreateGroupPost({ status: 'active', role: 'member', isAnnouncementOnly: false, type: 'opportunity' })).toBe(false);
   });
 

@@ -8,6 +8,7 @@ import {
   postsTable, likesTable, commentsTable, followsTable,
   postSharesTable, repostsTable, savedPostsTable,
   commentLikesTable, userTrustScoresTable, usersTable, boostRequestsTable,
+  groupPostDetailsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, notInArray, sql, isNull, gte, lte, gt, or } from "drizzle-orm";
 import { enrichPost } from "../profiles/profile.service";
@@ -423,6 +424,9 @@ export const createComment = async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
   const { content } = req.body;
   if (!content) return res.status(400).json({ error: "Content is required" });
+  const [groupPost] = await db.select({ commentsEnabled: groupPostDetailsTable.commentsEnabled })
+    .from(groupPostDetailsTable).where(eq(groupPostDetailsTable.postId, id));
+  if (groupPost && !groupPost.commentsEnabled) return res.status(403).json({ error: "Comments are turned off for this group post" });
   const comment = await PostService.createComment(id, viewerId, content);
   const [post] = await db.select({ authorId: postsTable.authorId }).from(postsTable).where(eq(postsTable.id, id));
   refreshTrustForUsers(viewerId, post?.authorId);
@@ -803,6 +807,9 @@ export const replyToComment = async (req: Request, res: Response) => {
 
   const [parent] = await db.select().from(commentsTable).where(eq(commentsTable.id, commentId));
   if (!parent) return res.status(404).json({ error: "Comment not found" });
+  const [groupPost] = await db.select({ commentsEnabled: groupPostDetailsTable.commentsEnabled })
+    .from(groupPostDetailsTable).where(eq(groupPostDetailsTable.postId, parent.postId));
+  if (groupPost && !groupPost.commentsEnabled) return res.status(403).json({ error: "Comments are turned off for this group post" });
 
   const newDepth = (parent.depth ?? 0) + 1;
   if (newDepth > 3) return res.status(400).json({ error: "Max thread depth (3) reached" });

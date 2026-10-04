@@ -21,6 +21,7 @@ import AdminMonitoring from "./components/AdminMonitoring";
 import AdminLanguages from "./components/AdminLanguages";
 import AdminSupport from "./components/AdminSupport";
 import AdminCommunications from "./components/AdminCommunications";
+import AdminGroups from "./components/AdminGroups";
 import AdminConsoleShell, { type AdminNavItem, type AdminTabKey } from "./components/AdminConsoleShell";
 import type { AdminProps } from "./components/types";
 
@@ -28,18 +29,18 @@ const ADMIN_GROUPS: readonly { label: string; items: readonly AdminNavItem[] }[]
   { label: "Overview", items: [["dashboard", "Dashboard", LayoutDashboard]] },
   { label: "People", items: [["users", "Users", Users], ["referrals", "Growth / Referrals", BarChart3]] },
   { label: "Communications", items: [["support", "Support inbox", MessageSquare], ["communications", "Send messages", Send]] },
-  { label: "Content", items: [["content", "Content", BookOpen], ["trust", "Moderation", Shield]] },
+  { label: "Content", items: [["content", "Content", BookOpen], ["groups", "Groups", Users], ["trust", "Moderation", Shield]] },
   { label: "Growth", items: [["chains", "Chains", ListTodo], ["scheduled", "Scheduled posts", Gauge]] },
   { label: "Payments / Boosts", items: [["revenue", "Revenue & boosts", Briefcase]] },
   { label: "Feature Flags", items: [["features", "Feature flags", ToggleRight]] },
   { label: "System", items: [["settings", "Settings", Settings], ["monitoring", "Monitoring", Activity], ["languages", "Languages", Languages]] },
 ];
 
-export default function Admin() {
+export default function Admin({ initialTab = "dashboard" }: { initialTab?: AdminTabKey }) {
   const { user, logout } = useAuthStore();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState<AdminTabKey>("dashboard");
+  const [activeTab, setActiveTab] = useState<AdminTabKey>(initialTab);
   const role = (user as { role?: string } | null)?.role;
   if (!user || !["moderator", "admin", "super_admin"].includes(role ?? "")) {
     return <Redirect to="/" />;
@@ -56,6 +57,7 @@ export default function Admin() {
     users: <AdminUsers {...props} />,
     referrals: <AdminReferrals {...props} />,
     content: <AdminContent {...props} />,
+    groups: <AdminGroups {...props} />,
     revenue: <AdminRevenue {...props} />,
     trust: <AdminTrust {...props} />,
     chains: <AdminChains {...props} />,

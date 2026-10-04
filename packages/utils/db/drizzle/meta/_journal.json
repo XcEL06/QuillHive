@@ -134,6 +134,20 @@
       "when": 1790812800000,
       "tag": "0020_spark_visibility",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1791072000000,
+      "tag": "0022_group_post_comments",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791075600000,
+      "tag": "0023_group_moderation",
+      "breakpoints": true
     }
   ]
 }

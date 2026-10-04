@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import { EditorContent, useEditor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import Placeholder from '@tiptap/extension-placeholder';
 import { useRoute } from 'wouter';
 import { 
   useGetGroups, useGetGroup, useJoinGroup, useCreateGroup, useGetGroupPosts 
@@ -11,12 +15,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2, Send, Share2, MoreHorizontal, Copy, LogOut, UserPlus, CircleDot, MessageSquare, BarChart3 } from 'lucide-react';
+import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2, Send, Share2, MoreHorizontal, Copy, LogOut, UserPlus, CircleDot, MessageSquare, BarChart3, Bold, Italic, List, ListOrdered, ImagePlus, AtSign, Pin, Archive, MessageCircleOff, Flag } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useT } from '@/lib/i18n';
 
@@ -36,7 +40,6 @@ async function uploadGroupCover(file: File): Promise<string> {
   const uploaded = await uploadFile(file, 'group');
   return uploaded.url;
 }
-
 interface GroupView {
   id: number;
   name: string;
@@ -58,6 +61,9 @@ interface GroupView {
   postCount?: number;
   rules?: string[] | null;
   isAnnouncementOnly?: boolean;
+  requireApprovalFirstThree?: boolean;
+  requireApprovalAll?: boolean;
+  announcementPolicy?: 'owner' | 'admins';
   features?: { eventsEnabled: boolean };
   hasPendingJoinRequest?: boolean;
   memberRole?: 'owner' | 'admin' | 'moderator' | 'member' | null;
@@ -78,6 +84,13 @@ interface GroupPollData {
   allowMultiple: boolean;
   voteCounts: number[];
   myVotes: number[];
+}
+
+interface MentionCandidate {
+  id: number;
+  username: string;
+  displayName: string;
+  avatarUrl?: string | null;
 }
 
 function GroupPoll({ groupId, postId, poll }: { groupId: number; postId: number; poll: GroupPollData }) {
@@ -133,6 +146,95 @@ function GroupPoll({ groupId, postId, poll }: { groupId: number; postId: number;
   </section>;
 }
 
+function GroupActivityTimeline({ groupId }: { groupId: number }) {
+  const [activity, setActivity] = useState<Array<{ id: number; actorName: string | null; actorUsername: string | null; action: string; createdAt: string }>>([]);
+  useEffect(() => {
+    let active = true;
+    void apiFetch(`/api/groups/${groupId}/activity`)
+      .then(response => response.ok ? response.json() : { activity: [] })
+      .then(data => { if (active) setActivity(Array.isArray(data.activity) ? data.activity : []); });
+    return () => { active = false; };
+  }, [groupId]);
+  const labels: Record<string, string> = {
+    member_joined: 'joined the group',
+    member_muted: 'muted a member',
+    member_unmuted: 'unmuted a member',
+    member_removed: 'removed a member',
+    member_banned: 'banned a member',
+    member_role_changed: 'updated a member role',
+    post_pinned: 'pinned a post',
+    post_unpinned: 'unpinned a post',
+    announcement_posted: 'posted an announcement',
+    post_approved: 'approved a post',
+    post_rejected: 'rejected a post',
+    group_archived: 'archived the group',
+    join_request_created: 'requested to join',
+    join_request_cancelled: 'cancelled a join request',
+    poll_ended: 'Poll ended',
+  };
+  if (activity.length === 0) return <p className="text-xs text-muted-foreground">No recent activity.</p>;
+  return <ol className="space-y-3">{activity.map(item => {
+    const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(item.createdAt)) / 60000));
+    const ago = minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
+    return <li key={item.id} className="flex items-start justify-between gap-3 text-xs"><span>{item.action === 'poll_ended' ? labels[item.action] : <><strong>{item.actorName || (item.actorUsername ? `@${item.actorUsername}` : 'A member')}</strong> {labels[item.action] ?? item.action.replace(/_/g, ' ')}</>}</span><time className="shrink-0 text-muted-foreground">{ago}</time></li>;
+  })}</ol>;
+}
+
+function GroupPostActions({ groupId, postId, isAuthor, canModerate, isPinned, commentsEnabled, onChanged }: {
+  groupId: number;
+  postId: number;
+  isAuthor: boolean;
+  canModerate: boolean;
+  isPinned: boolean;
+  commentsEnabled: boolean;
+  onChanged: () => void;
+}) {
+  const { toast } = useToast();
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState('spam');
+
+  const run = async (path: string, method: string, body?: unknown) => {
+    const response = await apiFetch(path, {
+      method,
+      ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}),
+    });
+    if (!response.ok) {
+      const result = await response.json().catch(() => null);
+      throw new Error(result?.error ?? 'Could not update this post.');
+    }
+    onChanged();
+  };
+
+  const handleReport = async () => {
+    try {
+      await run(`/api/groups/${groupId}/posts/${postId}/report`, 'POST', { reason: reportReason });
+      setReportOpen(false);
+      toast({ title: 'Report sent to group moderators' });
+    } catch (error) {
+      toast({ title: 'Could not report post', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' });
+    }
+  };
+
+  return <>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild><Button type="button" size="icon" variant="ghost" aria-label="Post actions" className="absolute right-2 top-2 z-10 h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {canModerate && <DropdownMenuItem onSelect={() => void run(`/api/groups/${groupId}/posts/${postId}/pin`, isPinned ? 'DELETE' : 'POST').catch(error => toast({ title: 'Could not update pin', description: error.message, variant: 'destructive' }))}><Pin className="mr-2 h-4 w-4" />{isPinned ? 'Unpin' : 'Pin'}</DropdownMenuItem>}
+        {(isAuthor || canModerate) && <DropdownMenuItem onSelect={() => void run(`/api/groups/${groupId}/posts/${postId}/archive`, 'POST').then(() => toast({ title: 'Post archived' })).catch(error => toast({ title: 'Could not archive post', description: error.message, variant: 'destructive' }))}><Archive className="mr-2 h-4 w-4" />Archive</DropdownMenuItem>}
+        {(isAuthor || canModerate) && <DropdownMenuItem onSelect={() => void run(`/api/groups/${groupId}/posts/${postId}/comments`, 'PATCH', { enabled: !commentsEnabled }).then(() => toast({ title: commentsEnabled ? 'Comments turned off' : 'Comments turned on' })).catch(error => toast({ title: 'Could not update comments', description: error.message, variant: 'destructive' }))}><MessageCircleOff className="mr-2 h-4 w-4" />{commentsEnabled ? 'Turn off comments' : 'Turn on comments'}</DropdownMenuItem>}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => setReportOpen(true)}><Flag className="mr-2 h-4 w-4" />Report</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+      <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Report group post</DialogTitle><DialogDescription>Your report goes to the group moderators first.</DialogDescription></DialogHeader>
+        <Select value={reportReason} onValueChange={setReportReason}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="spam">Spam</SelectItem><SelectItem value="harassment">Harassment</SelectItem><SelectItem value="off_topic">Off-topic</SelectItem><SelectItem value="scam_reshare">Scam reshare</SelectItem></SelectContent></Select>
+        <Button onClick={() => void handleReport()}>Submit report</Button>
+      </DialogContent>
+    </Dialog>
+  </>;
+}
+
 function GroupQuestion({ groupId, postId, question, canChooseAnswer }: {
   groupId: number;
   postId: number;
@@ -168,13 +270,13 @@ function GroupQuestion({ groupId, postId, question, canChooseAnswer }: {
 
   return <section className="mt-2 space-y-2">
     <div className="flex flex-wrap items-center gap-2">
-      <Badge variant={question.isAnswered ? 'secondary' : 'outline'}>{question.isAnswered ? 'Answered question' : 'Open question'}</Badge>
+      <Badge variant="outline" className={question.isAnswered ? 'border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300' : ''}>{question.isAnswered ? 'Answered question' : 'Open question'}</Badge>
       {canChooseAnswer && !question.isAnswered && <Button type="button" variant="ghost" size="sm" onClick={() => void loadAnswers()}>Choose best answer</Button>}
     </div>
     {isOpen && <div className="space-y-2 rounded-lg border border-border p-3">
-      {answers.length === 0 ? <p className="text-xs text-muted-foreground">No answers yet.</p> : answers.map(answer => <div key={answer.id} className="flex items-start justify-between gap-3 border-b border-border/60 pb-2 last:border-0 last:pb-0">
-        <p className="min-w-0 text-sm">{answer.content}</p>
-        {canChooseAnswer && <Button type="button" size="sm" variant="outline" onClick={() => void selectAnswer(answer.id)}>Best answer</Button>}
+      {answers.length === 0 ? <p className="text-xs text-muted-foreground">No answers yet.</p> : [...answers].sort((a, b) => Number(b.id === question.bestAnswerId) - Number(a.id === question.bestAnswerId)).map(answer => <div key={answer.id} className={`flex items-start justify-between gap-3 border-b border-border/60 pb-2 last:border-0 last:pb-0 ${answer.id === question.bestAnswerId ? 'rounded-md border-l-2 border-emerald-600 bg-emerald-600/5 pl-3' : ''}`}>
+        <div className="min-w-0 space-y-1"><p className="text-sm">{answer.content}</p>{answer.id === question.bestAnswerId && <Badge className="border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-300">Best answer</Badge>}</div>
+        {canChooseAnswer && !question.isAnswered && <Button type="button" size="sm" variant="outline" onClick={() => void selectAnswer(answer.id)}>Best answer</Button>}
       </div>)}
     </div>}
   </section>;
@@ -183,38 +285,60 @@ function GroupQuestion({ groupId, postId, question, canChooseAnswer }: {
 function GroupDetail({ id }: { id: number }) {
   const queryClient = useQueryClient();
   const t = useT();
+  const [, setLocation] = useLocation();
 
   const { data: group, isLoading: groupLoading, refetch } = useGetGroup(id);
   const { data: postsData, isLoading: postsLoading } = useGetGroupPosts(id, {});
   const { token } = useAuthStore();
   const [myRole, setMyRole] = useState<GroupView['memberRole']>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState({ name: '', description: '', type: 'public', rules: '', coverUrl: '', isAnnouncementOnly: false });
+  const [settings, setSettings] = useState({ name: '', description: '', type: 'public', rules: '', coverUrl: '', iconUrl: '', isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false, announcementPolicy: 'admins' });
   const [composerType, setComposerType] = useState('discussion');
   const [postContent, setPostContent] = useState('');
+  const [postTitle, setPostTitle] = useState('');
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [questionTags, setQuestionTags] = useState('');
+  const [postAttachments, setPostAttachments] = useState<Array<{ url: string; mimeType: string; filename: string; sizeBytes: number }>>([]);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [pollDuration, setPollDuration] = useState('1d');
   const [pollOptions, setPollOptions] = useState(['', '']);
   const [pollMultiple, setPollMultiple] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
+  const [pendingPosts, setPendingPosts] = useState<any[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(false);
+  const [moderationReports, setModerationReports] = useState<Array<{ id: number; targetId: number; reason: string; postTitle: string | null; reporterName: string | null; reporterUsername: string | null; createdAt: string }>>([]);
   const [activeTab, setActiveTab] = useState('feed');
   const [feedMode, setFeedMode] = useState('recent');
   const [questionFilter, setQuestionFilter] = useState('unanswered');
   const [membersPreview, setMembersPreview] = useState<GroupMemberPreview[]>([]);
   const [onlineCount, setOnlineCount] = useState(0);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [lifecycleAction, setLifecycleAction] = useState<'archive' | 'delete' | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteSearch, setInviteSearch] = useState('');
   const [inviteUsers, setInviteUsers] = useState<Array<{ id: number; username: string; displayName: string; avatarUrl?: string | null }>>([]);
   const [isInviting, setIsInviting] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportDetails, setReportDetails] = useState('');
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionCandidates, setMentionCandidates] = useState<MentionCandidate[]>([]);
+  const groupImageInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuthStore();
   const { toast } = useToast();
+
+  const editor = useEditor({
+    extensions: [StarterKit, Underline, Placeholder.configure({ placeholder: composerType === 'question' ? 'Add details (optional)...' : 'Start a useful conversation...' })],
+    content: '',
+    onUpdate: ({ editor: updatedEditor }) => setPostContent(updatedEditor.getHTML()),
+    editorProps: { attributes: { class: 'min-h-32 px-3 py-2 text-sm focus:outline-none' } },
+  });
 
   useEffect(() => {
     if (!group) return;
     const current = group as GroupView;
     setMyRole(current.memberRole ?? null);
-    setSettings({ name: current.name, description: current.description ?? '', type: current.type ?? (current.privacy === 'private' ? 'private' : 'public'), rules: (current.rules ?? []).join('\n'), coverUrl: current.coverImage ?? current.coverUrl ?? '', isAnnouncementOnly: current.isAnnouncementOnly ?? false });
+    setSettings({ name: current.name, description: current.description ?? '', type: current.type ?? (current.privacy === 'private' ? 'private' : 'public'), rules: (current.rules ?? []).join('\n'), coverUrl: current.coverImage ?? current.coverUrl ?? '', iconUrl: current.iconImage ?? current.avatarUrl ?? '', isAnnouncementOnly: current.isAnnouncementOnly ?? false, requireApprovalFirstThree: current.requireApprovalFirstThree ?? false, requireApprovalAll: current.requireApprovalAll ?? false, announcementPolicy: current.announcementPolicy ?? 'admins' });
   }, [group]);
 
   useEffect(() => {
@@ -243,6 +367,28 @@ function GroupDetail({ id }: { id: number }) {
       socket.off('group:presence', onPresence);
     };
   }, [id, group?.isMember, user?.id]);
+
+  useEffect(() => {
+    if (!token || !['owner', 'admin', 'moderator'].includes(myRole ?? '')) {
+      setPendingPosts([]);
+      return;
+    }
+    setPendingLoading(true);
+    void apiFetch(`/api/groups/${id}/pending-posts`)
+      .then(response => response.ok ? response.json() : { posts: [] })
+      .then(data => setPendingPosts(Array.isArray(data.posts) ? data.posts : []))
+      .finally(() => setPendingLoading(false));
+  }, [id, myRole, token]);
+
+  useEffect(() => {
+    if (!token || !['owner', 'admin', 'moderator'].includes(myRole ?? '')) {
+      setModerationReports([]);
+      return;
+    }
+    void apiFetch(`/api/groups/${id}/reports`)
+      .then(response => response.ok ? response.json() : { reports: [] })
+      .then(data => setModerationReports(Array.isArray(data.reports) ? data.reports : []));
+  }, [id, myRole, token]);
 
   useEffect(() => {
     if (!inviteOpen || inviteSearch.trim().length < 2) {
@@ -275,6 +421,73 @@ function GroupDetail({ id }: { id: number }) {
     }
   };
 
+  const reviewPendingPost = async (postId: number, decision: 'approve' | 'reject') => {
+    const response = await apiFetch(`/api/groups/${id}/posts/${postId}/approval`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }),
+    });
+    if (!response.ok) return toast({ title: 'Could not review post', variant: 'destructive' });
+    setPendingPosts(posts => posts.filter(post => post.id !== postId));
+    void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'posts'] });
+    toast({ title: decision === 'approve' ? 'Post approved' : 'Post rejected' });
+  };
+
+  const reviewGroupReport = async (reportId: number, decision: 'dismiss' | 'remove_post' | 'escalate') => {
+    const response = await apiFetch(`/api/groups/${id}/reports/${reportId}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }),
+    });
+    if (!response.ok) return toast({ title: 'Could not resolve report', variant: 'destructive' });
+    setModerationReports(reports => reports.filter(report => report.id !== reportId));
+    void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'posts'] });
+  };
+
+  const searchMentionCandidates = async (query: string) => {
+    setMentionQuery(query);
+    if (query.trim().length < 1) {
+      setMentionCandidates([]);
+      return;
+    }
+    try {
+      const response = await apiFetch(`/api/mentions/search?q=${encodeURIComponent(query.trim())}`);
+      const users = response.ok ? await response.json() : [];
+      setMentionCandidates(Array.isArray(users) ? users.slice(0, 6) : []);
+    } catch {
+      setMentionCandidates([]);
+    }
+  };
+
+  const insertMention = (candidate: MentionCandidate) => {
+    editor?.chain().focus().insertContent(`@${candidate.username} `).run();
+    setMentionOpen(false);
+    setMentionQuery('');
+    setMentionCandidates([]);
+  };
+
+  const uploadPostImages = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const selected = Array.from(files);
+    if (postAttachments.length + selected.length > 4) {
+      toast({ title: 'Maximum four images', description: 'Remove an image before adding another.', variant: 'destructive' });
+      return;
+    }
+    if (selected.some(file => !file.type.startsWith('image/'))) {
+      toast({ title: 'Images only', description: 'Group discussions support image uploads only.', variant: 'destructive' });
+      return;
+    }
+    setIsUploadingImages(true);
+    try {
+      const uploaded = await Promise.all(selected.map(async file => {
+        const result = await uploadFile(file, 'post');
+        return { url: result.url, mimeType: file.type, filename: file.name, sizeBytes: file.size };
+      }));
+      setPostAttachments(current => [...current, ...uploaded].slice(0, 4));
+    } catch (error) {
+      toast({ title: 'Image upload failed', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' });
+    } finally {
+      setIsUploadingImages(false);
+      if (groupImageInputRef.current) groupImageInputRef.current.value = '';
+    }
+  };
+
   const saveSettings = async () => {
     if (!token) return;
     const res = await apiFetch(`/api/groups/${id}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, rules: settings.rules.split('\n').map(rule => rule.trim()).filter(Boolean).slice(0, 5) }) });
@@ -284,23 +497,44 @@ function GroupDetail({ id }: { id: number }) {
     void refetch();
   };
 
+  const performLifecycleAction = async () => {
+    if (!lifecycleAction) return;
+    const response = await apiFetch(`/api/groups/${id}${lifecycleAction === 'archive' ? '/archive' : ''}`, { method: lifecycleAction === 'archive' ? 'POST' : 'DELETE' });
+    if (!response.ok) return toast({ title: `Could not ${lifecycleAction} group`, variant: 'destructive' });
+    toast({ title: lifecycleAction === 'archive' ? 'Group archived' : 'Group deleted' });
+    setLifecycleAction(null);
+    setLocation('/groups');
+  };
+
   const submitGroupPost = async () => {
-    if (!token || !postContent.trim()) return;
+    const editorText = editor?.getText().trim() ?? '';
+    const hasContent = composerType === 'poll' ? Boolean(pollQuestion.trim()) : composerType === 'question' ? Boolean(postTitle.trim()) : Boolean(editorText);
+    if (!token || !hasContent) return;
     setIsPosting(true);
     try {
       const response = await apiFetch(`/api/groups/${id}/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: postContent.trim(),
+          content: composerType === 'poll'
+            ? `<p>${pollQuestion.trim().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`
+            : editor?.getHTML() ?? postContent,
+          ...(composerType === 'question' ? { title: postTitle.trim(), tags: questionTags.split(',').map(tag => tag.trim()).filter(Boolean).slice(0, 3) } : {}),
           type: composerType,
-          ...(composerType === 'poll' ? { poll: { options: pollOptions, allowMultiple: pollMultiple } } : {}),
+          ...(composerType === 'poll' ? { poll: { options: pollOptions, allowMultiple: pollMultiple, duration: pollDuration } } : {}),
+          ...(composerType === 'discussion' ? { attachments: postAttachments } : {}),
         }),
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.error ?? 'Could not publish to this group.');
       setPostContent('');
+      setPostTitle('');
+      setPollQuestion('');
+      setQuestionTags('');
+      setPostAttachments([]);
+      editor?.commands.clearContent();
       setPollOptions(['', '']);
+      setPollDuration('1d');
       void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'posts'] });
       void refetch();
       toast({ title: 'Added to the community' });
@@ -380,6 +614,8 @@ function GroupDetail({ id }: { id: number }) {
   const groupView = group as GroupView;
   const allGroupPosts = (postsData?.posts ?? []) as any[];
   const questions = allGroupPosts.filter(post => post.groupDetails?.type === 'question');
+  const featuredAnnouncements = allGroupPosts.filter(post => post.groupDetails?.type === 'announcement').slice(0, 3);
+  const pendingGroupPosts = pendingPosts;
   const now = Date.now();
   let visiblePosts = allGroupPosts;
   if (activeTab === 'questions') {
@@ -388,6 +624,8 @@ function GroupDetail({ id }: { id: number }) {
     visiblePosts = allGroupPosts.filter(post => post.groupDetails?.type === 'poll' && (!post.groupDetails?.poll?.endsAt || Date.parse(post.groupDetails.poll.endsAt) > now));
   } else if (activeTab === 'announcements') {
     visiblePosts = allGroupPosts.filter(post => post.groupDetails?.type === 'announcement');
+  } else if (activeTab === 'pending') {
+    visiblePosts = pendingGroupPosts;
   } else if (feedMode === 'unanswered') {
     visiblePosts = questions.filter(post => !post.groupDetails?.question?.isAnswered);
   } else if (feedMode === 'top') {
@@ -396,7 +634,7 @@ function GroupDetail({ id }: { id: number }) {
       .sort((a, b) => Number(b.likesCount ?? b.likeCount ?? 0) - Number(a.likesCount ?? a.likeCount ?? 0));
   }
 
-  const renderGroupPost = (post: any) => <article key={post.id} className={post.groupDetails?.type === 'announcement' ? 'rounded-lg border-l-4 border-amber-500 bg-amber-500/5 pl-3' : ''}>
+  const renderGroupPost = (post: any) => <article key={post.id} className={`relative ${post.groupDetails?.type === 'announcement' ? 'rounded-lg border-l-4 border-amber-500 bg-amber-500/5 pl-3' : ''}`}>
     {post.groupDetails?.type === 'opportunity_reshare' && <div className="mb-3 rounded-r-lg border-l-4 border-primary bg-primary/5 px-4 py-3">
       <div className="flex items-center gap-2 text-xs font-semibold text-primary"><Share2 className="h-3.5 w-3.5" />Opportunity reshared</div>
       <p className="mt-1 font-medium">{post.groupDetails?.opportunitySnapshot?.title}</p>
@@ -406,11 +644,31 @@ function GroupDetail({ id }: { id: number }) {
     <PostCard post={post} />
     {post.groupDetails?.type === 'question' && post.groupDetails?.question && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       <Badge variant={post.groupDetails.question.isAnswered ? 'secondary' : 'outline'}>{post.commentsCount ?? 0} answers · {post.groupDetails.question.isAnswered ? 'Answered' : 'Awaiting answer'}</Badge>
-      <GroupQuestion groupId={id} postId={post.id} question={post.groupDetails.question} canChooseAnswer={user?.id === post.authorId || myRole === 'owner' || myRole === 'admin' || myRole === 'moderator'} />
+      <GroupQuestion groupId={id} postId={post.id} question={post.groupDetails.question} canChooseAnswer={user?.id === post.authorId || myRole === 'owner' || myRole === 'admin'} />
     </div>}
     {post.groupDetails?.type === 'poll' && post.groupDetails?.poll && <GroupPoll groupId={id} postId={post.id} poll={post.groupDetails.poll} />}
-    {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <button type="button" title="Remove post" onClick={() => void removePost(post.id)} className="absolute right-3 top-3 rounded-lg border border-border bg-background/90 p-2 text-destructive hover:bg-destructive/10"><Trash2 className="w-4 h-4" /></button>}
+    {activeTab === 'pending' && <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void reviewPendingPost(post.id, 'approve')}>Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewPendingPost(post.id, 'reject')}>Reject</Button></div>}
+    <GroupPostActions
+      groupId={id}
+      postId={post.id}
+      isAuthor={user?.id === post.authorId}
+      canModerate={myRole === 'owner' || myRole === 'admin' || myRole === 'moderator'}
+      isPinned={Boolean(post.groupDetails?.isPinned)}
+      commentsEnabled={post.groupDetails?.commentsEnabled !== false}
+      onChanged={() => { void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'posts'] }); void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'pinned'] }); }}
+    />
   </article>;
+
+  const richEditor = <div className="overflow-hidden rounded-md border border-border bg-background">
+    <div className="flex items-center gap-1 border-b border-border px-2 py-1">
+      <Button type="button" variant="ghost" size="icon" title="Bold" aria-label="Bold" onClick={() => editor?.chain().focus().toggleBold().run()}><Bold className="h-4 w-4" /></Button>
+      <Button type="button" variant="ghost" size="icon" title="Italic" aria-label="Italic" onClick={() => editor?.chain().focus().toggleItalic().run()}><Italic className="h-4 w-4" /></Button>
+      <Button type="button" variant="ghost" size="icon" title="Bulleted list" aria-label="Bulleted list" onClick={() => editor?.chain().focus().toggleBulletList().run()}><List className="h-4 w-4" /></Button>
+      <Button type="button" variant="ghost" size="icon" title="Numbered list" aria-label="Numbered list" onClick={() => editor?.chain().focus().toggleOrderedList().run()}><ListOrdered className="h-4 w-4" /></Button>
+      <Button type="button" variant="ghost" size="icon" title="Mention someone" aria-label="Mention someone" onClick={() => setMentionOpen(true)}><AtSign className="h-4 w-4" /></Button>
+    </div>
+    <EditorContent editor={editor} />
+  </div>;
 
   const emptyStates: Record<string, { icon: typeof MessageSquare; title: string; body: string }> = {
     feed: { icon: MessageSquare, title: 'The conversation starts here', body: 'Share a useful idea or question with the community.' },
@@ -471,6 +729,8 @@ function GroupDetail({ id }: { id: number }) {
                 <TabsTrigger value="questions">Q&amp;A</TabsTrigger>
                 <TabsTrigger value="polls">Polls</TabsTrigger>
                 <TabsTrigger value="announcements">Announcements</TabsTrigger>
+                {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="pending">Pending{pendingPosts.length ? ` (${pendingPosts.length})` : ''}</TabsTrigger>}
+                {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="reports">Reports{moderationReports.length ? ` (${moderationReports.length})` : ''}</TabsTrigger>}
               </TabsList>
 
               {activeTab === 'feed' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -489,28 +749,67 @@ function GroupDetail({ id }: { id: number }) {
               </div>}
               {activeTab === 'polls' && <h2 className="mb-4 text-sm font-semibold">Active polls</h2>}
               {activeTab === 'announcements' && <h2 className="mb-4 text-sm font-semibold">Announcements</h2>}
+              {activeTab === 'pending' && <h2 className="mb-4 text-sm font-semibold">Posts awaiting review</h2>}
+              {activeTab === 'reports' && <h2 className="mb-4 text-sm font-semibold">Reports for group moderators</h2>}
 
-              {activeTab === 'feed' && group.isMember && <section className="mb-5 space-y-3 rounded-xl border border-border/70 bg-card p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-sm font-semibold">Add to the conversation</h2>
-                  <Select value={composerType} onValueChange={setComposerType}>
-                    <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="discussion">Discussion</SelectItem><SelectItem value="question">Question</SelectItem><SelectItem value="poll">Poll</SelectItem>
-                      {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <SelectItem value="announcement">Announcement</SelectItem>}
-                    </SelectContent>
-                  </Select>
+              {activeTab === 'feed' && featuredAnnouncements.length > 0 && <section aria-label="Featured announcements" className="mb-5 border-y border-amber-500/40 bg-amber-500/5 py-3">
+                <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-amber-700 dark:text-amber-300"><Megaphone className="h-4 w-4" />Featured</div>
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {featuredAnnouncements.map(post => <button key={post.id} type="button" onClick={() => setActiveTab('announcements')} className="min-w-56 max-w-72 flex-1 border-l-2 border-amber-500 px-3 py-1 text-left hover:bg-amber-500/5">
+                    <span className="line-clamp-1 text-sm font-semibold">{post.title || 'Group announcement'}</span>
+                    <span className="mt-1 line-clamp-2 text-xs text-muted-foreground">{post.excerpt || 'Read the latest from your group admins.'}</span>
+                  </button>)}
                 </div>
-                <Textarea value={postContent} onChange={e => setPostContent(e.target.value)} maxLength={50000} placeholder={composerType === 'question' ? 'What would you like help thinking through?' : composerType === 'announcement' ? 'Write a community announcement...' : 'Start a useful conversation...'} rows={4} />
-                {composerType === 'poll' && <div className="space-y-2">
-                  {pollOptions.map((option, index) => <Input key={index} value={option} maxLength={120} onChange={e => setPollOptions(items => items.map((item, itemIndex) => itemIndex === index ? e.target.value : item))} placeholder={`Option ${index + 1}`} />)}
-                  {pollOptions.length < 10 && <Button type="button" variant="ghost" size="sm" onClick={() => setPollOptions(items => [...items, ''])}>Add option</Button>}
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground"><input type="checkbox" checked={pollMultiple} onChange={e => setPollMultiple(e.target.checked)} />Allow multiple choices</label>
-                </div>}
-                <Button onClick={() => void submitGroupPost()} disabled={isPosting || !postContent.trim() || (composerType === 'poll' && pollOptions.filter(option => option.trim()).length < 2)} className="gap-2"><Send className="h-4 w-4" />{isPosting ? 'Publishing...' : 'Publish'}</Button>
               </section>}
 
-              {postsLoading ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}</div> : visiblePosts.length === 0 ? <div className="flex min-h-64 flex-col items-center justify-center border-y border-dashed border-border px-6 text-center">
+              {activeTab === 'feed' && group.isMember && <section className="mb-5 space-y-3 rounded-lg border border-border/70 bg-card p-4">
+                <h2 className="text-sm font-semibold">Add to the conversation</h2>
+                <Tabs value={composerType} onValueChange={setComposerType}>
+                  <TabsList className="w-full justify-start overflow-x-auto">
+                    <TabsTrigger value="discussion">Discussion</TabsTrigger>
+                    <TabsTrigger value="poll">Poll</TabsTrigger>
+                    <TabsTrigger value="question">Question</TabsTrigger>
+                    {(myRole === 'owner' || myRole === 'admin') && <TabsTrigger value="announcement">Announcement</TabsTrigger>}
+                  </TabsList>
+                  <TabsContent value="discussion" className="mt-3 space-y-3">
+                    {richEditor}
+                    <input ref={groupImageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={event => void uploadPostImages(event.target.files)} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button type="button" variant="outline" size="sm" disabled={isUploadingImages || postAttachments.length >= 4} onClick={() => groupImageInputRef.current?.click()}><ImagePlus className="mr-2 h-4 w-4" />{isUploadingImages ? 'Uploading...' : `Images ${postAttachments.length}/4`}</Button>
+                      {postAttachments.map((image, index) => <div key={image.url} className="relative h-12 w-12 overflow-hidden rounded-md border border-border"><img src={mediaUrl(image.url)} alt={image.filename} className="h-full w-full object-cover" /><button type="button" aria-label="Remove image" onClick={() => setPostAttachments(items => items.filter((_, itemIndex) => itemIndex !== index))} className="absolute right-0 top-0 bg-background/90 px-1 text-xs">×</button></div>)}
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="poll" className="mt-3 space-y-3">
+                    <Input value={pollQuestion} onChange={event => setPollQuestion(event.target.value)} maxLength={280} placeholder="Ask your group a question" aria-label="Poll question" />
+                    <div className="space-y-2">
+                      {pollOptions.map((option, index) => <Input key={index} value={option} maxLength={120} onChange={event => setPollOptions(items => items.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} placeholder={`Option ${index + 1}`} />)}
+                      {pollOptions.length < 5 && <Button type="button" variant="ghost" size="sm" onClick={() => setPollOptions(items => [...items, ''])}>Add option</Button>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-2 text-sm"><span>Duration</span><Select value={pollDuration} onValueChange={setPollDuration}><SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="1d">1 day</SelectItem><SelectItem value="3d">3 days</SelectItem><SelectItem value="1w">1 week</SelectItem><SelectItem value="never">Never</SelectItem></SelectContent></Select></label>
+                      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={pollMultiple} onChange={event => setPollMultiple(event.target.checked)} />Allow multiple votes</label>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="question" className="mt-3 space-y-3">
+                    <Input value={postTitle} onChange={event => setPostTitle(event.target.value)} maxLength={180} placeholder="Ask a question" aria-label="Question title" />
+                    {richEditor}
+                    <Input value={questionTags} onChange={event => setQuestionTags(event.target.value)} maxLength={140} placeholder="Tags, separated by commas (up to 3)" aria-label="Question tags" />
+                  </TabsContent>
+                  <TabsContent value="announcement" className="mt-3 space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-amber-700 dark:text-amber-300"><Megaphone className="h-4 w-4" />Group announcement</div>
+                    {richEditor}
+                    <p className="text-xs text-muted-foreground">One announcement per group every 24 hours.</p>
+                  </TabsContent>
+                </Tabs>
+                <Button onClick={() => void submitGroupPost()} disabled={isPosting || isUploadingImages || (composerType === 'poll' ? !pollQuestion.trim() || pollOptions.filter(option => option.trim()).length < 2 : composerType === 'question' ? !postTitle.trim() : !editor?.getText().trim())} className="gap-2"><Send className="h-4 w-4" />{isPosting ? 'Publishing...' : 'Publish'}</Button>
+              </section>}
+
+              {activeTab === 'reports' ? <div className="divide-y divide-border border-y">
+                {moderationReports.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No reports need group review.</p> : moderationReports.map(report => <article key={report.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
+                  <div className="min-w-0"><p className="text-sm font-semibold">{report.postTitle || `Post #${report.targetId}`}</p><p className="mt-1 text-xs text-muted-foreground">{report.reason.replace(/_/g, ' ')} · reported by {report.reporterName || `@${report.reporterUsername}`} · {new Date(report.createdAt).toLocaleDateString()}</p></div>
+                  <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void reviewGroupReport(report.id, 'dismiss')}>Dismiss</Button><Button size="sm" variant="destructive" onClick={() => void reviewGroupReport(report.id, 'remove_post')}>Remove post</Button><Button size="sm" variant="ghost" onClick={() => void reviewGroupReport(report.id, 'escalate')}>Escalate</Button></div>
+                </article>)}
+              </div> : (postsLoading || (activeTab === 'pending' && pendingLoading)) ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}</div> : visiblePosts.length === 0 ? <div className="flex min-h-64 flex-col items-center justify-center border-y border-dashed border-border px-6 text-center">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary"><EmptyIcon className="h-7 w-7" /></div>
                 <h3 className="font-semibold">{emptyStates[activeTab]?.title}</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">{emptyStates[activeTab]?.body}</p>
               </div> : activeTab === 'announcements' ? <div className="space-y-5 border-l border-amber-500/40 pl-4">{visiblePosts.map(renderGroupPost)}</div> : <div className="space-y-5">{visiblePosts.map(renderGroupPost)}</div>}
@@ -531,6 +830,8 @@ function GroupDetail({ id }: { id: number }) {
 
             <section className="border-b border-border/70 pb-4"><PinnedPosts groupId={id} myRole={myRole ?? null} /></section>
 
+            <section className="space-y-3 border-b border-border/70 pb-4"><h2 className="text-sm font-semibold">Recent activity</h2><GroupActivityTimeline groupId={id} /></section>
+
             <section className="space-y-3 border-b border-border/70 pb-4">
               <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Members</h2><span className="text-xs text-muted-foreground">{groupView.type === 'public' || groupView.type == null || group.isMember ? `${onlineCount} online now` : ''}</span></div>
               <div className="flex items-center">
@@ -539,7 +840,7 @@ function GroupDetail({ id }: { id: number }) {
                 </Avatar>)}
                 {membersPreview.length === 0 && <span className="text-xs text-muted-foreground">Members will appear here.</span>}
               </div>
-              <Button variant="ghost" size="sm" className="px-0" onClick={() => setMembersOpen(true)}>View all members</Button>
+              <Link href={`/g/${groupView.slug || id}/members`}><Button variant="ghost" size="sm" className="px-0">View all members</Button></Link>
             </section>
 
             <section className="space-y-2 border-b border-border/70 pb-4">
@@ -556,11 +857,15 @@ function GroupDetail({ id }: { id: number }) {
               <div className="mt-3 space-y-3">
                 <Input value={settings.name} onChange={e => setSettings(s => ({ ...s, name: e.target.value }))} placeholder="Group name" />
                 <Textarea maxLength={280} value={settings.description} onChange={e => setSettings(s => ({ ...s, description: e.target.value }))} placeholder="Description, up to 280 characters" />
-                <Select value={settings.type} onValueChange={type => setSettings(s => ({ ...s, type }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="public">Public</SelectItem><SelectItem value="private">Private</SelectItem><SelectItem value="secret">Secret</SelectItem></SelectContent></Select>
+                <Select value={settings.type} onValueChange={type => setSettings(s => ({ ...s, type }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(groupView.type === 'public' || user?.role === 'super_admin') && <SelectItem value="public">Public</SelectItem>}<SelectItem value="private">Private</SelectItem><SelectItem value="secret">Secret</SelectItem></SelectContent></Select>
                 <Textarea value={settings.rules} onChange={e => setSettings(s => ({ ...s, rules: e.target.value }))} placeholder="Up to five rules, one per line" />
                 <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.isAnnouncementOnly} onChange={e => setSettings(s => ({ ...s, isAnnouncementOnly: e.target.checked }))} />Announcement-only</label>
+                <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalFirstThree} onChange={e => setSettings(s => ({ ...s, requireApprovalFirstThree: e.target.checked, requireApprovalAll: false }))} />Require approval for each member's first 3 posts</label>
+                <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalAll} onChange={e => setSettings(s => ({ ...s, requireApprovalAll: e.target.checked, requireApprovalFirstThree: false }))} />Require approval for all posts</label>
+                <label className="flex items-center justify-between gap-3 text-xs"><span>Who can post announcements</span><Select value={settings.announcementPolicy} onValueChange={announcementPolicy => setSettings(s => ({ ...s, announcementPolicy }))}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="owner">Owner only</SelectItem><SelectItem value="admins">Admins</SelectItem></SelectContent></Select></label>
+                <ImageUploadField value={settings.iconUrl} onChange={iconUrl => setSettings(s => ({ ...s, iconUrl }))} category="group" label="Change group icon" previewClassName="h-20 w-20" />
                 <ImageUploadField value={settings.coverUrl} onChange={coverUrl => setSettings(s => ({ ...s, coverUrl }))} category="group" label="Change cover image" />
-                <Button size="sm" onClick={() => void saveSettings()}>Save settings</Button>
+                <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void saveSettings()}>Save settings</Button><Button size="sm" variant="outline" onClick={() => setLifecycleAction('archive')}>Archive group</Button><Button size="sm" variant="destructive" onClick={() => setLifecycleAction('delete')}>Delete group</Button></div>
               </div>
             </details>}
             {user?.role === 'super_admin' && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(groupView.features?.eventsEnabled)} onChange={e => void toggleEvents(e.target.checked)} />Enable group events</label>}
@@ -568,8 +873,17 @@ function GroupDetail({ id }: { id: number }) {
         </div>
       </div>
 
-      <Dialog open={membersOpen} onOpenChange={setMembersOpen}>
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Community members</DialogTitle></DialogHeader><GroupMembersList groupId={id} /></DialogContent>
+      <Dialog open={Boolean(lifecycleAction)} onOpenChange={open => { if (!open) setLifecycleAction(null); }}>
+        <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{lifecycleAction === 'archive' ? 'Archive this group?' : 'Delete this group?'}</DialogTitle><DialogDescription>{lifecycleAction === 'archive' ? 'The group will be hidden from discovery. Existing posts remain available by direct link.' : 'The group will be soft-deleted and no longer accessible. Its posts remain stored.'}</DialogDescription></DialogHeader><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setLifecycleAction(null)}>Cancel</Button><Button variant={lifecycleAction === 'delete' ? 'destructive' : 'default'} onClick={() => void performLifecycleAction()}>{lifecycleAction === 'archive' ? 'Archive group' : 'Delete group'}</Button></div></DialogContent>
+      </Dialog>
+      <Dialog open={mentionOpen} onOpenChange={setMentionOpen}>
+        <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Mention a member</DialogTitle></DialogHeader>
+          <Input autoFocus value={mentionQuery} onChange={event => void searchMentionCandidates(event.target.value)} placeholder="Search by name or username" />
+          <div className="max-h-64 space-y-1 overflow-y-auto">
+            {mentionCandidates.map(candidate => <button key={candidate.id} type="button" onClick={() => insertMention(candidate)} className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-muted/60"><Avatar className="h-8 w-8"><AvatarImage src={candidate.avatarUrl ?? undefined} /><AvatarFallback>{(candidate.displayName || candidate.username).slice(0, 1)}</AvatarFallback></Avatar><span className="min-w-0"><span className="block truncate text-sm font-medium">{candidate.displayName}</span><span className="block truncate text-xs text-muted-foreground">@{candidate.username}</span></span></button>)}
+            {mentionQuery.trim() && mentionCandidates.length === 0 && <p className="py-5 text-center text-sm text-muted-foreground">No members found.</p>}
+          </div>
+        </DialogContent>
       </Dialog>
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Invite to {group.name}</DialogTitle></DialogHeader>
@@ -835,9 +1149,31 @@ function GroupSlugRoute({ slug }: { slug: string }) {
   return <AppLayout><div className="mx-auto max-w-4xl space-y-4 p-4"><Skeleton className="aspect-[16/5] w-full" /><Skeleton className="h-10 w-64" /></div></AppLayout>;
 }
 
+function GroupMembersRoute({ slug }: { slug: string }) {
+  const [group, setGroup] = useState<GroupView | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let active = true;
+    void apiFetch(`/api/groups/${encodeURIComponent(slug)}`)
+      .then(async response => response.ok ? response.json() as Promise<GroupView> : null)
+      .then(value => { if (active) setGroup(value); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [slug]);
+  if (loading) return <AppLayout><div className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">Loading members...</div></AppLayout>;
+  if (!group) return <AppLayout><p className="py-20 text-center text-muted-foreground">Group not found</p></AppLayout>;
+  return <AppLayout><main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
+    <Link href={`/g/${slug}`} className="text-sm text-muted-foreground hover:text-foreground">← Back to {group.name}</Link>
+    <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4"><div><p className="text-xs font-semibold uppercase text-muted-foreground">{group.name}</p><h1 className="mt-1 text-2xl font-semibold">Member management</h1></div><span className="text-sm text-muted-foreground">{group.memberCount ?? group.membersCount} members</span></header>
+    <GroupMembersList groupId={group.id} />
+  </main></AppLayout>;
+}
+
 export default function Groups() {
   const [, groupParams] = useRoute('/groups/:id');
   const [, slugParams] = useRoute('/g/:slug');
+  const [, memberParams] = useRoute('/g/:slug/members');
+  if (memberParams?.slug) return <GroupMembersRoute slug={memberParams.slug} />;
   if (slugParams?.slug) return <GroupSlugRoute slug={slugParams.slug} />;
   const groupId = groupParams?.id ? Number.parseInt(groupParams.id, 10) : null;
   if (groupId && Number.isInteger(groupId)) return <GroupDetail id={groupId} />;

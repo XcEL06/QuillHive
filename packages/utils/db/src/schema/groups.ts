@@ -20,6 +20,11 @@ export const groupsTable = pgTable("groups", {
   type: text("type").notNull().default("public"),
   rules: jsonb("rules").$type<string[]>().notNull().default([]),
   isAnnouncementOnly: boolean("is_announcement_only").notNull().default(false),
+  requireApprovalFirstThree: boolean("require_approval_first_three").notNull().default(false),
+  requireApprovalAll: boolean("require_approval_all").notNull().default(false),
+  announcementPolicy: text("announcement_policy").notNull().default("admins"),
+  isArchived: boolean("is_archived").notNull().default(false),
+  isDeleted: boolean("is_deleted").notNull().default(false),
   features: jsonb("features").$type<{ eventsEnabled: boolean }>().notNull().default({ eventsEnabled: false }),
   isVerified: boolean("is_verified").notNull().default(false),
   isPromoted: boolean("is_promoted").notNull().default(false),
@@ -54,6 +59,8 @@ export const groupPostDetailsTable = pgTable("group_post_details", {
   opportunitySnapshot: jsonb("opportunity_snapshot").$type<{ title: string; budget: number | null; currency: string | null; type: string } | null>(),
   isPinned: boolean("is_pinned").notNull().default(false),
   isAnnouncement: boolean("is_announcement").notNull().default(false),
+  commentsEnabled: boolean("comments_enabled").notNull().default(true),
+  approvalStatus: text("approval_status").notNull().default("approved"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   postUnique: uniqueIndex("group_post_details_post_unique").on(t.postId),
@@ -67,6 +74,7 @@ export const groupJoinRequestsTable = pgTable("group_join_requests", {
   status: text("status").notNull().default("pending"),
   reviewedBy: integer("reviewed_by").references(() => usersTable.id),
   reviewedAt: timestamp("reviewed_at"),
+  screeningAnswers: jsonb("screening_answers").$type<Record<string, string>>().notNull().default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   requestUnique: uniqueIndex("group_join_requests_group_user_unique").on(t.groupId, t.userId),
@@ -90,6 +98,17 @@ export const groupPinnedPostsTable = pgTable("group_pinned_posts", {
   pinnedBy: integer("pinned_by").notNull().references(() => usersTable.id),
   pinnedAt: timestamp("pinned_at").defaultNow().notNull(),
 });
+
+export const groupActivityLogsTable = pgTable("group_activity_logs", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull().references(() => groupsTable.id, { onDelete: "cascade" }),
+  actorId: integer("actor_id").references(() => usersTable.id, { onDelete: "set null" }),
+  action: text("action").notNull(),
+  details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  groupCreatedIdx: index("group_activity_logs_group_created_idx").on(t.groupId, t.createdAt),
+}));
 
 export const insertGroupSchema = createInsertSchema(groupsTable).omit({ id: true, createdAt: true });
 export const insertGroupMemberSchema = createInsertSchema(groupMembersTable).omit({ id: true, joinedAt: true });

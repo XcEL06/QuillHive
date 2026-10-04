@@ -436,6 +436,9 @@ function Router() {
         <Profile />
       </Route>
 
+      <Route path="/admin/groups">
+        <AdminGuard><Admin initialTab="groups" /></AdminGuard>
+      </Route>
       <Route path="/admin">
         <AdminGuard><Admin /></AdminGuard>
       </Route>
