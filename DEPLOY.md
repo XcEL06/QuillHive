@@ -30,6 +30,10 @@
 
 For a database that already has the QuillHive base Groups schema, paste and run [`scripts/sql/group_moderation_neon.sql`](scripts/sql/group_moderation_neon.sql) in the Neon SQL Editor. The script combines the group-post comment-control and moderation schema updates and is safe to rerun. It is not a replacement for the full project schema; if this database has not had the base Groups migrations applied, run the database migrations first.
 
+### Create a fresh Neon database from SQL
+
+For a brand-new, empty Neon database, paste and run [`scripts/sql/quillhive_full_schema_neon.sql`](scripts/sql/quillhive_full_schema_neon.sql) in the Neon SQL Editor. It is the complete schema export from the current Drizzle definitions, including tables, foreign keys, and indexes. It is not idempotent and must not be run over an existing QuillHive database. For existing databases, use the normal migrations or the focused group moderation upgrade above.
+
 ## Healthcheck
 
 The API exposes `GET /api/healthz` which returns:
