@@ -1,4 +1,19 @@
+-- QuillHive group moderation schema for an existing database.
+-- Safe to run more than once in the Neon SQL Editor.
+-- Requires the base Groups schema (groups, group_join_requests, posts, users).
+
 BEGIN;
+
+DO $$
+BEGIN
+  IF to_regclass('public.groups') IS NULL
+    OR to_regclass('public.group_join_requests') IS NULL
+    OR to_regclass('public.posts') IS NULL
+    OR to_regclass('public.users') IS NULL THEN
+    RAISE EXCEPTION 'QuillHive base schema is missing. Run the project database migrations before this group moderation script.';
+  END IF;
+END;
+$$;
 
 ALTER TABLE "groups"
   ADD COLUMN IF NOT EXISTS "require_approval_first_three" boolean NOT NULL DEFAULT false,
@@ -26,6 +41,8 @@ CREATE TABLE IF NOT EXISTS "group_post_details" (
   "created_at" timestamp NOT NULL DEFAULT now()
 );
 
+-- Additions are repeated after CREATE TABLE so this also upgrades an existing
+-- group_post_details table created by an earlier Groups migration.
 ALTER TABLE "group_post_details"
   ADD COLUMN IF NOT EXISTS "comments_enabled" boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS "approval_status" text NOT NULL DEFAULT 'approved';

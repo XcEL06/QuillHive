@@ -1,5 +1,4 @@
 import { createServer } from "http";
-import app from "./app";
 import { logger } from "./lib/logger";
 import { setupSocket } from "./lib/socket";
 import { runSeed } from "./scripts/seed";
@@ -13,6 +12,8 @@ import { logAiConfiguration } from "./routes/ai";
 
 const rawPort = process.env["PORT"];
 
+await initSentry();
+
 if (!rawPort) {
   throw new Error(
     "PORT environment variable is required but was not provided.",
@@ -25,7 +26,7 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-await initSentry();
+const { default: app } = await import("./app");
 
 const dbReady = await testConnection();
 if (!dbReady) {

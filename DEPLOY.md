@@ -26,6 +26,10 @@
    ```
 2. Restart API server
 
+### Apply group moderation changes directly in Neon
+
+For a database that already has the QuillHive base Groups schema, paste and run [`scripts/sql/group_moderation_neon.sql`](scripts/sql/group_moderation_neon.sql) in the Neon SQL Editor. The script combines the group-post comment-control and moderation schema updates and is safe to rerun. It is not a replacement for the full project schema; if this database has not had the base Groups migrations applied, run the database migrations first.
+
 ## Healthcheck
 
 The API exposes `GET /api/healthz` which returns:

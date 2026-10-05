@@ -18,6 +18,7 @@ import { emitEvent, recordRequest } from "./lib/events";
 import { recordError, recordRequestForAnomaly } from "./lib/alertEngine";
 import { getApiErrorMessage } from "./lib/api-errors";
 import { validateBearerTokenState } from "./middleware/admin";
+import { captureError } from "./lib/sentry";
 
 const app: Express = express();
 app.disable('x-powered-by');
@@ -152,6 +153,10 @@ app.use((err: Error & { statusCode?: number }, req: express.Request, res: expres
   recordError();
   const status = err.statusCode || 500;
   if (status >= 500) {
+    captureError(err, {
+      tags: { source: "express", route: req.path },
+      extra: { method: req.method, statusCode: status },
+    });
     emitEvent({
       type: "SYSTEM_ERROR",
       severity: status >= 500 ? "high" : "medium",
