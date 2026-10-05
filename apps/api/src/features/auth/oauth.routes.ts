@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { oauthAccountsTable, usersTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { createAuthTokens } from "../../lib/auth";
+import { logger } from "../../lib/logger";
 
 export const oauthRouter = Router();
 
@@ -214,7 +215,7 @@ async function handleGithubCallback(req: Request, res: Response): Promise<void> 
     target.searchParams.set("refreshToken", tokens.refreshToken);
     return res.redirect(target.toString());
   } catch (error) {
-    console.error("GitHub OAuth error:", error);
+    logger.error({ err: error, provider: "github" }, "GitHub OAuth error");
     const appUrl = frontendUrl();
     const target = new URL("/login", appUrl);
     target.searchParams.set("error", "oauth_error");

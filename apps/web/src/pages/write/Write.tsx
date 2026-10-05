@@ -30,6 +30,7 @@ import { useT } from '@/lib/i18n';
 import { ImageUploadField } from '@/components/media/ImageUploadField';
 import { BackButton } from '@/components/ui/BackButton';
 import { apiUrl } from '@/lib/api';
+import { reportCaughtError } from '@/lib/reportCaughtError';
 import { useFeature } from '@/lib/features';
 
 type AiPanel = 'assist' | 'caption' | 'improve' | 'ideas' | 'titles' | 'hashtags' | null;
@@ -483,6 +484,7 @@ export default function Write() {
         return true;
       } catch (error) {
         console.error('[write] draft autosave failed', error);
+        reportCaughtError(error, { action: 'autosave_draft' });
         setShowSaved(false);
         toast({
           title: 'Draft could not be saved',

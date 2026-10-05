@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { getStoredToken } from '@/lib/api';
+import { reportCaughtError } from '@/lib/reportCaughtError';
 
 export function useAppreciations(postId: string) {
   const [loading, setLoading] = useState(false);
@@ -25,6 +26,7 @@ export function useAppreciations(postId: string) {
       setCounts(data.counts ?? {});
     } catch (error) {
       console.error('Failed to fetch appreciations:', error);
+      reportCaughtError(error, { action: 'fetch_appreciations', postId });
     }
   };
 
@@ -44,6 +46,7 @@ export function useAppreciations(postId: string) {
       await fetchAppreciations();
     } catch (error) {
       console.error('Failed to add appreciation:', error);
+      reportCaughtError(error, { action: 'add_appreciation', postId, type });
     } finally {
       setLoading(false);
     }

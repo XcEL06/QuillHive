@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '@/lib/api';
+import { reportCaughtError } from '@/lib/reportCaughtError';
 
 export function useReadingProgress(postId: number | null, opts?: { enabled?: boolean }) {
   const enabled = opts?.enabled ?? true;
@@ -16,6 +17,7 @@ export function useReadingProgress(postId: number | null, opts?: { enabled?: boo
     const elapsed = activeMs.current + currentlyActive;
     void apiRequest('PUT', `/api/reading-progress/${postId}`, { percent: value, readTimeMs: elapsed }).catch((error) => {
       console.error('[reading-progress] save failed', error);
+      reportCaughtError(error, { action: 'save_reading_progress', postId });
     });
   };
 
@@ -39,7 +41,7 @@ export function useReadingProgress(postId: number | null, opts?: { enabled?: boo
         if (cancelled) return;
         if (typeof data?.percent === 'number') setPercent(data.percent);
       })
-      .catch(() => {});
+      .catch((error) => reportCaughtError(error, { action: 'load_reading_progress', postId }));
     return () => {
       cancelled = true;
       document.removeEventListener('visibilitychange', onVisible);

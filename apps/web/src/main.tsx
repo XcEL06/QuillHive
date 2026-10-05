@@ -1,20 +1,42 @@
 import { API_BASE_URL, apiUrl } from "./lib/api";
+import { captureBrowserException, initializeSentryClient } from "./lib/sentryClient";
 
-if (API_BASE_URL) {
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
+initializeSentryClient();
+
+const originalFetch = window.fetch.bind(window);
+window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const rawUrl = input instanceof Request ? input.url : String(input);
+  const parsedUrl = new URL(rawUrl, window.location.origin);
+  const isApiRequest = parsedUrl.pathname.startsWith("/api/") || parsedUrl.pathname === "/api";
+  const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+  let target: RequestInfo | URL = input;
+
+  if (API_BASE_URL) {
     if (typeof input === "string" && input.startsWith("/api")) {
-      return originalFetch(apiUrl(input), init);
+      target = apiUrl(input);
+    } else if (input instanceof URL && input.origin === window.location.origin && input.pathname.startsWith("/api")) {
+      target = apiUrl(`${input.pathname}${input.search}`);
+    } else if (input instanceof Request && input.url.startsWith(`${window.location.origin}/api`)) {
+      target = new Request(apiUrl(input.url.replace(window.location.origin, "")), input);
     }
-    if (input instanceof URL && input.origin === window.location.origin && input.pathname.startsWith("/api")) {
-      return originalFetch(apiUrl(`${input.pathname}${input.search}`), init);
+  }
+
+  try {
+    const response = await originalFetch(target, init);
+    if (isApiRequest && response.status >= 500) {
+      captureBrowserException(new Error(`API request returned HTTP ${response.status}`), {
+        tags: { source: "api_request", status_code: String(response.status) },
+        extra: { method, path: parsedUrl.pathname },
+      });
     }
-    if (input instanceof Request && input.url.startsWith(`${window.location.origin}/api`)) {
-      return originalFetch(new Request(apiUrl(`${input.url.replace(window.location.origin, "")}`), input), init);
+    return response;
+  } catch (error) {
+    if (isApiRequest) {
+      captureBrowserException(error, { tags: { source: "api_request", failure: "network" }, extra: { method, path: parsedUrl.pathname } });
     }
-    return originalFetch(input, init);
-  };
-}
+    throw error;
+  }
+};
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {

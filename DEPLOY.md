@@ -60,6 +60,25 @@ Optional verification providers:
 - `IDENTITY_VERIFICATION_PROVIDER_KEY` - required only when `identity_verification_enabled` is enabled
 - `SMS_PROVIDER_API_KEY` - required only when `phone_verification_enabled` is enabled
 
+## Error monitoring
+
+Create Sentry projects for the API and browser, then set these in production:
+
+- Render API runtime: `SENTRY_DSN` (API project DSN), `SENTRY_ENVIRONMENT=production`, and optionally `SENTRY_TRACES_SAMPLE_RATE=0.05`.
+- Cloudflare Pages build environment: `VITE_SENTRY_DSN` (browser project DSN), `VITE_SENTRY_ENVIRONMENT=production`, and optionally `VITE_SENTRY_TRACES_SAMPLE_RATE=0.05`.
+
+The Vite variables are embedded at build time, so trigger a new frontend build after setting them. DSNs are public ingestion identifiers, not authentication secrets. The API and browser DSNs may be separate projects to keep their issue streams distinct. Without a DSN, Sentry stays disabled and application behavior is unchanged.
+
+To receive notifications rather than only see events in Sentry, create an Issue Alert for each project: trigger on a new issue in the `production` environment and notify the team by email or Slack. The API reports Express errors, error-level Pino logs (including failed BullMQ jobs), startup errors, and unhandled exceptions. The browser reports uncaught exceptions, React render failures, network failures, and API 5xx responses; expected 4xx responses are excluded.
+
+Verify capture without sending a production event:
+
+```sh
+pnpm --dir apps/api exec vitest run src/__tests__/sentry.test.ts
+```
+
+This test runs with `NODE_ENV=test`, generates a deliberate failed-job error, and asserts that its Sentry envelope reaches a local test receiver.
+
 ## Services
 
 | Service | Port | Purpose |

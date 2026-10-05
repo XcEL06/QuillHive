@@ -17,6 +17,7 @@ import { useSocketEvent, useJoinConversation } from '@/hooks/useSocket';
 import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
 import { getStoredToken } from '@/lib/api';
+import { reportCaughtError } from '@/lib/reportCaughtError';
 import { AttachmentPicker, type Attachment } from '@/components/post/AttachmentPicker';
 import { useToast } from '@/hooks/use-toast';
 
@@ -138,6 +139,7 @@ export default function Messages() {
         });
       } catch (error) {
         console.error('Failed to mark messages as seen', error);
+        reportCaughtError(error, { action: 'mark_messages_seen', conversationId: activeConvId });
       }
     };
 

@@ -16,6 +16,7 @@ import { useSocketConnection } from '@/hooks/useSocket';
 import { apiFetch, apiUrl, getApiErrorMessage, getStoredToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useT } from '@/lib/i18n';
+import { reportCaughtError } from '@/lib/reportCaughtError';
 import { StreakChip } from '@/components/profile/StreakWidget';
 import { StoriesRow } from '@/components/sparks/StoriesRow';
 import { StoryViewer } from '@/components/sparks/StoryViewer';
@@ -571,6 +572,7 @@ function AuthenticatedHome() {
         setNewPostsAvailable(Array.isArray(data.posts) ? data.posts.length : 0);
       } catch (error) {
         console.error('[home] new-post polling failed', error);
+        reportCaughtError(error, { action: 'poll_new_posts' });
       }
     };
     const interval = window.setInterval(() => void pollForNewPosts(), 30_000);

@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { captureBrowserException } from "@/lib/sentryClient";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 
@@ -20,6 +21,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: { componentStack: string }) {
+    captureBrowserException(error, { extra: { componentStack: info.componentStack } });
     console.error("[ErrorBoundary] Unhandled render error", {
       name: error.name,
       message: error.message,

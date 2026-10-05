@@ -25,6 +25,8 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+await initSentry();
+
 const dbReady = await testConnection();
 if (!dbReady) {
   logger.error("Database connection failed on startup - exiting");
@@ -52,7 +54,6 @@ setupSocket(httpServer);
 
 startWorker();
 startScheduling();
-void initSentry();
 startDailyDigest();
 startAnomalyMonitor();
 

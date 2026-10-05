@@ -12,6 +12,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@sentry/node": "^11.4.0",
     "@types/multer": "^2.2.0",
     "@upstash/redis": "^1.38.0",
     "@workspace/api-zod": "workspace:*",
