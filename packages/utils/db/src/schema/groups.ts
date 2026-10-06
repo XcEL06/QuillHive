@@ -80,6 +80,19 @@ export const groupJoinRequestsTable = pgTable("group_join_requests", {
   requestUnique: uniqueIndex("group_join_requests_group_user_unique").on(t.groupId, t.userId),
 }));
 
+export const groupInvitesTable = pgTable("group_invites", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull().references(() => groupsTable.id, { onDelete: "cascade" }),
+  invitedByUserId: integer("invited_by_user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  inviteCode: text("invite_code").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+}, (t) => ({
+  inviteCodeUnique: uniqueIndex("group_invites_code_unique").on(t.inviteCode),
+  groupStatusIdx: index("group_invites_group_status_idx").on(t.groupId, t.status),
+}));
+
 export const groupBansTable = pgTable("group_bans", {
   id: serial("id").primaryKey(),
   groupId: integer("group_id").notNull().references(() => groupsTable.id, { onDelete: "cascade" }),
@@ -117,5 +130,6 @@ export type Group = typeof groupsTable.$inferSelect;
 export type InsertGroup = z.infer<typeof insertGroupSchema>;
 export type GroupMember = typeof groupMembersTable.$inferSelect;
 export type GroupJoinRequest = typeof groupJoinRequestsTable.$inferSelect;
+export type GroupInvite = typeof groupInvitesTable.$inferSelect;
 export type GroupBan = typeof groupBansTable.$inferSelect;
 export type GroupPinnedPost = typeof groupPinnedPostsTable.$inferSelect;

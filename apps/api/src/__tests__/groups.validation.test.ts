@@ -13,7 +13,7 @@ vi.mock('@workspace/db', () => ({
   },
 }));
 
-import { canCreateGroupPost, canViewGroupPosts, groupCreateErrorMessage, normalizeGroupCreateInput } from '../routes/groups';
+import { canCreateGroupPost, getGroupJoinAction, canViewGroupPosts, groupCreateErrorMessage, normalizeGroupCreateInput } from '../routes/groups';
 
 const baselineGroupsSql = readFileSync(
   fileURLToPath(new URL('../../../../packages/utils/db/drizzle/0000_baseline.sql', import.meta.url)),
@@ -21,6 +21,10 @@ const baselineGroupsSql = readFileSync(
 );
 const communityMigrationSql = readFileSync(
   fileURLToPath(new URL('../../../../packages/utils/db/drizzle/0021_groups_community_model.sql', import.meta.url)),
+  'utf8'
+);
+const privacyInviteMigrationSql = readFileSync(
+  fileURLToPath(new URL('../../../../packages/utils/db/drizzle/0024_group_privacy_invites.sql', import.meta.url)),
   'utf8'
 );
 
@@ -32,6 +36,13 @@ describe('Group create validation', () => {
   it('keeps private group posts closed to regular non-members', () => {
     expect(canViewGroupPosts('private', false, false)).toBe(false);
     expect(canViewGroupPosts('private', true, false)).toBe(true);
+    expect(canViewGroupPosts('public', false, false)).toBe(true);
+  });
+
+  it('selects instant, approval, or invite-only group join behavior', () => {
+    expect(getGroupJoinAction('open')).toBe('join');
+    expect(getGroupJoinAction('public')).toBe('request');
+    expect(getGroupJoinAction('private')).toBe('invite');
   });
 
   it('allows creating a private group without a category', () => {
@@ -58,17 +69,16 @@ describe('Group create validation', () => {
     });
   });
 
-  it('supports public, private, and secret community types', () => {
+  it('supports the three privacy states and migrates legacy secret type input', () => {
     expect(normalizeGroupCreateInput({ name: 'Secret Writers', type: 'secret' })).toMatchObject({
-      type: 'secret',
+      type: 'private',
       privacy: 'private',
     });
-    expect(() =>
-      normalizeGroupCreateInput({
-        name: 'Writers Circle',
-        privacy: 'public',
-      })
-    ).toThrow('Group type must be public, private, or secret');
+    expect(normalizeGroupCreateInput({ name: 'Open Writers', privacy: 'open' }).privacy).toBe('open');
+    expect(normalizeGroupCreateInput({ name: 'Public Writers', privacy: 'public' }).privacy).toBe('public');
+    expect(normalizeGroupCreateInput({ name: 'Private Writers', privacy: 'private' }).privacy).toBe('private');
+    expect(normalizeGroupCreateInput({ name: 'Legacy Gated', type: 'private' }).privacy).toBe('public');
+    expect(() => normalizeGroupCreateInput({ name: 'Invalid privacy', privacy: 'secret' })).toThrow('Group privacy must be open, public, or private');
   });
 
   it('limits descriptions and rules to the community spec', () => {
@@ -121,5 +131,13 @@ describe('Group create validation', () => {
     expect(communityMigrationSql).toContain('CREATE TABLE IF NOT EXISTS "group_post_details"');
     expect(communityMigrationSql).toContain('"opportunity_snapshot" jsonb');
     expect(communityMigrationSql).toContain('"is_announcement" boolean NOT NULL DEFAULT false');
+  });
+
+  it('creates expiring private-group invites and migrates legacy privacy safely', () => {
+    expect(privacyInviteMigrationSql).toContain('UPDATE "groups"');
+    expect(privacyInviteMigrationSql).toContain('SET "privacy" = \'public\'');
+    expect(privacyInviteMigrationSql).toContain('SET "type" = \'private\'');
+    expect(privacyInviteMigrationSql).toContain('CREATE TABLE IF NOT EXISTS "group_invites"');
+    expect(privacyInviteMigrationSql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "group_invites_code_unique"');
   });
 });

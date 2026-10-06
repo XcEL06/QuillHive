@@ -14,11 +14,21 @@ export function normalizeGroupCreateInput(input: Record<string, any> = {}) {
   const name = typeof input.name === "string" ? input.name.trim() : "";
   const requestedType = typeof input.type === "string" ? input.type.trim().toLowerCase() : "";
   const legacyPrivacy = typeof input.privacy === "string" ? input.privacy.trim().toLowerCase() : "";
-  const type = requestedType || (legacyPrivacy === "private" ? "private" : legacyPrivacy === "open" || !legacyPrivacy ? "public" : "");
+  if (legacyPrivacy && !["open", "public", "private"].includes(legacyPrivacy)) throw new Error("Group privacy must be open, public, or private");
+  const type = requestedType === "secret" ? "private" : requestedType || (legacyPrivacy === "private" ? "private" : "public");
+  const explicitPrivacy = ["open", "public", "private"].includes(legacyPrivacy);
+  const privacy = explicitPrivacy
+    ? legacyPrivacy
+    : requestedType === "secret"
+      ? "private"
+      : requestedType === "private"
+        ? "public"
+        : "open";
 
   if (!name) throw new Error("Name is required");
   if (name.length > 80) throw new Error("Group name must be 80 characters or fewer");
   if (!["public", "private", "secret"].includes(type)) throw new Error("Group type must be public, private, or secret");
+  if (!["open", "public", "private"].includes(privacy)) throw new Error("Group privacy must be open, public, or private");
 
   const description = typeof input.description === "string" ? input.description.trim() || null : input.description ?? null;
   if (typeof description === "string" && description.length > 280) throw new Error("Description must be 280 characters or fewer");
@@ -47,7 +57,7 @@ export function normalizeGroupCreateInput(input: Record<string, any> = {}) {
     avatarUrl: iconImage,
     coverImage,
     coverUrl: coverImage,
-    privacy: type === "public" ? "open" : "private",
+    privacy,
     type,
     rules: normalizedRules,
     isAnnouncementOnly: Boolean(input.isAnnouncementOnly),
@@ -90,6 +100,12 @@ export function groupCreateErrorMessage(error: unknown): string {
 
 export function canViewGroupPosts(privacy: string, isMember: boolean, isSuperAdmin: boolean): boolean {
   return privacy !== "private" || isMember || isSuperAdmin;
+}
+
+export function getGroupJoinAction(privacy: string): "join" | "request" | "invite" {
+  if (privacy === "private") return "invite";
+  if (privacy === "public") return "request";
+  return "join";
 }
 
 function getViewerId(req: any): number | null {
@@ -171,7 +187,10 @@ router.get("/", async (req, res) => {
       .where(and(eq(groupMembersTable.userId, viewerId), inArray(groupMembersTable.status, ["active", "muted"])))
     : [];
   const memberGroupIds = new Set(secretGroups.map((row) => row.groupId));
-  const visibleGroups = groups.filter((group) => viewer?.role === "super_admin" || group.type !== "secret" || group.creatorId === viewerId || memberGroupIds.has(group.id));
+  const visibleGroups = groups.filter((group) => viewer?.role === "super_admin"
+    || (group.privacy !== "private" && group.type !== "secret")
+    || group.creatorId === viewerId
+    || memberGroupIds.has(group.id));
   const enriched = await Promise.all(visibleGroups.map(g => enrichGroup(g, viewerId)));
 
   return res.json({ groups: enriched, total: enriched.length, page });
@@ -593,6 +612,11 @@ router.post("/:id/join", async (req, res) => {
 
   const existing = await db.select().from(groupMembersTable)
     .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId)));
+  const joinAction = getGroupJoinAction(group.privacy);
+  const isActiveMember = existing.some((member) => ["active", "muted"].includes(member.status));
+  if (joinAction === "invite" && !isActiveMember) {
+    return res.status(403).json({ error: "This group is invite-only" });
+  }
 
   let isMember: boolean;
   if (existing[0]?.status === "pending") {
@@ -606,7 +630,7 @@ router.post("/:id/join", async (req, res) => {
       .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId)));
     isMember = false;
   } else {
-    if (group.privacy === "private") {
+    if (joinAction === "request") {
       const screeningAnswers = req.body?.screeningAnswers && typeof req.body.screeningAnswers === "object" && !Array.isArray(req.body.screeningAnswers)
         ? Object.fromEntries(Object.entries(req.body.screeningAnswers).slice(0, 10).map(([key, value]) => [String(key).slice(0, 80), String(value).slice(0, 500)]))
         : {};

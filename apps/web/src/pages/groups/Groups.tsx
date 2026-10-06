@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2, Send, Share2, MoreHorizontal, Copy, LogOut, UserPlus, CircleDot, MessageSquare, BarChart3, Bold, Italic, List, ListOrdered, ImagePlus, AtSign, Pin, Archive, MessageCircleOff, Flag } from 'lucide-react';
+import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2, Send, Share2, MoreHorizontal, Copy, LogOut, UserPlus, CircleDot, MessageSquare, BarChart3, Bold, Italic, List, ListOrdered, ImagePlus, AtSign, Pin, Archive, MessageCircleOff, Flag, Check, X } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useT } from '@/lib/i18n';
 
@@ -51,7 +51,7 @@ interface GroupView {
   postsCount: number;
   isVerified?: boolean;
   isPromoted?: boolean;
-  privacy?: string;
+  privacy?: 'open' | 'public' | 'private';
   type?: 'public' | 'private' | 'secret';
   slug?: string;
   iconImage?: string | null;
@@ -76,6 +76,16 @@ interface GroupMemberPreview {
   avatarUrl: string | null;
   role: string;
   status: string;
+}
+
+interface JoinRequestPreview {
+  id: number;
+  userId: number;
+  createdAt: string;
+  username: string;
+  displayName: string | null;
+  avatarUrl: string | null;
+  trustScore: number | null;
 }
 
 interface GroupPollData {
@@ -285,14 +295,14 @@ function GroupQuestion({ groupId, postId, question, canChooseAnswer }: {
 function GroupDetail({ id }: { id: number }) {
   const queryClient = useQueryClient();
   const t = useT();
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const { data: group, isLoading: groupLoading, refetch } = useGetGroup(id);
   const { data: postsData, isLoading: postsLoading } = useGetGroupPosts(id, {});
   const { token } = useAuthStore();
   const [myRole, setMyRole] = useState<GroupView['memberRole']>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState({ name: '', description: '', type: 'public', rules: '', coverUrl: '', iconUrl: '', isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false, announcementPolicy: 'admins' });
+  const [settings, setSettings] = useState({ name: '', description: '', privacy: 'open', rules: '', coverUrl: '', iconUrl: '', isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false, announcementPolicy: 'admins' });
   const [composerType, setComposerType] = useState('discussion');
   const [postContent, setPostContent] = useState('');
   const [postTitle, setPostTitle] = useState('');
@@ -306,6 +316,8 @@ function GroupDetail({ id }: { id: number }) {
   const [isPosting, setIsPosting] = useState(false);
   const [pendingPosts, setPendingPosts] = useState<any[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
+  const [joinRequests, setJoinRequests] = useState<JoinRequestPreview[]>([]);
+  const [joinRequestsLoading, setJoinRequestsLoading] = useState(false);
   const [moderationReports, setModerationReports] = useState<Array<{ id: number; targetId: number; reason: string; postTitle: string | null; reporterName: string | null; reporterUsername: string | null; createdAt: string }>>([]);
   const [activeTab, setActiveTab] = useState('feed');
   const [feedMode, setFeedMode] = useState('recent');
@@ -338,7 +350,7 @@ function GroupDetail({ id }: { id: number }) {
     if (!group) return;
     const current = group as GroupView;
     setMyRole(current.memberRole ?? null);
-    setSettings({ name: current.name, description: current.description ?? '', type: current.type ?? (current.privacy === 'private' ? 'private' : 'public'), rules: (current.rules ?? []).join('\n'), coverUrl: current.coverImage ?? current.coverUrl ?? '', iconUrl: current.iconImage ?? current.avatarUrl ?? '', isAnnouncementOnly: current.isAnnouncementOnly ?? false, requireApprovalFirstThree: current.requireApprovalFirstThree ?? false, requireApprovalAll: current.requireApprovalAll ?? false, announcementPolicy: current.announcementPolicy ?? 'admins' });
+    setSettings({ name: current.name, description: current.description ?? '', privacy: current.privacy ?? (current.type === 'secret' ? 'private' : current.type === 'private' ? 'public' : 'open'), rules: (current.rules ?? []).join('\n'), coverUrl: current.coverImage ?? current.coverUrl ?? '', iconUrl: current.iconImage ?? current.avatarUrl ?? '', isAnnouncementOnly: current.isAnnouncementOnly ?? false, requireApprovalFirstThree: current.requireApprovalFirstThree ?? false, requireApprovalAll: current.requireApprovalAll ?? false, announcementPolicy: current.announcementPolicy ?? 'admins' });
   }, [group]);
 
   useEffect(() => {
@@ -378,6 +390,18 @@ function GroupDetail({ id }: { id: number }) {
       .then(response => response.ok ? response.json() : { posts: [] })
       .then(data => setPendingPosts(Array.isArray(data.posts) ? data.posts : []))
       .finally(() => setPendingLoading(false));
+  }, [id, myRole, token]);
+
+  useEffect(() => {
+    if (!token || !['owner', 'admin', 'moderator'].includes(myRole ?? '')) {
+      setJoinRequests([]);
+      return;
+    }
+    setJoinRequestsLoading(true);
+    void apiFetch(`/api/groups/${id}/join-requests`)
+      .then(response => response.ok ? response.json() : { requests: [] })
+      .then(data => setJoinRequests(Array.isArray(data.requests) ? data.requests : []))
+      .finally(() => setJoinRequestsLoading(false));
   }, [id, myRole, token]);
 
   useEffect(() => {
@@ -429,6 +453,16 @@ function GroupDetail({ id }: { id: number }) {
     setPendingPosts(posts => posts.filter(post => post.id !== postId));
     void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'posts'] });
     toast({ title: decision === 'approve' ? 'Post approved' : 'Post rejected' });
+  };
+
+  const reviewJoinRequest = async (requestId: number, decision: 'approve' | 'deny') => {
+    const response = await apiFetch(`/api/groups/${id}/join-requests/${requestId}/${decision}`, { method: 'POST' });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) return toast({ title: 'Could not review join request', description: result?.error ?? 'Please try again.', variant: 'destructive' });
+    setJoinRequests(requests => requests.filter(request => request.id !== requestId));
+    void refetch();
+    void queryClient.invalidateQueries({ queryKey: ['/api/groups'] });
+    toast({ title: decision === 'approve' ? 'Join request approved' : 'Join request denied' });
   };
 
   const reviewGroupReport = async (reportId: number, decision: 'dismiss' | 'remove_post' | 'escalate') => {
@@ -495,6 +529,29 @@ function GroupDetail({ id }: { id: number }) {
     toast({ title: 'Group settings updated' });
     setSettingsOpen(false);
     void refetch();
+  };
+
+  const createGroupInvite = async () => {
+    const response = await apiFetch(`/api/groups/${id}/invites`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expiresInDays: 7 }) });
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.inviteCode) return toast({ title: 'Could not create invite link', description: result?.error ?? 'Please try again.', variant: 'destructive' });
+    const inviteUrl = `${window.location.origin}/g/${groupView.slug || id}?invite=${encodeURIComponent(result.inviteCode)}`;
+    try {
+      await copyTextToClipboard(inviteUrl);
+      toast({ title: 'Invite link copied', description: 'This link expires in seven days and can be used once.' });
+    } catch {
+      toast({ title: 'Invite link created', description: inviteUrl });
+    }
+  };
+
+  const acceptGroupInvite = async (inviteCode: string) => {
+    const response = await apiFetch(`/api/groups/invites/${encodeURIComponent(inviteCode)}/accept`, { method: 'POST' });
+    const result = await response.json().catch(() => null);
+    if (!response.ok) return toast({ title: 'Could not accept invite', description: result?.error ?? 'Please try again.', variant: 'destructive' });
+    setLocation(`/g/${groupView.slug || id}`);
+    void refetch();
+    void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'posts'] });
+    toast({ title: 'You joined the group' });
   };
 
   const performLifecycleAction = async () => {
@@ -612,6 +669,7 @@ function GroupDetail({ id }: { id: number }) {
   if (!group) return <AppLayout><div className="py-20 text-center text-muted-foreground">{t('groups.notFound', 'Group not found')}</div></AppLayout>;
 
   const groupView = group as GroupView;
+  const inviteCode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('invite') : null;
   const allGroupPosts = (postsData?.posts ?? []) as any[];
   const questions = allGroupPosts.filter(post => post.groupDetails?.type === 'question');
   const featuredAnnouncements = allGroupPosts.filter(post => post.groupDetails?.type === 'announcement').slice(0, 3);
@@ -698,7 +756,7 @@ function GroupDetail({ id }: { id: number }) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-serif font-bold">{group.name}</h1>
               {(groupView.isVerified) && <BadgeCheck className="h-5 w-5 text-blue-500" aria-label="Verified community" />}
-              <Badge variant="outline" className="capitalize">{groupView.type ?? (groupView.privacy === 'private' ? 'private' : 'public')}</Badge>
+              <Badge variant="outline">{groupView.privacy === 'private' ? 'Private · invite-only' : groupView.privacy === 'public' ? 'Public · approval required' : 'Open'}</Badge>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span>{groupView.memberCount ?? group.membersCount} members</span>
@@ -707,7 +765,7 @@ function GroupDetail({ id }: { id: number }) {
             </div>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2 pb-1">
-            {group.isMember ? <Button variant="secondary" disabled>Joined</Button> : groupView.hasPendingJoinRequest ? <Button variant="outline" disabled>Request pending</Button> : groupView.type === 'secret' ? <Badge variant="outline">Invite-only</Badge> : <Button onClick={() => toggleJoin({ id })} disabled={isJoining}>{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : groupView.type === 'private' ? 'Request to join' : 'Join group'}</Button>}
+            {group.isMember ? <Button variant="secondary" disabled>Joined</Button> : groupView.hasPendingJoinRequest ? <Button variant="outline" disabled>Request pending</Button> : groupView.privacy === 'private' || groupView.type === 'secret' ? inviteCode ? <Button onClick={() => void acceptGroupInvite(inviteCode)}>Accept invite</Button> : <Badge variant="outline">Invite-only</Badge> : <Button onClick={() => toggleJoin({ id })} disabled={isJoining}>{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button>}
             <Button variant="outline" onClick={() => setInviteOpen(true)} disabled={!group.isMember} className="gap-1.5"><UserPlus className="h-4 w-4" />Invite</Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Community actions"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
@@ -730,6 +788,7 @@ function GroupDetail({ id }: { id: number }) {
                 <TabsTrigger value="polls">Polls</TabsTrigger>
                 <TabsTrigger value="announcements">Announcements</TabsTrigger>
                 {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="pending">Pending{pendingPosts.length ? ` (${pendingPosts.length})` : ''}</TabsTrigger>}
+                {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="join-requests">Join requests{joinRequests.length ? ` (${joinRequests.length})` : ''}</TabsTrigger>}
                 {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="reports">Reports{moderationReports.length ? ` (${moderationReports.length})` : ''}</TabsTrigger>}
               </TabsList>
 
@@ -750,6 +809,7 @@ function GroupDetail({ id }: { id: number }) {
               {activeTab === 'polls' && <h2 className="mb-4 text-sm font-semibold">Active polls</h2>}
               {activeTab === 'announcements' && <h2 className="mb-4 text-sm font-semibold">Announcements</h2>}
               {activeTab === 'pending' && <h2 className="mb-4 text-sm font-semibold">Posts awaiting review</h2>}
+              {activeTab === 'join-requests' && <h2 className="mb-4 text-sm font-semibold">People requesting to join</h2>}
               {activeTab === 'reports' && <h2 className="mb-4 text-sm font-semibold">Reports for group moderators</h2>}
 
               {activeTab === 'feed' && featuredAnnouncements.length > 0 && <section aria-label="Featured announcements" className="mb-5 border-y border-amber-500/40 bg-amber-500/5 py-3">
@@ -804,7 +864,15 @@ function GroupDetail({ id }: { id: number }) {
                 <Button onClick={() => void submitGroupPost()} disabled={isPosting || isUploadingImages || (composerType === 'poll' ? !pollQuestion.trim() || pollOptions.filter(option => option.trim()).length < 2 : composerType === 'question' ? !postTitle.trim() : !editor?.getText().trim())} className="gap-2"><Send className="h-4 w-4" />{isPosting ? 'Publishing...' : 'Publish'}</Button>
               </section>}
 
-              {activeTab === 'reports' ? <div className="divide-y divide-border border-y">
+              {activeTab === 'join-requests' ? joinRequestsLoading ? <div className="space-y-3">{Array.from({ length: 2 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-lg" />)}</div> : <div className="divide-y divide-border border-y">
+                {joinRequests.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No pending join requests.</p> : joinRequests.map(request => <article key={request.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
+                    <div className="min-w-0"><p className="truncate text-sm font-semibold">{request.displayName || request.username}</p><p className="truncate text-xs text-muted-foreground">@{request.username} · requested {new Date(request.createdAt).toLocaleDateString()}</p>{request.trustScore != null && <p className="mt-0.5 text-xs text-muted-foreground">Trust score {request.trustScore}</p>}</div>
+                  </div>
+                  <div className="flex gap-2"><Button size="sm" onClick={() => void reviewJoinRequest(request.id, 'approve')}><Check className="mr-1.5 h-4 w-4" />Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewJoinRequest(request.id, 'deny')}><X className="mr-1.5 h-4 w-4" />Deny</Button></div>
+                </article>)}
+              </div> : activeTab === 'reports' ? <div className="divide-y divide-border border-y">
                 {moderationReports.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No reports need group review.</p> : moderationReports.map(report => <article key={report.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
                   <div className="min-w-0"><p className="text-sm font-semibold">{report.postTitle || `Post #${report.targetId}`}</p><p className="mt-1 text-xs text-muted-foreground">{report.reason.replace(/_/g, ' ')} · reported by {report.reporterName || `@${report.reporterUsername}`} · {new Date(report.createdAt).toLocaleDateString()}</p></div>
                   <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void reviewGroupReport(report.id, 'dismiss')}>Dismiss</Button><Button size="sm" variant="destructive" onClick={() => void reviewGroupReport(report.id, 'remove_post')}>Remove post</Button><Button size="sm" variant="ghost" onClick={() => void reviewGroupReport(report.id, 'escalate')}>Escalate</Button></div>
@@ -820,7 +888,7 @@ function GroupDetail({ id }: { id: number }) {
             <section className="space-y-3 border-b border-border/70 pb-4">
               <h2 className="text-sm font-semibold">About</h2>
               <p className="text-sm leading-relaxed text-muted-foreground">{group.description || 'A community for shared interests and useful conversations.'}</p>
-              <dl className="grid grid-cols-2 gap-2 text-xs"><div><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 font-medium">{group.category}</dd></div><div><dt className="text-muted-foreground">Visibility</dt><dd className="mt-0.5 font-medium capitalize">{groupView.type ?? 'public'}</dd></div></dl>
+              <dl className="grid grid-cols-2 gap-2 text-xs"><div><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 font-medium">{group.category}</dd></div><div><dt className="text-muted-foreground">Access</dt><dd className="mt-0.5 font-medium">{groupView.privacy === 'private' ? 'Invite-only' : groupView.privacy === 'public' ? 'Request to join' : 'Open join'}</dd></div></dl>
               {groupView.tags?.length ? <div className="flex flex-wrap gap-1">{groupView.tags.map(tag => <Badge variant="secondary" key={tag} className="text-[10px]">{tag}</Badge>)}</div> : null}
               <details className="group border-t border-border/60 pt-3">
                 <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium">Community rules <span className="text-muted-foreground group-open:rotate-180">⌄</span></summary>
@@ -857,7 +925,7 @@ function GroupDetail({ id }: { id: number }) {
               <div className="mt-3 space-y-3">
                 <Input value={settings.name} onChange={e => setSettings(s => ({ ...s, name: e.target.value }))} placeholder="Group name" />
                 <Textarea maxLength={280} value={settings.description} onChange={e => setSettings(s => ({ ...s, description: e.target.value }))} placeholder="Description, up to 280 characters" />
-                <Select value={settings.type} onValueChange={type => setSettings(s => ({ ...s, type }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(groupView.type === 'public' || user?.role === 'super_admin') && <SelectItem value="public">Public</SelectItem>}<SelectItem value="private">Private</SelectItem><SelectItem value="secret">Secret</SelectItem></SelectContent></Select>
+                <div><Label>Group privacy</Label><Select value={settings.privacy} onValueChange={privacy => setSettings(s => ({ ...s, privacy }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="private">Private</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-muted-foreground">{settings.privacy === 'open' ? 'Anyone can find and join immediately.' : settings.privacy === 'public' ? 'Anyone can find the group and request to join; moderators approve requests.' : 'Only people with a valid invite can join.'}</p></div>
                 <Textarea value={settings.rules} onChange={e => setSettings(s => ({ ...s, rules: e.target.value }))} placeholder="Up to five rules, one per line" />
                 <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.isAnnouncementOnly} onChange={e => setSettings(s => ({ ...s, isAnnouncementOnly: e.target.checked }))} />Announcement-only</label>
                 <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalFirstThree} onChange={e => setSettings(s => ({ ...s, requireApprovalFirstThree: e.target.checked, requireApprovalAll: false }))} />Require approval for each member's first 3 posts</label>
@@ -887,11 +955,11 @@ function GroupDetail({ id }: { id: number }) {
       </Dialog>
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Invite to {group.name}</DialogTitle></DialogHeader>
-          <Input value={inviteSearch} onChange={event => setInviteSearch(event.target.value)} placeholder="Find someone by name or username" />
-          <div className="max-h-64 space-y-1 overflow-y-auto">
-            {inviteUsers.map(candidate => <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-muted/60"><div className="min-w-0"><p className="truncate text-sm font-medium">{candidate.displayName || candidate.username}</p><p className="truncate text-xs text-muted-foreground">@{candidate.username}</p></div><Button size="sm" disabled={isInviting} onClick={() => void inviteMember(candidate.id)}>Invite</Button></div>)}
-            {inviteSearch.trim().length >= 2 && inviteUsers.length === 0 && <p className="py-5 text-center text-sm text-muted-foreground">No matching members.</p>}
-          </div>
+          {groupView.privacy === 'private' ? <div className="space-y-3"><p className="text-sm text-muted-foreground">Create a single-use link that expires in seven days.</p><Button onClick={() => void createGroupInvite()}><Copy className="mr-2 h-4 w-4" />Create invite link</Button></div> : <><Input value={inviteSearch} onChange={event => setInviteSearch(event.target.value)} placeholder="Find someone by name or username" />
+            <div className="max-h-64 space-y-1 overflow-y-auto">
+              {inviteUsers.map(candidate => <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-muted/60"><div className="min-w-0"><p className="truncate text-sm font-medium">{candidate.displayName || candidate.username}</p><p className="truncate text-xs text-muted-foreground">@{candidate.username}</p></div><Button size="sm" disabled={isInviting} onClick={() => void inviteMember(candidate.id)}>Invite</Button></div>)}
+              {inviteSearch.trim().length >= 2 && inviteUsers.length === 0 && <p className="py-5 text-center text-sm text-muted-foreground">No matching members.</p>}
+            </div></>}
         </DialogContent>
       </Dialog>
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
@@ -910,7 +978,7 @@ function GroupsList() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', description: '', category: 'general', type: 'public', coverUrl: '', iconUrl: '', tags: '', rules: '', isAnnouncementOnly: false });
+  const [form, setForm] = useState({ name: '', description: '', category: 'general', privacy: 'open', coverUrl: '', iconUrl: '', tags: '', rules: '', isAnnouncementOnly: false });
   const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   const { data, isLoading } = useGetGroups({ search: search || undefined });
@@ -921,7 +989,7 @@ function GroupsList() {
         void queryClient.invalidateQueries({ queryKey: ['/api/groups'] });
         toast({ title: t('groups.groupCreated', 'Group created!'), description: t('groups.groupCreatedDesc', 'Your community is live.') });
         setCreateOpen(false);
-        setForm({ name: '', description: '', category: 'general', type: 'public', coverUrl: '', iconUrl: '', tags: '', rules: '', isAnnouncementOnly: false });
+        setForm({ name: '', description: '', category: 'general', privacy: 'open', coverUrl: '', iconUrl: '', tags: '', rules: '', isAnnouncementOnly: false });
         if (fileInputRef.current) fileInputRef.current.value = '';
         setLocation(`/g/${(createdGroup as any).slug || createdGroup.id}`);
       },
@@ -1017,7 +1085,7 @@ function GroupsList() {
                     )}
                   </h3>
                   <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                    <Badge variant="outline" className="capitalize">{(group as GroupView).type ?? ((group as GroupView).privacy === 'private' ? 'private' : 'public')}</Badge>
+                    <Badge variant="outline">{(group as GroupView).privacy === 'private' ? 'Private · invite-only' : (group as GroupView).privacy === 'public' ? 'Public · approval required' : 'Open'}</Badge>
                     {(group as GroupView).isPromoted && (
                       <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] uppercase tracking-wider gap-1">
                         <Megaphone className="w-2.5 h-2.5" /> {t('groups.promoted', 'Promoted')}
@@ -1036,13 +1104,17 @@ function GroupsList() {
                       <Link href={`/g/${(group as GroupView).slug || group.id}`}>
                         <Button variant="ghost" size="sm" className="rounded-xl h-8 text-xs">{t('groups.view', 'View')}</Button>
                       </Link>
-                      {(group as GroupView).type !== 'secret' || group.isMember ? <Button
+                      {(group as GroupView).privacy === 'private' || (group as GroupView).type === 'secret' ? group.isMember ? <Button size="sm" disabled className="rounded-xl h-8 text-xs">Joined</Button> : <Badge variant="outline">Invite-only</Badge> : group.isMember ? <Button
+                        size="sm"
+                        disabled
+                        className="rounded-xl h-8 text-xs"
+                      >{t('groups.joined', 'Joined')}</Button> : (group as GroupView).hasPendingJoinRequest ? <Button size="sm" disabled variant="outline" className="rounded-xl h-8 text-xs">Request pending</Button> : <Button
                         size="sm"
                         onClick={() => joinGroup({ id: group.id })}
-                        className={`rounded-xl h-8 text-xs ${group.isMember ? 'bg-secondary text-secondary-foreground' : 'bg-primary text-primary-foreground'}`}
+                        className="rounded-xl h-8 text-xs bg-primary text-primary-foreground"
                       >
-                        {group.isMember ? t('groups.joined', 'Joined') : t('groups.join', '+ Join')}
-                      </Button> : <Badge variant="outline">Invite-only</Badge>}
+                        {(group as GroupView).privacy === 'public' ? 'Request to join' : t('groups.join', '+ Join')}
+                      </Button>}
                     </div>
                   </div>
                 </div>
@@ -1078,15 +1150,16 @@ function GroupsList() {
               {form.coverUrl && <img src={form.coverUrl} alt="Cover preview" className="mt-3 h-28 w-full rounded-xl object-cover border border-border" />}
             </div>
             <div>
-              <Label>Community type</Label>
-              <Select value={form.type} onValueChange={type => setForm(f => ({ ...f, type }))}>
+              <Label>Group privacy</Label>
+              <Select value={form.privacy} onValueChange={privacy => setForm(f => ({ ...f, privacy }))}>
                 <SelectTrigger className="mt-1.5 rounded-xl"><SelectValue /></SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="public">Public</SelectItem>
                   <SelectItem value="private">Private</SelectItem>
-                  <SelectItem value="secret">Secret, invite-only</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="mt-1 text-xs text-muted-foreground">{form.privacy === 'open' ? 'Anyone can find and join immediately.' : form.privacy === 'public' ? 'Anyone can find the group and request to join; moderators approve requests.' : 'Only people with a valid invite can join.'}</p>
             </div>
             <div>
               <Label>Category</Label>
@@ -1107,7 +1180,7 @@ function GroupsList() {
                   name: form.name.trim(),
                   description: form.description || null,
                   category: form.category.trim() || 'general',
-                  type: form.type,
+                  privacy: form.privacy,
                   tags: form.tags.split(',').map(tag => tag.trim()).filter(Boolean).slice(0, 20),
                   rules: form.rules.split('\n').map(rule => rule.trim()).filter(Boolean).slice(0, 5),
                   iconImage: form.iconUrl || null,
