@@ -31,6 +31,11 @@ const FLAG_METADATA: Record<string, { label: string; description: string; catego
     description: "Expose phone verification only when an SMS provider is configured. Off by default.",
     category: "Future",
   },
+  ads_enabled: {
+    label: "Native Feed Ads",
+    description: "Allow configured third-party native ad units in the public Explore feed. Off by default; can be paused without a deploy.",
+    category: "Core",
+  },
 };
 
 export default function AdminFeatureFlags({ token, toast }: AdminProps) {

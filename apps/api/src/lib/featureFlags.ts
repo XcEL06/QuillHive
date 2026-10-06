@@ -26,6 +26,7 @@ export const FEATURE_FLAG_KEYS = [
   "referral_rewards_enabled",
   "identity_verification_enabled",
   "phone_verification_enabled",
+  "ads_enabled",
 ] as const;
 
 export type FeatureFlagKey = (typeof FEATURE_FLAG_KEYS)[number];
@@ -53,6 +54,7 @@ const DEFAULT_FLAGS: Partial<Record<string, boolean>> = {
   referral_rewards_enabled: false,
   identity_verification_enabled: false,
   phone_verification_enabled: false,
+  ads_enabled: false,
 };
 
 interface CacheEntry {

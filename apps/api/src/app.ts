@@ -127,6 +127,7 @@ app.get("/api/features", async (_req, res) => {
       "quick_posts_enabled",
       "registration_open",
       "maintenance_mode",
+      "ads_enabled",
     ] as const;
 
     const result: Record<string, boolean> = {};

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { useGetPosts } from '@workspace/api-client-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
@@ -20,6 +20,8 @@ import { reportCaughtError } from '@/lib/reportCaughtError';
 import { StreakChip } from '@/components/profile/StreakWidget';
 import { StoriesRow } from '@/components/sparks/StoriesRow';
 import { StoryViewer } from '@/components/sparks/StoryViewer';
+import { AdSlot, isAdSenseConfigured } from '@/components/ads/AdSlot';
+import { useFeature } from '@/lib/features';
 
 interface ChecklistItem {
   id: string;
@@ -498,6 +500,8 @@ function AuthenticatedHome() {
     return 'explore';
   })();
   const [feedSource, setFeedSource] = useState<FeedSource>(initialSource);
+  const adsFeatureEnabled = useFeature('ads_enabled');
+  const showFeedAds = feedSource === 'explore' && adsFeatureEnabled && isAdSenseConfigured;
   const feedAlgorithm: FeedAlgorithm = 'algorithmic';
   const [feedPosts, setFeedPosts] = useState<import('@workspace/api-client-react').Post[] | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
@@ -700,8 +704,13 @@ function AuthenticatedHome() {
             </div>
           )}
 
-          {displayPosts.map((post) => (
-            <PostCard key={post.id} post={post} />
+          {displayPosts.map((post, index) => (
+            <Fragment key={post.id}>
+              <PostCard post={post} />
+              {showFeedAds && (index + 1) % 9 === 0 && index + 1 < displayPosts.length && (
+                <AdSlot key={`network-ad-after-${post.id}`} placementId={`home-explore-${post.id}`} />
+              )}
+            </Fragment>
           ))}
         </div>
         </div>
