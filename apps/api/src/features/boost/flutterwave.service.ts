@@ -53,7 +53,10 @@ export async function verifyTransaction(transactionId: string | number): Promise
 export function verifyWebhookSignature(rawBody: string, signature: string): boolean {
   const secretHash = process.env.FLW_WEBHOOK_SECRET ?? process.env.FLW_ENCRYPTION_KEY;
   if (!secretHash) return false;
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(secretHash));
+  const signatureBuffer = Buffer.from(signature);
+  const secretBuffer = Buffer.from(secretHash);
+  if (signatureBuffer.length !== secretBuffer.length) return false;
+  return crypto.timingSafeEqual(signatureBuffer, secretBuffer);
 }
 
 export function generateTxRef(prefix: string): string {
