@@ -148,6 +148,20 @@
       "when": 1791075600000,
       "tag": "0023_group_moderation",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791075600001,
+      "tag": "0024_group_privacy_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791289472053,
+      "tag": "0025_spam_review_flags",
+      "breakpoints": true
     }
   ]
 }

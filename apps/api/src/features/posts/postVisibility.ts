@@ -3,7 +3,9 @@ import { postsTable } from "@workspace/db/schema";
 
 export type SparkVisibility = "public" | "followers" | "private";
 
-export function postVisibilityCondition(viewerId: number | null) {
+export function postVisibilityCondition(viewerId: number | null, isSuperAdmin = false) {
+  if (isSuperAdmin) return sql`TRUE`;
+
   const visibleToViewer = [eq(postsTable.visibility, "public")];
 
   if (viewerId !== null) {

@@ -63,6 +63,8 @@ import { opportunitiesRouter } from "../features/creator-economy/opportunities.r
 import { officialPostsRouter, officialPublicRouter } from "../features/official/officialPosts.routes";
 import { chainsRouter } from "../features/chains/chains.routes";
 import { carouselRouter } from "../features/carousel/carousel.routes";
+import { masterAdminRouter } from "../features/admin/master.routes";
+import { spamReviewRouter } from "../features/admin/spamReview.routes";
 
 const router: IRouter = Router();
 
@@ -92,6 +94,8 @@ router.use("/writing-streaks", writingStreaksRouter);
 router.use("/ai", aiRouter);
 router.use(appreciationsRouter);
 router.use("/admin", adminRouter);
+router.use("/admin/master", masterAdminRouter);
+router.use("/admin/spam-review", spamReviewRouter);
 router.use("/admin/trust", adminTrustRouter);
 router.use("/trust", trustRouter);
 router.use("/topics", topicsRouter);

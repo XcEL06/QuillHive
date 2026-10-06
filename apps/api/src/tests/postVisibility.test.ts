@@ -18,6 +18,13 @@ describe("Spark visibility", () => {
 
     expect(query.sql).toMatch(/author_id.*=\s*\$\d/);
     expect(query.sql).toMatch(/follower_id.*=\s*\$\d/);
-    expect(query.params.filter(value => value === viewerId)).toHaveLength(2);
+    expect(query.params.filter(value => value === viewerId)).toHaveLength(3);
+  });
+
+  it("removes Spark and group visibility predicates for super-admin inspection queries", () => {
+    const query = dialect.sqlToQuery(postVisibilityCondition(42, true));
+
+    expect(query.sql).toBe("TRUE");
+    expect(query.params).toEqual([]);
   });
 });

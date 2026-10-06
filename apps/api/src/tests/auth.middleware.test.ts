@@ -71,6 +71,41 @@ describe("requireAdmin middleware", () => {
     dbMocks.user.authVersion = 0;
   });
 
+  describe("requireSuperAdmin middleware", () => {
+    beforeEach(() => {
+      authMocks.getSessionUserId.mockReturnValue(1);
+      authMocks.getSessionAuthVersion.mockReturnValue(0);
+      authMocks.isTokenBlacklisted.mockResolvedValue(false);
+      dbMocks.user.role = "user";
+      dbMocks.user.isBanned = false;
+      dbMocks.user.authVersion = 0;
+    });
+
+    it("allows only super_admin", async () => {
+      dbMocks.user.role = "super_admin";
+      const { requireSuperAdmin } = await import("../middleware/admin");
+      const req = { headers: { authorization: "Bearer token" } } as unknown as Request;
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
+      const next = vi.fn() as NextFunction;
+
+      await requireSuperAdmin(req, res, next);
+      expect(next).toHaveBeenCalledOnce();
+      expect(res.status).not.toHaveBeenCalled();
+    });
+
+    it.each(["admin", "moderator", "user"])("rejects %s from super-admin routes", async (role) => {
+      dbMocks.user.role = role;
+      const { requireSuperAdmin } = await import("../middleware/admin");
+      const req = { headers: { authorization: "Bearer token" } } as unknown as Request;
+      const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
+      const next = vi.fn() as NextFunction;
+
+      await requireSuperAdmin(req, res, next);
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(next).not.toHaveBeenCalled();
+    });
+  });
+
   it("rejects unauthenticated requests with 401 (requireAdmin calls resolveUser first)", async () => {
     const { requireAdmin } = await import("../middleware/admin");
     const req = {

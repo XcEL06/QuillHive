@@ -126,12 +126,12 @@ function canModerateGroup(role: string | null): boolean {
   return role === "owner" || role === "admin" || role === "moderator";
 }
 
-async function enrichGroup(group: any, viewerId: number | null) {
+async function enrichGroup(group: any, viewerId: number | null, isSuperAdmin = false) {
   const [membersResult] = await db.select({ count: sql<number>`count(*)::int` })
     .from(groupMembersTable).where(and(eq(groupMembersTable.groupId, group.id), inArray(groupMembersTable.status, ["active", "muted"])));
 
   const [postsResult] = await db.select({ count: sql<number>`count(*)::int` })
-    .from(postsTable).where(and(eq(postsTable.groupId, group.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId)));
+    .from(postsTable).where(and(eq(postsTable.groupId, group.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId, isSuperAdmin)));
 
   let isMember = false;
   let memberRole: string | null = null;
@@ -594,7 +594,7 @@ router.get("/:id", async (req, res) => {
     if (!membership || !["active", "muted"].includes(membership.status)) return res.status(404).json({ error: "Group not found" });
   }
 
-  const enriched = await enrichGroup(group, viewerId);
+  const enriched = await enrichGroup(group, viewerId, viewer?.role === "super_admin");
   return res.json(enriched);
 });
 
@@ -681,7 +681,7 @@ router.get("/:id/posts", async (req, res) => {
 
   const posts = await db.select({ post: postsTable, groupDetails: groupPostDetailsTable }).from(postsTable)
     .leftJoin(groupPostDetailsTable, eq(groupPostDetailsTable.postId, postsTable.id))
-    .where(and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId)))
+    .where(and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId, isSuperAdmin)))
     .orderBy(desc(postsTable.createdAt))
     .limit(limit).offset((page - 1) * limit);
 

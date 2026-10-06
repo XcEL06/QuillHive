@@ -7,7 +7,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
-export type AdminTabKey = "dashboard" | "users" | "referrals" | "content" | "groups" | "revenue" | "trust" | "chains" | "scheduled" | "features" | "settings" | "monitoring" | "languages" | "support" | "communications";
+export type AdminTabKey = "dashboard" | "users" | "referrals" | "content" | "groups" | "revenue" | "trust" | "chains" | "scheduled" | "features" | "settings" | "monitoring" | "languages" | "support" | "communications" | "spamReview" | "master";
 export type AdminNavItem = readonly [AdminTabKey, string, React.ComponentType<{ className?: string }>];
 
 interface AdminConsoleShellProps {
