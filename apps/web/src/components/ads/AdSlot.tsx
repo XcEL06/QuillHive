@@ -25,8 +25,9 @@ function loadAdSenseScript(): Promise<void> {
       'script[src*="pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]',
     );
     if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("AdSense script failed to load")), { once: true });
+      // Queueing is safe while the shared script is loading and avoids missing
+      // a load event that fired before this component mounted.
+      resolve();
       return;
     }
 
