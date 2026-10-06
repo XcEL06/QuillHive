@@ -33,6 +33,7 @@ export interface LoginRequest {
 
 export interface User {
   id: number;
+  publicId: string;
   username: string;
   email: string;
   displayName: string;
@@ -82,6 +83,7 @@ export const PostType = {
 
 export interface Post {
   id: number;
+  publicId: string;
   authorId: number;
   author: User;
   /** @nullable */
@@ -238,6 +240,7 @@ export interface SendMessageRequest {
 
 export interface Group {
   id: number;
+  publicId: string;
   name: string;
   /** @nullable */
   description?: string | null;

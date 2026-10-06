@@ -36,7 +36,7 @@ export const getSentRequests = async (req: Request, res: Response) => {
 export const updateRequest = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
-  const id = parseInt(req.params.id);
+  const id = parseInt(req.params.requestId);
   const { status } = req.body;
   if (!["accepted", "rejected"].includes(status)) {
     return res.status(400).json({ error: "status must be accepted or rejected" });
@@ -71,7 +71,7 @@ export const createRoom = async (req: Request, res: Response) => {
 export const updateRoom = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
-  const result = await CollaborationService.updateRoom(viewerId, parseInt(req.params.id), req.body);
+  const result = await CollaborationService.updateRoom(viewerId, parseInt(req.params.roomId), req.body);
   if (result.kind === "missing") return res.status(404).json({ error: "Room not found" });
   if (result.kind === "forbidden") return res.status(403).json({ error: "Forbidden" });
   return res.json(result.room);

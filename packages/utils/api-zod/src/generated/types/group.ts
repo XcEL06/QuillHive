@@ -8,6 +8,7 @@
 
 export interface Group {
   id: number;
+  publicId: string;
   name: string;
   /** @nullable */
   description?: string | null;

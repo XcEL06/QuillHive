@@ -10,6 +10,7 @@ import type { User } from "./user";
 
 export interface Post {
   id: number;
+  publicId: string;
   authorId: number;
   author: User;
   /** @nullable */

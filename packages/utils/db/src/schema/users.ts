@@ -1,9 +1,11 @@
 import { pgTable, text, serial, timestamp, integer, boolean, real, index, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const usersTable = pgTable("users", {
   id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().default(sql`gen_random_uuid()::text`),
   username: text("username").notNull().unique(),
   lastUsernameChangeAt: timestamp("last_username_change_at"),
   email: text("email").notNull().unique(),
@@ -64,7 +66,9 @@ export const usersTable = pgTable("users", {
   referredBy: integer("referred_by"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (t) => ({
+  publicIdUnique: uniqueIndex("users_public_id_unique").on(t.publicId),
+}));
 
 export const followsTable = pgTable("follows", {
   id: serial("id").primaryKey(),
@@ -150,7 +154,7 @@ export const loginEventsTable = pgTable("login_events", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertUserSchema = createInsertSchema(usersTable).omit({ id: true, publicId: true, createdAt: true, updatedAt: true });
 export const insertFollowSchema = createInsertSchema(followsTable).omit({ id: true, createdAt: true });
 export const insertWorkHistorySchema = createInsertSchema(workHistoryTable).omit({ id: true, createdAt: true });
 export const insertEducationHistorySchema = createInsertSchema(educationHistoryTable).omit({ id: true, createdAt: true });

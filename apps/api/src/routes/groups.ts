@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { db } from "@workspace/db";
 import { groupsTable, groupMembersTable, groupJoinRequestsTable, groupBansTable, groupPostDetailsTable, groupPinnedPostsTable, groupActivityLogsTable, postsTable, jobsTable, userTrustScoresTable, commentsTable, reportsTable, usersTable } from "@workspace/db/schema";
 import { eq, and, sql, ilike, desc, inArray, gte } from "drizzle-orm";
@@ -9,6 +10,17 @@ import { postVisibilityCondition } from "../features/posts/postVisibility";
 import { sanitizeRichText } from "../lib/sanitize";
 
 const router = Router();
+router.param("id", async (req: Request, res: Response, next: NextFunction, id: string) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return next();
+  try {
+    const [group] = await db.select({ id: groupsTable.id }).from(groupsTable).where(eq(groupsTable.publicId, id));
+    if (!group) return res.status(404).json({ error: "Group not found" });
+    req.params.id = String(group.id);
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+});
 
 export function normalizeGroupCreateInput(input: Record<string, any> = {}) {
   const name = typeof input.name === "string" ? input.name.trim() : "";

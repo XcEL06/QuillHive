@@ -1,11 +1,26 @@
 import { Router } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
 import * as PostController from "./post.controller";
 import { preventSpam } from "../../middleware/abuseProtection";
 import { validateBody, validateParams, validateQuery } from "../../middleware/validate";
 import { optionalAuth, requireAuth } from "../../middleware/admin";
+import { db } from "@workspace/db";
+import { postsTable } from "@workspace/db/schema";
 
 const idParamsSchema = z.object({ id: z.coerce.number().int().positive() });
+const resolvePostPublicId = async (req: Request, res: Response, next: NextFunction, id: string) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return next();
+  try {
+    const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(eq(postsTable.publicId, id));
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    req.params.id = String(post.id);
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+};
 const listPostsQuerySchema = z.object({
   type: z.string().min(1).max(50).optional(),
   feed: z.string().max(40).optional(),
@@ -58,6 +73,7 @@ const draftBodySchema = z.object({
 });
 
 export const postsRouter = Router();
+postsRouter.param("id", resolvePostPublicId);
 postsRouter.get("/my-drafts", PostController.listMyDrafts);
 postsRouter.post("/draft", validateBody(draftBodySchema), PostController.saveDraft);
 postsRouter.get("/draft/:id", validateParams(idParamsSchema), PostController.getDraft);
@@ -79,6 +95,7 @@ postsRouter.post("/:id/save", validateParams(idParamsSchema), PostController.sav
 postsRouter.delete("/:id/save", validateParams(idParamsSchema), PostController.unsavePost);
 
 export const sparksRouter = Router();
+sparksRouter.param("id", resolvePostPublicId);
 sparksRouter.get("/active", requireAuth, PostController.listRecentSparks);
 sparksRouter.post("/:id/view", requireAuth, validateParams(idParamsSchema), PostController.viewSpark);
 

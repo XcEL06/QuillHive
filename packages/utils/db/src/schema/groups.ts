@@ -1,4 +1,5 @@
 import { pgTable, text, serial, timestamp, integer, boolean, uniqueIndex, jsonb, index } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { usersTable } from "./users";
@@ -6,6 +7,7 @@ import { postsTable } from "./posts";
 
 export const groupsTable = pgTable("groups", {
   id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().default(sql`gen_random_uuid()::text`),
   slug: text("slug").notNull().default(""),
   name: text("name").notNull(),
   description: text("description"),
@@ -32,6 +34,7 @@ export const groupsTable = pgTable("groups", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   slugUnique: uniqueIndex("groups_slug_unique").on(t.slug),
+  publicIdUnique: uniqueIndex("groups_public_id_unique").on(t.publicId),
 }));
 
 export const groupMembersTable = pgTable("group_members", {
@@ -123,7 +126,7 @@ export const groupActivityLogsTable = pgTable("group_activity_logs", {
   groupCreatedIdx: index("group_activity_logs_group_created_idx").on(t.groupId, t.createdAt),
 }));
 
-export const insertGroupSchema = createInsertSchema(groupsTable).omit({ id: true, createdAt: true });
+export const insertGroupSchema = createInsertSchema(groupsTable).omit({ id: true, publicId: true, createdAt: true });
 export const insertGroupMemberSchema = createInsertSchema(groupMembersTable).omit({ id: true, joinedAt: true });
 
 export type Group = typeof groupsTable.$inferSelect;

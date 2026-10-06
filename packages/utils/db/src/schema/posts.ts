@@ -6,6 +6,7 @@ import { usersTable } from "./users";
 
 export const postsTable = pgTable("posts", {
   id: serial("id").primaryKey(),
+  publicId: text("public_id").notNull().default(sql`gen_random_uuid()::text`),
   authorId: integer("author_id").notNull().references(() => usersTable.id),
   title: text("title"),
   titleA: text("title_a"),
@@ -60,6 +61,7 @@ export const postsTable = pgTable("posts", {
   idxPostsIsDeleted: index("idx_posts_is_deleted").on(t.isDeleted),
   idxPostsType: index("idx_posts_type").on(t.type),
   idxPostsScheduledAt: index("idx_posts_scheduled_at").on(t.scheduledAt),
+  publicIdUnique: uniqueIndex("posts_public_id_unique").on(t.publicId),
 }));
 
 export const commentsTable = pgTable("comments", {
@@ -130,7 +132,7 @@ export const savedPostsTable = pgTable("saved_posts", {
   uniqueSavedPost: uniqueIndex("saved_posts_user_post_unique").on(t.userId, t.postId),
 }));
 
-export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true, publicId: true, createdAt: true, updatedAt: true });
 export const insertCommentSchema = createInsertSchema(commentsTable).omit({ id: true, createdAt: true });
 export const insertLikeSchema = createInsertSchema(likesTable).omit({ id: true, createdAt: true });
 export const insertPostShareSchema = createInsertSchema(postSharesTable).omit({ id: true, createdAt: true });

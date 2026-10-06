@@ -794,6 +794,8 @@ components:
       properties:
         id:
           type: integer
+        publicId:
+          type: string
         username:
           type: string
         email:
@@ -823,6 +825,7 @@ components:
           type: boolean
       required:
         - id
+        - publicId
         - username
         - email
         - displayName
@@ -911,6 +914,8 @@ components:
       properties:
         id:
           type: integer
+        publicId:
+          type: string
         authorId:
           type: integer
         author:
@@ -946,16 +951,8 @@ components:
           type: boolean
         isPublished:
           type: boolean
-        visibility:
-          type: string
-          enum: [public, followers, private]
         groupId:
           type: ["integer", "null"]
-        attachments:
-          type: array
-          items:
-            type: object
-            additionalProperties: true
         createdAt:
           type: string
           format: date-time
@@ -964,6 +961,7 @@ components:
           format: date-time
       required:
         - id
+        - publicId
         - authorId
         - author
         - content
@@ -1170,6 +1168,8 @@ components:
       properties:
         id:
           type: integer
+        publicId:
+          type: string
         name:
           type: string
         description:
@@ -1191,6 +1191,7 @@ components:
           format: date-time
       required:
         - id
+        - publicId
         - name
         - category
         - membersCount
