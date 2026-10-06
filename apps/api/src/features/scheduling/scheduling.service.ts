@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { postsTable, usersTable, boostRequestsTable } from "@workspace/db/schema";
 import { and, eq, lte, isNotNull, lt } from "drizzle-orm";
 import { logger } from "../../lib/logger";
+import { runScheduledJob } from "./scheduledJobRunner";
 import { addJob } from "../../lib/queue/queue";
 import { expireHighlights } from "../highlights/highlights.routes";
 import { SPARK_LIFETIME_MS } from "../posts/postExpiry";
@@ -31,7 +32,8 @@ export async function publishDuePosts(): Promise<void> {
     }
     if (duePosts.length > 0) logger.info({ count: duePosts.length }, "Triggered scheduled post publication");
   } catch (err) {
-    logger.error({ err }, "Error in publishDuePosts");
+    logger.warn({ err }, "publishDuePosts attempt failed");
+    throw err;
   }
 }
 
@@ -79,11 +81,12 @@ export async function expireBoostCampaigns(): Promise<void> {
           postId: campaign.postId ?? null,
         });
       } catch (notifyErr) {
-        logger.warn({ err: notifyErr, campaignId: campaign.id }, "Failed to send boost-expired notification");
+        logger.error({ err: notifyErr, campaignId: campaign.id }, "Failed to send boost-expired notification");
       }
     }
   } catch (err) {
-    logger.error({ err }, "Error in expireBoostCampaigns");
+    logger.warn({ err }, "expireBoostCampaigns attempt failed");
+    throw err;
   }
 }
 
@@ -102,7 +105,8 @@ export async function expireOldSparks(): Promise<void> {
       ));
     logger.info({ count: result.rowCount ?? 0 }, "Expired sparks soft-deleted");
   } catch (err) {
-    logger.error({ err }, "Error expiring sparks");
+    logger.warn({ err }, "expireOldSparks attempt failed");
+    throw err;
   }
 }
 
@@ -118,7 +122,8 @@ export async function sendWeeklyDigests(): Promise<void> {
     }
     logger.info({ count: users.length }, "Weekly digest jobs queued");
   } catch (err) {
-    logger.error({ err }, "Error in sendWeeklyDigests");
+    logger.warn({ err }, "sendWeeklyDigests attempt failed");
+    throw err;
   }
 }
 
@@ -174,7 +179,8 @@ async function sendDraftReminders(): Promise<void> {
     }
     logger.info({ count: staleDrafts.length }, "Draft reminders processed");
   } catch (err) {
-    logger.error({ err }, "Error in sendDraftReminders");
+    logger.warn({ err }, "sendDraftReminders attempt failed");
+    throw err;
   }
 }
 
@@ -214,7 +220,8 @@ async function sendStreakMilestoneNudges(): Promise<void> {
     }
     logger.info("Streak milestone nudges processed");
   } catch (err) {
-    logger.error({ err }, "Error in sendStreakMilestoneNudges");
+    logger.warn({ err }, "sendStreakMilestoneNudges attempt failed");
+    throw err;
   }
 }
 
@@ -410,7 +417,9 @@ async function sendWeeklyCreatorDigests(): Promise<void> {
         });
       if (result.ok) sent += 1;
       await new Promise(resolve => setTimeout(resolve, 100));
-    } catch { /* skip this creator on error */ }
+    } catch (err) {
+      logger.error({ err, userId: creator.id, name: "sendWeeklyCreatorDigests" }, "Weekly creator digest failed for user");
+    }
   }
 
   logger.info({ selected: creators.length, sent }, "weekly creator digest complete");
@@ -448,7 +457,9 @@ async function sendNurtureEmails(): Promise<void> {
       });
       if (result.ok) sent += 1;
       await new Promise((r) => setTimeout(r, 80));
-    } catch { /* skip */ }
+    } catch (err) {
+      logger.error({ err, userId: u.id, name: "sendNurtureEmails" }, "Day 3 nurture email failed for user");
+    }
   }
 
   // Day 7 nurture - created 7 days ago (±30 min window)
@@ -480,7 +491,9 @@ async function sendNurtureEmails(): Promise<void> {
       });
       if (result.ok) sent += 1;
       await new Promise((r) => setTimeout(r, 80));
-    } catch { /* skip */ }
+    } catch (err) {
+      logger.error({ err, userId: u.id, name: "sendNurtureEmails" }, "Day 7 nurture email failed for user");
+    }
   }
 
   logger.info({ day3: day3Users.rows.length, day7: day7Users.rows.length, sent }, "nurture email job complete");
@@ -583,14 +596,17 @@ async function sendOpportunityNotifications(): Promise<void> {
         type: "opportunity_insight",
         message,
         category: "growth",
-      }).catch(() => {});
+      }).catch((err) => {
+        logger.error({ err, userId: creator.id, name: "sendOpportunityNotifications" }, "Opportunity notification failed for user");
+      });
     }
 
     if (creators.rows.length > 0) {
       logger.info({ count: creators.rows.length }, "opportunity notifications sent");
     }
   } catch (err) {
-    logger.error({ err }, "sendOpportunityNotifications failed");
+    logger.warn({ err }, "sendOpportunityNotifications attempt failed");
+    throw err;
   }
 }
 
@@ -631,11 +647,14 @@ async function sendProfileViewNotifications(): Promise<void> {
         title: `Your profile was viewed ${thisWeek} time${thisWeek === 1 ? "" : "s"} this week`,
         message: `${thisWeek} creator${thisWeek === 1 ? "" : "s"} checked out your profile this week${trend}. A complete profile gets 3× more interest.`,
         url: `/profile`,
-      }).catch(() => {});
+      }).catch((err) => {
+        logger.error({ err, userId: row.profileUserId, name: "sendProfileViewNotifications" }, "Profile view notification failed for user");
+      });
     }
     logger.info({ count: viewsByUser.length }, "Profile view notifications sent");
   } catch (err) {
-    logger.error({ err }, "Error in sendProfileViewNotifications");
+    logger.warn({ err }, "sendProfileViewNotifications attempt failed");
+    throw err;
   }
 }
 
@@ -685,7 +704,8 @@ async function sendChallengeDeadlineReminders(): Promise<void> {
       logger.info({ challengeId: challenge.id, title: challenge.title }, "Challenge deadline reminders sent");
     }
   } catch (err) {
-    logger.error({ err }, "Error in sendChallengeDeadlineReminders");
+    logger.warn({ err }, "sendChallengeDeadlineReminders attempt failed");
+    throw err;
   }
 }
 
@@ -722,8 +742,13 @@ export async function runScheduledModerationRules(): Promise<void> {
       logger.info({ count: flaggedUsers.rows.length }, "moderation rules applied");
     }
   } catch (err) {
-    logger.error({ err }, "runScheduledModerationRules failed");
+    logger.warn({ err }, "runScheduledModerationRules attempt failed");
+    throw err;
   }
+}
+
+function scheduleJob(jobName: string, job: () => Promise<unknown>): void {
+  void runScheduledJob(jobName, job).catch(() => {});
 }
 
 export function startScheduling(): void {
@@ -734,68 +759,54 @@ export function startScheduling(): void {
     }, 4 * 60 * 1000);
   }
   schedulingTimer = setInterval(() => {
-    publishDuePosts();
-    expireBoostCampaigns().catch(() => {});
+    scheduleJob("publishDuePosts", publishDuePosts);
+    scheduleJob("expireBoostCampaigns", expireBoostCampaigns);
     const now = Date.now();
     if (now - lastSparkExpiry > 60 * 60 * 1000) {
       lastSparkExpiry = now;
     }
     if (now - lastDraftReminder > 12 * 60 * 60 * 1000) {
       lastDraftReminder = now;
-      sendDraftReminders().catch(() => {});
+      scheduleJob("sendDraftReminders", sendDraftReminders);
     }
     if (now - lastStreakNudge > 24 * 60 * 60 * 1000) {
       lastStreakNudge = now;
-      sendStreakMilestoneNudges().catch(() => {});
+      scheduleJob("sendStreakMilestoneNudges", sendStreakMilestoneNudges);
     }
     if (now - lastAffinityUpdate > 24 * 60 * 60 * 1000) {
       lastAffinityUpdate = now;
-      updateUserTopicAffinity().catch((err) => {
-        logger.error({ err }, "userTopicAffinity update failed");
-      });
+      scheduleJob("updateUserTopicAffinity", updateUserTopicAffinity);
     }
     if (now - lastWeeklyDigest > 7 * 24 * 60 * 60 * 1000) {
       lastWeeklyDigest = now;
-      sendWeeklyCreatorDigests().catch((err) => {
-        logger.error({ err }, "weekly digest send failed");
-      });
+      scheduleJob("sendWeeklyCreatorDigests", sendWeeklyCreatorDigests);
     }
     if (now - lastDormantNudge > 24 * 60 * 60 * 1000) {
       lastDormantNudge = now;
-      notifyDormantUsers().catch(() => {});
-      sendNurtureEmails().catch((err) => {
-        logger.error({ err }, "nurture emails failed");
-      });
-      sendOpportunityNotifications().catch((err) => {
-        logger.error({ err }, "opportunity notifications failed");
-      });
-      runScheduledModerationRules().catch((err) => {
-        logger.error({ err }, "scheduled moderation rules failed");
-      });
+      scheduleJob("notifyDormantUsers", notifyDormantUsers);
+      scheduleJob("sendNurtureEmails", sendNurtureEmails);
+      scheduleJob("sendOpportunityNotifications", sendOpportunityNotifications);
+      scheduleJob("runScheduledModerationRules", runScheduledModerationRules);
     }
     // Challenge deadline reminders - checked hourly (24-25h window prevents duplicates)
     if (now - lastChallengeReminder > 60 * 60 * 1000) {
       lastChallengeReminder = now;
-      sendChallengeDeadlineReminders().catch((err) => {
-        logger.error({ err }, "challenge deadline reminders failed");
-      });
+      scheduleJob("sendChallengeDeadlineReminders", sendChallengeDeadlineReminders);
     }
     // Profile view notifications - weekly (7-day guard)
     if (now - lastProfileViewNotif > 7 * 24 * 60 * 60 * 1000) {
       lastProfileViewNotif = now;
-      sendProfileViewNotifications().catch((err) => {
-        logger.error({ err }, "profile view notifications failed");
-      });
+      scheduleJob("sendProfileViewNotifications", sendProfileViewNotifications);
     }
   }, 60_000);
-  publishDuePosts();
+  scheduleJob("publishDuePosts", publishDuePosts);
 
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-  digestTimer = setInterval(() => { sendWeeklyDigests(); }, WEEK_MS);
+  digestTimer = setInterval(() => { scheduleJob("sendWeeklyDigests", sendWeeklyDigests); }, WEEK_MS);
 
   // Highlight cleanup every 5 minutes
-  highlightTimer = setInterval(() => { expireHighlights(); }, 5 * 60_000);
-  expireHighlights();
+  highlightTimer = setInterval(() => { scheduleJob("expireHighlights", async () => { await expireHighlights(); }); }, 5 * 60_000);
+  scheduleJob("expireHighlights", async () => { await expireHighlights(); });
 
   logger.info("Scheduling service started (60s poll, 5m highlights, weekly digest, draft reminders, streak nudges)");
 }
