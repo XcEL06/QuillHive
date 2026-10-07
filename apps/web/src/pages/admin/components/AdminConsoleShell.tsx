@@ -42,14 +42,14 @@ export default function AdminConsoleShell({ groups, activeTab, onSelectTab, curr
   };
 
   const navigation = (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-border/70 px-5 py-5">
         <button onClick={() => setLocation("/")} className="flex items-center gap-3 text-left">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><BookOpen className="h-4 w-4" /></span>
           <span><span className="block text-sm font-semibold tracking-tight">QuillHive</span><span className="block text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Admin console</span></span>
         </button>
       </div>
-      <div className="px-3 py-4">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         <div className="relative mb-4">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Jump to a section" className="h-9 border-border/70 bg-muted/40 pl-9 text-xs" />
