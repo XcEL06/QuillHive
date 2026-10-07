@@ -38,12 +38,12 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
   };
 
   return <>
-    <div className="flex items-center gap-1.5">
-      <Button size={compact ? "sm" : "default"} className="gap-1" onClick={() => void submit("apply")} disabled={sending}>
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
+      <Button size={compact ? "sm" : "default"} className="gap-1 whitespace-normal text-center leading-tight" onClick={() => void submit("apply")} disabled={sending}>
         <Send className="h-3.5 w-3.5" /> Apply
       </Button>
       {externalHref && <a href={externalHref} target={externalHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="text-[10px] text-muted-foreground underline">External application</a>}
-      <Button size={compact ? "sm" : "default"} variant="outline" className="gap-1" onClick={() => setOpen(true)} disabled={sending}>
+      <Button size={compact ? "sm" : "default"} variant="outline" className="gap-1 whitespace-normal text-center leading-tight" onClick={() => setOpen(true)} disabled={sending}>
         <MessageSquare className="h-3.5 w-3.5" /> Apply + message
       </Button>
     </div>

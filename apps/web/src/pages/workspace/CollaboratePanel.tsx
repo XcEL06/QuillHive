@@ -67,7 +67,7 @@ function CollabCard({ req, mode, onAct }: {
 
   return (
     <Card className="p-4">
-      <div className="flex items-start justify-between gap-3 mb-2">
+      <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
         <div className="flex items-center gap-2">
           <Avatar className="h-8 w-8">
             {other?.avatarUrl && <img src={other.avatarUrl} alt="" className="rounded-full object-cover w-full h-full" />}
@@ -87,9 +87,9 @@ function CollabCard({ req, mode, onAct }: {
 
       {req.message && <p className="text-sm text-muted-foreground line-clamp-3 mb-3">{req.message}</p>}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">{new Date(req.createdAt).toLocaleDateString()}</p>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {req.status === "accepted" && (
             <Link href={`/messages?user=${other?.username}`}>
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
@@ -142,8 +142,8 @@ function CommissionCard({ commission, mode, onRespond }: {
             <AvatarFallback className="bg-primary/10 text-primary text-xs">{getInitials(counterpart?.displayName || counterpart?.username || "?")}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2">
-              <div>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0 flex-1 basis-48">
                 <p className="text-xs text-muted-foreground">
                   {mode === "received" ? "From" : "To"}{" "}
                   <Link href={`/profile/${counterpart?.username ?? ""}`} className="font-semibold text-foreground hover:text-primary transition-colors">
@@ -208,7 +208,7 @@ function CommissionCard({ commission, mode, onRespond }: {
                   className="text-sm"
                 />
               )}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => setResponding(v => !v)}>
                   {responding ? <ChevronUp className="w-3 h-3" /> : <MessageSquare className="w-3 h-3" />}
                   {responding ? "Cancel" : "Add response"}

@@ -228,28 +228,32 @@ export function JobsPanel() {
               </Link>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {!j.isActive && <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">Inactive</Badge>}
-                    {j.moderationStatus && j.moderationStatus !== 'published' && (
-                      <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-300">
-                        {j.moderationStatus.replace(/_/g, ' ')}
-                      </Badge>
-                    )}
-                    {isFeatured && (
-                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] gap-0.5">
-                        <Star className="w-2.5 h-2.5 fill-current" /> Featured
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className={`capitalize text-[10px] ${
-                      job.type === 'commission'    ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
-                      job.type === 'collaboration' ? 'bg-violet-500/10 text-violet-600 border-violet-500/20' :
-                                                     'bg-blue-500/10 text-blue-600 border-blue-500/20'
-                    }`}>{job.type}</Badge>
-                    {matchData && <MatchBadge score={matchData.score} />}
-                  </div>
+                <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                  {!j.isActive && <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">Inactive</Badge>}
+                  {j.moderationStatus && j.moderationStatus !== 'published' && (
+                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-300">
+                      {j.moderationStatus.replace(/_/g, ' ')}
+                    </Badge>
+                  )}
+                  {isFeatured && (
+                    <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] gap-0.5">
+                      <Star className="w-2.5 h-2.5 fill-current" /> Featured
+                    </Badge>
+                  )}
+                  <Badge variant="outline" className={`capitalize text-[10px] ${
+                    job.type === 'commission'    ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
+                    job.type === 'collaboration' ? 'bg-violet-500/10 text-violet-600 border-violet-500/20' :
+                                                   'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                  }`}>{job.type}</Badge>
+                  {matchData && <MatchBadge score={matchData.score} />}
+                </div>
+
+                <h4 className="font-semibold text-sm mb-0.5 line-clamp-1">{job.title}</h4>
+                {j.companyName && <p className="text-xs text-muted-foreground">at {j.companyName}</p>}
+
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   {isOwner && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setLocation(`/jobs/post?edit=${job.id}`)}>
                         <Pencil className="w-3.5 h-3.5" /> Edit
                       </Button>
@@ -263,8 +267,6 @@ export function JobsPanel() {
                   <ReportDialog targetType="job" targetId={job.id} label="Report" />
                 </div>
 
-                <h4 className="font-semibold text-sm mb-0.5 line-clamp-1">{job.title}</h4>
-                {j.companyName && <p className="text-xs text-muted-foreground">at {j.companyName}</p>}
                 <p className="text-xs text-muted-foreground mt-1">
                   Posted by {job.author.displayName} · Member since {formatAccountAge(job.author.createdAt)} · Trust: {j.author.trustTier ?? 'new'}
                   {j.author.trustTier === 'new' && (

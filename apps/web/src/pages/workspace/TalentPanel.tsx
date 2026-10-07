@@ -132,19 +132,19 @@ function CreatorCard({ creator, checkoutEnabled, onCheckout }: { creator: Creato
         </div>
       )}
 
-      <div className="mt-auto px-4 md:px-5 pb-4 md:pb-5 flex gap-2">
-        <Link href={`/profile/${user.username}`} className="flex-1">
-          <Button variant="outline" size="sm" className="w-full gap-1 text-xs h-8">
+      <div className="mt-auto px-4 md:px-5 pb-4 md:pb-5 flex flex-wrap gap-2">
+        <Link href={`/profile/${user.username}`} className="min-w-0 flex-1 basis-32">
+          <Button variant="outline" size="sm" className="h-auto min-h-8 w-full whitespace-normal py-2 text-center text-xs leading-tight">
             View Profile <ChevronRight className="w-3 h-3" />
           </Button>
         </Link>
         {checkoutEnabled && listing?.pricingModel === 'fixed' && listing.priceFrom && (
-          <Button size="sm" className="gap-1 text-xs h-8" onClick={() => onCheckout(listing)}>
+          <Button size="sm" className="h-auto min-h-8 gap-1 whitespace-normal py-2 text-xs leading-tight" onClick={() => onCheckout(listing)}>
             <CreditCard className="w-3 h-3" /> Pay
           </Button>
         )}
-        <Link href={`/profile/${user.username}?action=collaborate`}>
-          <Button size="sm" variant="outline" className="gap-1 text-xs h-8">
+        <Link href={`/profile/${user.username}?action=collaborate`} className="min-w-0 flex-1 basis-32">
+          <Button size="sm" variant="outline" className="h-auto min-h-8 w-full gap-1 whitespace-normal py-2 text-center text-xs leading-tight">
             <Briefcase className="w-3 h-3" /> Request collaboration
           </Button>
         </Link>
