@@ -4,6 +4,7 @@ import {
   BarChart3,
   BellOff,
   Bookmark,
+  BookOpen,
   BriefcaseBusiness,
   CheckCircle2,
   CircleDollarSign,
@@ -79,6 +80,7 @@ export type PostOptionAction =
   | 'reopen'
   | 'delete-permanently'
   | 'save'
+  | 'add-to-library'
   | 'copy-link'
   | 'embed'
   | 'share-whatsapp'
@@ -182,6 +184,16 @@ export function PostOptionsMenu({
         ...(post.type !== 'job' ? [{ label: 'Boost Post', action: 'boost' as const, icon: CircleDollarSign }] : []),
       ],
     },
+    ...(post.type !== 'job' ? [{
+      label: 'Distribution',
+      items: [
+        { label: 'Add to Library', action: 'add-to-library' as const, icon: BookOpen },
+        { label: 'Copy Link', action: 'copy-link' as const, icon: Link2 },
+        { label: 'Embed Post', action: 'embed' as const, icon: Code2 },
+        { label: 'Share via WhatsApp', action: 'share-whatsapp' as const, icon: Send },
+        { label: 'Share via Twitter', action: 'share-twitter' as const, icon: Share2 },
+      ],
+    }] : []),
     {
       label: 'Visibility',
       items: [
@@ -204,6 +216,7 @@ export function PostOptionsMenu({
       label: 'Actions',
       items: [
         { label: isSaved ? 'Unsave Post' : 'Save Post', action: 'save', icon: Bookmark },
+        ...(post.type !== 'job' ? [{ label: 'Add to Library', action: 'add-to-library' as const, icon: BookOpen }] : []),
         { label: 'Copy Link', action: 'copy-link', icon: Link2 },
         { label: 'Embed Post', action: 'embed', icon: Code2 },
         { label: 'Share via WhatsApp', action: 'share-whatsapp', icon: Send },

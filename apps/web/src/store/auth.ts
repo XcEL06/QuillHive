@@ -59,6 +59,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
+        if (res.status !== 401) throw new Error(`Session check failed (${res.status})`);
         const refreshToken = getStoredRefreshToken();
         if (refreshToken) {
           const refreshRes = await apiFetch("/api/auth/refresh", {
@@ -66,6 +67,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ refreshToken }),
           });
+          if (!refreshRes.ok && refreshRes.status !== 401) {
+            throw new Error(`Session refresh failed (${refreshRes.status})`);
+          }
           if (refreshRes.ok) {
             const refreshed = await refreshRes.json();
             setStoredToken(refreshed.token);
@@ -74,6 +78,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             const retry = await apiFetch("/api/auth/me", {
               headers: { Authorization: `Bearer ${refreshed.token}` },
             });
+            if (!retry.ok && retry.status !== 401) {
+              throw new Error(`Refreshed session check failed (${retry.status})`);
+            }
             if (retry.ok) {
               const user: AuthUser = await retry.json();
               if (!user) {
@@ -98,12 +105,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       set({ user, isAuthenticated: true, token });
     } catch (error) {
-      console.warn("[auth] Session check unavailable; clearing the incomplete session", error);
-      // A token without a verified user is not an authenticated app state.
-      // Keeping isAuthenticated=true here lets protected components render
-      // and dereference a null user during a transient API failure.
-      clearStoredToken();
-      set({ user: null, token: null, isAuthenticated: false });
+      console.warn("[auth] Session check unavailable; keeping stored credentials for retry", error);
+      set({ user: null, token: getStoredToken(), isAuthenticated: false });
     }
   },
 }));

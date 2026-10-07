@@ -662,7 +662,10 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
   const handlePostOptionAction = async (action: PostOptionAction, optionPost: PostOptionPost) => {
     switch (action) {
       case 'copy-link':
-        handleCopyLink();
+        await handleCopyLink();
+        break;
+      case 'add-to-library':
+        setLocation(`/library/new?postId=${post.id}`);
         break;
       case 'edit':
         setLocation(`/write?edit=${post.id}`);
@@ -673,8 +676,18 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
         break;
       case 'embed': {
         const embedCode = `<iframe src="${apiUrl(`/api/embed/${optionPost.id}`)}" width="100%" height="240" frameborder="0" allowfullscreen></iframe>`;
-        await navigator.clipboard.writeText(embedCode);
+        await copyTextToClipboard(embedCode);
         toast({ title: 'Embed code copied', description: 'Paste it anywhere on the web.' });
+        break;
+      }
+      case 'share-whatsapp':
+      case 'share-twitter': {
+        const url = getPostShareUrl(post.id);
+        const text = post.title?.trim() || 'Check out this post on QuillHive';
+        const shareUrl = action === 'share-whatsapp'
+          ? `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`
+          : `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+        window.open(shareUrl, '_blank', 'noopener,noreferrer');
         break;
       }
       case 'boost':
