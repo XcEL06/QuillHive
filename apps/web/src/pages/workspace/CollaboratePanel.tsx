@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useFeature } from "@/lib/features";
 import {
   Handshake, Check, X, Inbox as InboxIcon, Send, Briefcase,
   DollarSign, Calendar, MessageSquare, ChevronDown, ChevronUp, Loader2,
@@ -230,6 +231,7 @@ function CommissionCard({ commission, mode, onRespond }: {
 
 export function CollaboratePanel() {
   const { toast } = useToast();
+  const creatorIncomeEnabled = useFeature("creator_income_enabled");
   const [collabReceived, setCollabReceived] = useState<CollabRequest[]>([]);
   const [collabSent, setCollabSent] = useState<CollabRequest[]>([]);
   const [commReceived, setCommReceived] = useState<CommissionRequest[]>([]);
@@ -242,8 +244,8 @@ export function CollaboratePanel() {
       const [cr, cs, cmr, cms] = await Promise.all([
         apiFetch("/api/collaboration/requests/received").then(r => r.json()).catch(() => ({ requests: [] })),
         apiFetch("/api/collaboration/requests/sent").then(r => r.json()).catch(() => ({ requests: [] })),
-        apiFetch("/api/services/commissions/received").then(r => r.json()).catch(() => ({ commissions: [] })),
-        apiFetch("/api/services/commissions/sent").then(r => r.json()).catch(() => ({ commissions: [] })),
+        creatorIncomeEnabled ? apiFetch("/api/services/commissions/received").then(r => r.json()).catch(() => ({ commissions: [] })) : Promise.resolve({ commissions: [] }),
+        creatorIncomeEnabled ? apiFetch("/api/services/commissions/sent").then(r => r.json()).catch(() => ({ commissions: [] })) : Promise.resolve({ commissions: [] }),
       ]);
       setCollabReceived(Array.isArray(cr?.requests) ? cr.requests : []);
       setCollabSent(Array.isArray(cs?.requests) ? cs.requests : []);
@@ -254,9 +256,9 @@ export function CollaboratePanel() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [creatorIncomeEnabled]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const handleCollabAct = async (id: number, status: "accepted" | "rejected") => {
     await apiFetch(`/api/collaboration/requests/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
@@ -264,6 +266,7 @@ export function CollaboratePanel() {
   };
 
   const handleCommRespond = async (id: number, status: string, response: string) => {
+    if (!creatorIncomeEnabled) return;
     await apiFetch(`/api/services/commissions/${id}/respond`, {
       method: "PATCH", body: JSON.stringify({ status, response: response.trim() || undefined }),
     });
@@ -272,7 +275,7 @@ export function CollaboratePanel() {
 
   const pendingCollab = collabReceived.filter(r => r.status === "pending").length;
   const pendingComm = commReceived.filter(r => r.status === "pending").length;
-  const totalPending = pendingCollab + pendingComm;
+  const totalPending = pendingCollab + (creatorIncomeEnabled ? pendingComm : 0);
 
   return (
     <div className="space-y-4">
@@ -292,13 +295,13 @@ export function CollaboratePanel() {
           <TabsTrigger value="sent-collab" className="gap-1.5 text-xs">
             <Send className="w-3.5 h-3.5" /> Sent Collabs
           </TabsTrigger>
-          <TabsTrigger value="received-comm" className="gap-1.5 text-xs">
+          {creatorIncomeEnabled && <TabsTrigger value="received-comm" className="gap-1.5 text-xs">
             <Briefcase className="w-3.5 h-3.5" /> Commissions
             {pendingComm > 0 && <span className="bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold">{pendingComm}</span>}
-          </TabsTrigger>
-          <TabsTrigger value="sent-comm" className="gap-1.5 text-xs">
+          </TabsTrigger>}
+          {creatorIncomeEnabled && <TabsTrigger value="sent-comm" className="gap-1.5 text-xs">
             <Send className="w-3.5 h-3.5" /> Sent Commissions
-          </TabsTrigger>
+          </TabsTrigger>}
         </TabsList>
 
         <TabsContent value="received-collab" className="space-y-3">
@@ -323,7 +326,7 @@ export function CollaboratePanel() {
           {collabSent.map(r => <CollabCard key={r.id} req={r} mode="sent" />)}
         </TabsContent>
 
-        <TabsContent value="received-comm" className="space-y-3">
+        {creatorIncomeEnabled && <TabsContent value="received-comm" className="space-y-3">
           {loading && <p className="text-sm text-muted-foreground py-4">Loading…</p>}
           {!loading && commReceived.length === 0 && (
             <Card className="p-10 text-center">
@@ -332,9 +335,9 @@ export function CollaboratePanel() {
             </Card>
           )}
           {commReceived.map(c => <CommissionCard key={c.id} commission={c} mode="received" onRespond={handleCommRespond} />)}
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="sent-comm" className="space-y-3">
+        {creatorIncomeEnabled && <TabsContent value="sent-comm" className="space-y-3">
           {loading && <p className="text-sm text-muted-foreground py-4">Loading…</p>}
           {!loading && commSent.length === 0 && (
             <Card className="p-10 text-center">
@@ -343,7 +346,7 @@ export function CollaboratePanel() {
             </Card>
           )}
           {commSent.map(c => <CommissionCard key={c.id} commission={c} mode="sent" />)}
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </div>
   );

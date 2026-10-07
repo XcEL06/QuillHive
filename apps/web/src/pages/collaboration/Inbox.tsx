@@ -17,6 +17,7 @@ import {
 import { SmartProjectDraft } from "@/components/collaboration/SmartProjectDraft";
 import { getInitials } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { useFeature } from "@/lib/features";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -274,7 +275,15 @@ export default function Inbox() {
   const t = useT();
   const search = useSearch();
   const params = new URLSearchParams(search);
-  const defaultTab = params.get("tab") ?? "received-collab";
+  const creatorIncomeEnabled = useFeature("creator_income_enabled");
+  const requestedTab = params.get("tab") ?? "received-collab";
+  const defaultTab = !creatorIncomeEnabled && requestedTab.endsWith("-comm")
+    ? "received-collab"
+    : requestedTab;
+  const [activeTab, setActiveTab] = useState(defaultTab);
+  useEffect(() => {
+    if (!creatorIncomeEnabled && activeTab.endsWith("-comm")) setActiveTab("received-collab");
+  }, [activeTab, creatorIncomeEnabled]);
 
   // Collaboration state
   const [collabReceived, setCollabReceived] = useState<CollabRequest[]>([]);
@@ -295,23 +304,27 @@ export default function Inbox() {
       const [cr, cs, mr, ms, roomsRes] = await Promise.all([
         apiFetch("/api/collaboration/requests/received"),
         apiFetch("/api/collaboration/requests/sent"),
-        apiFetch("/api/services/commissions/received"),
-        apiFetch("/api/services/commissions/sent"),
+        creatorIncomeEnabled ? apiFetch("/api/services/commissions/received") : Promise.resolve(null),
+        creatorIncomeEnabled ? apiFetch("/api/services/commissions/sent") : Promise.resolve(null),
         apiFetch("/api/collaboration/rooms"),
       ]);
       if (cr.ok) setCollabReceived(await cr.json());
       if (cs.ok) setCollabSent(await cs.json());
-      if (mr.ok) setCommReceived(await mr.json());
-      if (ms.ok) setCommSent(await ms.json());
+      if (mr?.ok) setCommReceived(await mr.json());
+      if (ms?.ok) setCommSent(await ms.json());
+      if (!creatorIncomeEnabled) {
+        setCommReceived([]);
+        setCommSent([]);
+      }
       if (roomsRes.ok) setRooms(await roomsRes.json());
     } catch {
       toast({ title: "Failed to load inbox", variant: "destructive" });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [creatorIncomeEnabled, toast]);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, [load]);
 
   // Collab: accept / reject
   const decideCollab = async (id: number, status: "accepted" | "rejected") => {
@@ -374,6 +387,7 @@ export default function Inbox() {
 
   // Commission: respond
   const respondCommission = async (id: number, status: string, response: string) => {
+    if (!creatorIncomeEnabled) return;
     try {
       const res = await apiFetch(`/api/services/commissions/${id}/respond`, {
         method: "PATCH",
@@ -391,7 +405,7 @@ export default function Inbox() {
 
   const pendingCollab = collabReceived.filter(r => r.status === "pending").length;
   const pendingComm = commReceived.filter(r => r.status === "pending").length;
-  const totalPending = pendingCollab + pendingComm;
+  const totalPending = pendingCollab + (creatorIncomeEnabled ? pendingComm : 0);
 
   return (
     <AppLayout>
@@ -410,11 +424,13 @@ export default function Inbox() {
                 </span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">Collaboration requests and commission inquiries.</p>
+            <p className="text-sm text-muted-foreground">
+              {creatorIncomeEnabled ? "Collaboration requests and commission inquiries." : "Collaboration requests."}
+            </p>
           </div>
         </div>
 
-        <Tabs defaultValue={defaultTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="mb-5 h-auto flex-wrap gap-1">
             <TabsTrigger value="received-collab" className="gap-1.5 text-xs">
               <InboxIcon className="w-3.5 h-3.5" /> Collaborations
@@ -425,15 +441,19 @@ export default function Inbox() {
             <TabsTrigger value="sent-collab" className="gap-1.5 text-xs">
               <Send className="w-3.5 h-3.5" /> Sent Collabs
             </TabsTrigger>
-            <TabsTrigger value="received-comm" className="gap-1.5 text-xs">
-              <Briefcase className="w-3.5 h-3.5" /> Commissions
-              {pendingComm > 0 && (
-                <span className="bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold">{pendingComm}</span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="sent-comm" className="gap-1.5 text-xs">
-              <Send className="w-3.5 h-3.5" /> Sent Commissions
-            </TabsTrigger>
+            {creatorIncomeEnabled && (
+              <>
+                <TabsTrigger value="received-comm" className="gap-1.5 text-xs">
+                  <Briefcase className="w-3.5 h-3.5" /> Commissions
+                  {pendingComm > 0 && (
+                    <span className="bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold">{pendingComm}</span>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="sent-comm" className="gap-1.5 text-xs">
+                  <Send className="w-3.5 h-3.5" /> Sent Commissions
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
 
           {rooms.length > 0 && (
@@ -553,7 +573,7 @@ export default function Inbox() {
           </TabsContent>
 
           {/* ── Received Commissions ── */}
-          <TabsContent value="received-comm" className="space-y-3">
+          {creatorIncomeEnabled && <TabsContent value="received-comm" className="space-y-3">
             {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
             {!loading && commReceived.length === 0 && (
               <Card className="p-10 text-center">
@@ -569,10 +589,10 @@ export default function Inbox() {
             {commReceived.map(c => (
               <CommissionCard key={c.id} commission={c} mode="received" onRespond={respondCommission} />
             ))}
-          </TabsContent>
+          </TabsContent>}
 
           {/* ── Sent Commissions ── */}
-          <TabsContent value="sent-comm" className="space-y-3">
+          {creatorIncomeEnabled && <TabsContent value="sent-comm" className="space-y-3">
             {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
             {!loading && commSent.length === 0 && (
               <Card className="p-10 text-center">
@@ -588,7 +608,7 @@ export default function Inbox() {
             {commSent.map(c => (
               <CommissionCard key={c.id} commission={c} mode="sent" />
             ))}
-          </TabsContent>
+          </TabsContent>}
         </Tabs>
       </div>
 

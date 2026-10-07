@@ -22,6 +22,7 @@ import {
 } from "@workspace/db/schema";
 import { eq, and, gte, count, sql, inArray, desc } from "drizzle-orm";
 import { logger } from "../../lib/logger";
+import { requireCreatorIncomeEnabled } from "../../middleware/creatorIncome";
 
 export const analyticsRouter = Router();
 
@@ -165,7 +166,7 @@ analyticsRouter.get("/weekly-report", requireAuth, async (req: any, res) => {
   return res.json(data);
 });
 
-analyticsRouter.get("/growth-score", requireAuth, async (req: any, res) => {
+analyticsRouter.get("/growth-score", requireCreatorIncomeEnabled, requireAuth, async (req: any, res) => {
   try {
     const data = await getCreatorGrowthScore(req.currentUser.id);
     return res.json(data);
@@ -174,7 +175,7 @@ analyticsRouter.get("/growth-score", requireAuth, async (req: any, res) => {
   }
 });
 
-analyticsRouter.get("/opportunity-readiness", requireAuth, async (req: any, res) => {
+analyticsRouter.get("/opportunity-readiness", requireCreatorIncomeEnabled, requireAuth, async (req: any, res) => {
   try {
     const data = await getOpportunityReadiness(req.currentUser.id);
     return res.json(data);
@@ -193,7 +194,7 @@ analyticsRouter.get("/content-intelligence", requireAuth, async (req: any, res) 
 });
 
 // ── Creator Spending Analytics ────────────────────────────────────────────────
-analyticsRouter.get("/creator/spending", requireAuth, async (req: any, res) => {
+analyticsRouter.get("/creator/spending", requireCreatorIncomeEnabled, requireAuth, async (req: any, res) => {
   try {
     const userId = req.currentUser.id as number;
     const range = (req.query.range as string) ?? "30d";

@@ -12,6 +12,7 @@ import { formatDistanceToNow } from "date-fns";
 import { getStoredToken } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { useT } from "@/lib/i18n";
+import { useFeature } from "@/lib/features";
 import { GrowthScoreCard } from "@/components/dashboard/GrowthScoreCard";
 import { OpportunityPanel } from "@/components/dashboard/OpportunityPanel";
 import { MomentumCard } from "@/components/dashboard/MomentumCard";
@@ -120,6 +121,7 @@ export default function CreatorDashboard() {
   const [recalculating, setRecalculating] = useState(false);
   const { user } = useAuthStore();
   const t = useT();
+  const creatorIncomeEnabled = useFeature("creator_income_enabled");
 
   const fetchTrust = async (token: string | null) => {
     try {
@@ -147,6 +149,7 @@ export default function CreatorDashboard() {
   useEffect(() => {
     const token = getStoredToken();
     const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    if (!creatorIncomeEnabled) setIncome([]);
     Promise.all([
       fetch("/api/analytics/dashboard", { headers: authHeaders })
         .then(async res => {
@@ -159,8 +162,9 @@ export default function CreatorDashboard() {
       fetch("/api/analytics/geography", { headers: authHeaders })
         .then(async res => { if (res.ok) setGeography(await res.json()); })
         .catch(() => {}),
-      fetch("/api/income?limit=5", { headers: authHeaders })
+      (creatorIncomeEnabled ? fetch("/api/income?limit=5", { headers: authHeaders }) : Promise.resolve(null))
         .then(async res => {
+          if (!res) return;
           if (res.status === 403 || res.status === 503) {
             setIncome([]);
           } else if (res.ok) {
@@ -181,7 +185,7 @@ export default function CreatorDashboard() {
         .then(async res => { if (res.ok) setWeeklyReport(await res.json()); })
         .catch(() => {}),
     ]).finally(() => setLoading(false));
-  }, []);
+  }, [creatorIncomeEnabled]);
 
   const totalViews = analytics?.totalViews ?? analytics?.totals?.views ?? 0;
   const totalLikes = analytics?.totalLikes ?? analytics?.totals?.likes ?? 0;
@@ -265,8 +269,8 @@ export default function CreatorDashboard() {
 
             {/* Growth Intelligence Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <GrowthScoreCard />
-              <OpportunityPanel />
+              {creatorIncomeEnabled && <GrowthScoreCard />}
+              {creatorIncomeEnabled && <OpportunityPanel />}
             </div>
 
             {user?.id && <CreatorMomentumHQ userId={user.id} isMe />}
@@ -274,7 +278,7 @@ export default function CreatorDashboard() {
             {/* Profile Strength + Opportunity Signals */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <ProfileStrengthMeter />
-              <OpportunitySignals />
+              {creatorIncomeEnabled && <OpportunitySignals />}
             </div>
 
             {/* Momentum Card */}
@@ -813,7 +817,7 @@ export default function CreatorDashboard() {
             )}
 
             {/* Income Tracker */}
-            <Card className="rounded-2xl border-border/60">
+            {creatorIncomeEnabled && <Card className="rounded-2xl border-border/60">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -845,7 +849,7 @@ export default function CreatorDashboard() {
                   </div>
                 )}
               </CardContent>
-            </Card>
+            </Card>}
 
           </>
         )}

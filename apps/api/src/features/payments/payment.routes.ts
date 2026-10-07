@@ -14,7 +14,7 @@ import { logger } from "../../lib/logger";
 import { db } from "@workspace/db";
 import { usersTable, incomeLogsTable, serviceListingsTable, commissionRequestsTable, creatorEarningsTable, creatorPaymentTransactionsTable, notificationsTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
-import { isFeatureEnabled } from "../../lib/featureFlags";
+import { requireCreatorIncomeEnabled } from "../../middleware/creatorIncome";
 
 interface AuthedReq extends Request {
   currentUser: { id: number; email?: string; displayName?: string };
@@ -32,8 +32,7 @@ const serviceCheckoutSchema = z.object({
 });
 const SUPPORTED_SERVICE_CURRENCIES = ["USD", "NGN", "GHS", "KES", "ZAR", "UGX", "TZS", "RWF", "GBP", "EUR"] as const;
 
-paymentRouter.post("/service/initiate", requireAuth, validateBody(serviceCheckoutSchema), async (req: Request, res: Response) => {
-  if (!(await isFeatureEnabled("service_checkout_enabled"))) return res.status(404).json({ error: "service_checkout_disabled" });
+paymentRouter.post("/service/initiate", requireCreatorIncomeEnabled, requireAuth, validateBody(serviceCheckoutSchema), async (req: Request, res: Response) => {
   if (!isConfigured()) return res.status(503).json({ error: "payment_gateway_not_configured" });
 
   const buyerId = (req as AuthedReq).currentUser.id;
@@ -159,8 +158,7 @@ paymentRouter.get(
 
 const serviceVerifySchema = z.object({ transactionId: z.string().min(1), txRef: z.string().min(1) });
 
-paymentRouter.get("/service/verify", requireAuth, async (req: Request, res: Response) => {
-  if (!(await isFeatureEnabled("service_checkout_enabled"))) return res.status(404).json({ error: "service_checkout_disabled" });
+paymentRouter.get("/service/verify", requireCreatorIncomeEnabled, requireAuth, async (req: Request, res: Response) => {
   if (!isConfigured()) return res.status(503).json({ error: "payment_gateway_not_configured" });
   const parsed = serviceVerifySchema.safeParse(req.query);
   if (!parsed.success) return res.status(400).json({ error: "transactionId and txRef are required" });

@@ -5,8 +5,10 @@ import { incomeLogsTable } from "@workspace/db/schema";
 import { eq, and, desc, gte, lte, sum, sql } from "drizzle-orm";
 import { requireAuth } from "../../middleware/admin";
 import { validateBody, validateParams, validateQuery } from "../../middleware/validate";
+import { requireCreatorIncomeEnabled } from "../../middleware/creatorIncome";
 
 export const incomeRouter = Router();
+incomeRouter.use(requireCreatorIncomeEnabled);
 
 const createIncomeSchema = z.object({
   amount: z.number().positive(),

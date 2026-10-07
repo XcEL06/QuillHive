@@ -22,6 +22,7 @@ import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { CreatorModeToggle } from '@/components/settings/CreatorModeToggle';
 import { SessionsCard } from '@/components/settings/SessionsCard';
 import { BackButton } from '@/components/ui/BackButton';
+import { useFeature } from '@/lib/features';
 import {
   User, Lock, Bell, Palette, Shield, Trash2, Moon, Sun, ChevronRight, Save, Loader2, Eye, Globe, Link2,
   MessageCircle, GraduationCap, Briefcase, Plus, Pencil, X, Upload, Camera, Facebook, Linkedin,
@@ -56,6 +57,7 @@ const COUNTRIES = [
 export default function Settings() {
   usePageTitle('Settings');
   const { user, setUser, logout } = useAuthStore();
+  const creatorIncomeEnabled = useFeature('creator_income_enabled');
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
@@ -1100,18 +1102,20 @@ export default function Settings() {
                         { key: 'library_entry', label: 'New library entries in your topics' },
                       ]},
                       { label: 'Opportunities', types: [
-                        { key: 'commission_request', label: 'Commission requests' },
-                        { key: 'commission_response', label: 'Commission responses' },
+                        ...(creatorIncomeEnabled ? [
+                          { key: 'commission_request', label: 'Commission requests' },
+                          { key: 'commission_response', label: 'Commission responses' },
+                        ] : []),
                         { key: 'collaboration_accepted', label: 'Collaboration accepted' },
                         { key: 'collaboration_declined', label: 'Collaboration declined' },
-                        { key: 'skill_endorsement', label: 'Skill endorsements' },
+                        ...(creatorIncomeEnabled ? [{ key: 'skill_endorsement', label: 'Skill endorsements' }] : []),
                       ]},
                       { label: 'Growth & Milestones', types: [
                         { key: 'milestone', label: 'Milestone reached' },
                         { key: 'achievement', label: 'Achievement unlocked' },
                         { key: 'streak_milestone', label: 'Writing streak milestone' },
                         { key: 'referral_reward', label: 'Referral rewards' },
-                        { key: 'opportunity_nudge', label: 'Opportunity nudges' },
+                        ...(creatorIncomeEnabled ? [{ key: 'opportunity_nudge', label: 'Opportunity nudges' }] : []),
                       ]},
                       { label: 'System', types: [
                         { key: 'system', label: 'System notifications' },

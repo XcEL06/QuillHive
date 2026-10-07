@@ -6,6 +6,7 @@ import { preventSpam } from "../../middleware/abuseProtection";
 import { validateBody } from "../../middleware/validate";
 import { rateLimit } from "../../middleware/rateLimit";
 import { requireAuth } from "../../middleware/admin";
+import { requireCreatorIncomeEnabled } from "../../middleware/creatorIncome";
 
 // Production: 30 login attempts / 15 min, 30 registrations / hr.
 // Development/preview: 6× headroom (applied inside rateLimit middleware).
@@ -113,7 +114,7 @@ usersRouter.patch("/me/settings", validateBody(z.object({
   hireMeEnabled: z.boolean().optional(),
 })), ProfileController.updateSettings);
 usersRouter.post("/me/verification", validateBody(z.object({ kind: z.enum(["phone", "identity"]) })), ProfileController.requestVerification);
-usersRouter.patch("/me/creator", validateBody(creatorSchema), ProfileController.updateMyCreatorProfile);
+usersRouter.patch("/me/creator", requireCreatorIncomeEnabled, validateBody(creatorSchema), ProfileController.updateMyCreatorProfile);
 
 usersRouter.get("/me/profile-strength", ProfileController.getProfileStrength);
 usersRouter.get("/me/profile-viewers", requireAuth, ProfileController.getProfileViewers);
@@ -130,12 +131,12 @@ usersRouter.delete("/me/education/:id", ProfileController.deleteEducation);
 usersRouter.get("/search", ProfileController.searchUsers);
 usersRouter.get("/suggested", requireAuth, ProfileController.getSuggestedUsers);
 usersRouter.get("/recommended", ProfileController.getRecommendedUsers);
-usersRouter.get("/hireable", ProfileController.getHireableCreators);
+usersRouter.get("/hireable", requireCreatorIncomeEnabled, ProfileController.getHireableCreators);
 usersRouter.get("/featured", ProfileController.getFeaturedUsers);
 usersRouter.get("/me/saved", ProfileController.getMySavedPosts);
 usersRouter.get("/:username/portfolio", ProfileController.getUserPortfolio);
 usersRouter.get("/:username", ProfileController.getUserByUsername);
-usersRouter.get("/:username/creator", ProfileController.getCreatorProfileByUsername);
+usersRouter.get("/:username/creator", requireCreatorIncomeEnabled, ProfileController.getCreatorProfileByUsername);
 usersRouter.get("/:username/posts", ProfileController.getUserPosts);
 usersRouter.post("/:username/follow", ProfileController.followUser);
 usersRouter.get("/:username/followers", ProfileController.getFollowers);

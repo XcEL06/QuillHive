@@ -11,8 +11,10 @@ import {
   userTopicAffinityTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, sql, desc, gt, or } from "drizzle-orm";
+import { requireCreatorIncomeEnabled } from "../../middleware/creatorIncome";
 
 export const opportunitiesRouter = Router();
+opportunitiesRouter.use(requireCreatorIncomeEnabled);
 
 const listQuerySchema = z.object({
   skill: z.string().max(60).optional(),

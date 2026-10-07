@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -7,6 +7,7 @@ import { JobsPanel } from "./JobsPanel";
 import { TalentPanel } from "./TalentPanel";
 import { CollaboratePanel } from "./CollaboratePanel";
 import { BackButton } from "@/components/ui/BackButton";
+import { useFeature } from "@/lib/features";
 
 const WORKSPACE_SAFETY_DISMISSED_KEY = "quillhive_workspace_safety_dismissed";
 
@@ -20,9 +21,14 @@ function hasDismissedSafetyNotice() {
 
 export default function Workspace() {
   const [location] = useLocation();
+  const creatorIncomeEnabled = useFeature("creator_income_enabled");
   const params = new URLSearchParams(location.split("?")[1] ?? "");
   const [tab, setTab] = useState(params.get("tab") ?? "work");
   const [showSafetyNotice, setShowSafetyNotice] = useState(() => !hasDismissedSafetyNotice());
+
+  useEffect(() => {
+    if (!creatorIncomeEnabled && tab === "talent") setTab("work");
+  }, [creatorIncomeEnabled, tab]);
 
   const dismissSafetyNotice = () => {
     try {
@@ -40,7 +46,9 @@ export default function Workspace() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight">Workspace</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Turn your body of work, Trust Score, and availability into your next paid opportunity.
+            {creatorIncomeEnabled
+              ? "Turn your body of work, Trust Score, and availability into your next paid opportunity."
+              : "Find work opportunities and collaborate with other creators."}
           </p>
         </div>
 
@@ -64,17 +72,17 @@ export default function Workspace() {
         )}
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="w-full grid grid-cols-3 mb-6">
+          <TabsList className={`w-full grid ${creatorIncomeEnabled ? "grid-cols-3" : "grid-cols-2"} mb-6`}>
             <TabsTrigger value="work" className="gap-1.5">
               <Briefcase className="w-4 h-4" />
               <span className="hidden sm:inline">Find Opportunities</span>
               <span className="sm:hidden">Work</span>
             </TabsTrigger>
-            <TabsTrigger value="talent" className="gap-1.5">
-              <Users2 className="w-4 h-4" />
-              <span className="hidden sm:inline">Browse People</span>
-              <span className="sm:hidden">Talent</span>
-            </TabsTrigger>
+            {creatorIncomeEnabled && <TabsTrigger value="talent" className="gap-1.5">
+                <Users2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Browse People</span>
+                <span className="sm:hidden">Talent</span>
+              </TabsTrigger>}
             <TabsTrigger value="collaborate" className="gap-1.5">
               <Handshake className="w-4 h-4" />
               <span className="hidden sm:inline">Collaborate</span>
@@ -86,9 +94,7 @@ export default function Workspace() {
             <JobsPanel />
           </TabsContent>
 
-          <TabsContent value="talent">
-            <TalentPanel />
-          </TabsContent>
+          {creatorIncomeEnabled && <TabsContent value="talent"><TalentPanel /></TabsContent>}
 
           <TabsContent value="collaborate">
             <CollaboratePanel />

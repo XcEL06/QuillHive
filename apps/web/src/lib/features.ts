@@ -20,5 +20,12 @@ export function useFeature(flag: string): boolean {
   const flags = useFeatureFlags();
   // Missing flags should keep normal features available, but maintenance is
   // an explicit opt-in switch and must never default to taking the app down.
-  return flags[flag] ?? (flag === "maintenance_mode" || flag === "ai_tools_enabled" || flag === "ads_enabled" ? false : true);
+  return flags[flag] ?? (
+    flag === "maintenance_mode" ||
+    flag === "ai_tools_enabled" ||
+    flag === "ads_enabled" ||
+    flag === "creator_income_enabled"
+      ? false
+      : true
+  );
 }

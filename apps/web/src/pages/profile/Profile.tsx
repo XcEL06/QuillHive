@@ -28,6 +28,7 @@ import { useT } from '@/lib/i18n';
 import { CreatorLevelBadge } from '@/components/trust/CreatorLevelBadge';
 import { BackButton } from '@/components/ui/BackButton';
 import { ReportDialog } from '@/components/report/ReportDialog';
+import { useFeature } from '@/lib/features';
 
 interface CreatorProfile {
   skills: string[]; links: { label: string; url: string }[];
@@ -95,6 +96,7 @@ export default function Profile() {
   const username = profileParams?.username || publicParams?.username || currentUser?.username || '';
   const { toast } = useToast();
   const t = useT();
+  const creatorIncomeEnabled = useFeature('creator_income_enabled');
   const isMe = currentUser?.username === username;
   const token = getStoredToken();
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -188,7 +190,8 @@ export default function Profile() {
   }, [location, isMe, data?.user?.id]);
 
   useEffect(() => {
-    if (data?.user?.username) {
+    let creatorProfileRequestCancelled = false;
+    if (creatorIncomeEnabled && data?.user?.username) {
       fetch(`/api/users/${data.user.username}/endorsements`)
         .then(r => r.ok ? r.json() : { endorsements: [] })
         .then((d: { endorsements: Array<{ skill: string; count: number }> }) => {
@@ -218,10 +221,43 @@ export default function Profile() {
         .then(d => { if (d) setProfileTrust({ creatorLevel: d.creatorLevel }); })
         .catch(() => {});
     }
-    const cp = (data as { creatorProfile?: CreatorProfile })?.creatorProfile;
-    if (cp) setCreatorProfile(cp);
+    if (creatorIncomeEnabled) {
+      const cp = (data as { creatorProfile?: CreatorProfile })?.creatorProfile;
+      if (cp) setCreatorProfile(cp);
+      else if (data?.user?.username) {
+        fetch(`/api/users/${encodeURIComponent(data.user.username)}/creator`)
+          .then(response => {
+            if (!response.ok) throw new Error("Could not load creator profile");
+            return response.json();
+          })
+          .then((profile: CreatorProfile) => {
+            if (!creatorProfileRequestCancelled) {
+              setCreatorProfile({
+                ...profile,
+                skills: profile.skills || [],
+                links: profile.links || [],
+                availableFor: profile.availableFor || [],
+              });
+            }
+          })
+          .catch(error => {
+            if (!creatorProfileRequestCancelled) {
+              toast({
+                title: "Could not load creator profile",
+                description: error instanceof Error ? error.message : "Please try again.",
+                variant: "destructive",
+              });
+            }
+          });
+      }
+    } else {
+      setCreatorProfile({ skills: [], links: [], verified: false, isAvailableForHire: false, availableFor: [] });
+      setEndorsements({});
+      setIsEditCreatorOpen(false);
+    }
 
-  }, [data?.user?.id, data?.user?.username, token]);
+    return () => { creatorProfileRequestCancelled = true; };
+  }, [creatorIncomeEnabled, data?.user?.id, data?.user?.username, token, toast]);
 
   const loadMoreProfilePosts = async () => {
     if (!data?.user?.username || profileContentLoadingMore || !profileContentHasMore) return;
@@ -419,7 +455,7 @@ export default function Profile() {
                 </>
               )}
             </Avatar>
-            {creatorProfile.verified && (
+            {creatorIncomeEnabled && creatorProfile.verified && (
               <Badge className="mb-2 bg-primary/10 text-primary border-primary/30 gap-1.5">
                 <Sparkles className="w-3 h-3" /> {t('profile.verifiedCreator', 'Verified Creator')}
               </Badge>
@@ -432,9 +468,9 @@ export default function Profile() {
                 <Link href="/settings">
                   <Button variant="outline" className="rounded-xl border-border/80">{t('profile.editProfile', 'Edit Profile')}</Button>
                 </Link>
-                <Button variant="outline" onClick={openEditCreator} className="rounded-xl gap-2">
+                {creatorIncomeEnabled && <Button variant="outline" onClick={openEditCreator} className="rounded-xl gap-2">
                   <Pencil className="w-4 h-4" /> {t('profile.creatorProfile', 'Creator Profile')}
-                </Button>
+                </Button>}
                 <Link href="/inbox">
                   <Button variant="outline" className="rounded-xl gap-2">
                     <Handshake className="w-4 h-4" /> {t('profile.collabInbox', 'Collab Inbox')}
@@ -443,7 +479,7 @@ export default function Profile() {
               </>
             ) : (
               <>
-                {creatorProfile.isAvailableForHire && (
+                {creatorIncomeEnabled && creatorProfile.isAvailableForHire && (
                   <Button onClick={handleHireMe} className="rounded-xl gap-2 bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-500/30 font-semibold">
                     <Zap className="w-4 h-4" /> {t('profile.inviteToCollaborate', 'Message about a project')}
                   </Button>
@@ -474,13 +510,13 @@ export default function Profile() {
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl font-serif font-bold text-foreground">{user.displayName}</h1>
             <CreatorLevelBadge level={profileTrust?.creatorLevel} size="sm" />
-            {creatorProfile.isAvailableForHire && (
+            {creatorIncomeEnabled && creatorProfile.isAvailableForHire && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold border border-amber-300 dark:border-amber-700">
                 <Zap className="w-3.5 h-3.5" />
                 {t('profile.openToOpportunities', '⚡ Available for others to find')}
               </span>
             )}
-            {(creatorProfile.availableFor || []).map(af => {
+            {creatorIncomeEnabled && (creatorProfile.availableFor || []).map(af => {
               const opt = AVAILABLE_FOR_OPTIONS.find(o => o.id === af);
               if (!opt) return null;
               return (
@@ -526,7 +562,7 @@ export default function Profile() {
           ) : null}
 
           {/* Skills */}
-          {creatorProfile.skills.length > 0 && (
+          {creatorIncomeEnabled && creatorProfile.skills.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-4">
               {creatorProfile.skills.map(skill => (
                 <div key={skill} className="flex items-center gap-1">
@@ -560,7 +596,7 @@ export default function Profile() {
           )}
 
           {/* Links */}
-          {creatorProfile.links.length > 0 && (
+          {creatorIncomeEnabled && creatorProfile.links.length > 0 && (
             <div className="flex flex-wrap gap-3 mb-4">
               {creatorProfile.links.map((link, i) => (
                 <a key={i} href={link.url} target="_blank" rel="noreferrer"
@@ -571,7 +607,7 @@ export default function Profile() {
             </div>
           )}
 
-          {isMe && creatorProfile.skills.length === 0 && creatorProfile.links.length === 0 && (
+          {creatorIncomeEnabled && isMe && creatorProfile.skills.length === 0 && creatorProfile.links.length === 0 && (
             <button onClick={openEditCreator} className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1.5 mb-4 transition-colors">
               <Plus className="w-3.5 h-3.5" /> {t('profile.addSkillsLinks', 'Add skills and links to your profile')}
             </button>
@@ -721,7 +757,7 @@ export default function Profile() {
       </Dialog>
 
       {/* Edit Creator Profile Modal */}
-      <Dialog open={isEditCreatorOpen} onOpenChange={setIsEditCreatorOpen}>
+      {creatorIncomeEnabled && <Dialog open={isEditCreatorOpen} onOpenChange={setIsEditCreatorOpen}>
         <DialogContent className="sm:max-w-lg rounded-2xl">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl flex items-center gap-2">
@@ -798,7 +834,7 @@ export default function Profile() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
     </AppLayout>
   );
 }

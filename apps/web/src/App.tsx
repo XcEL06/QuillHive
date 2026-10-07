@@ -392,7 +392,7 @@ function Router() {
         <AuthGuard><FeatureRoute flag="series_enabled"><Series /></FeatureRoute></AuthGuard>
       </Route>
       <Route path="/income">
-        <AuthGuard><FeatureRoute flag="income_tracker_enabled"><IncomePage /></FeatureRoute></AuthGuard>
+        <AuthGuard><FeatureRoute flag="creator_income_enabled"><IncomePage /></FeatureRoute></AuthGuard>
       </Route>
       <Route path="/payments/complete">
         <AuthGuard><PaymentComplete /></AuthGuard>
@@ -414,10 +414,10 @@ function Router() {
       </Route>
 
       <Route path="/opportunities/search">
-        <Redirect to="/workspace?tab=talent" />
+        <FeatureRoute flag="creator_income_enabled"><Redirect to="/workspace?tab=talent" /></FeatureRoute>
       </Route>
       <Route path="/opportunities">
-        <Redirect to="/workspace?tab=talent" />
+        <FeatureRoute flag="creator_income_enabled"><Redirect to="/workspace?tab=talent" /></FeatureRoute>
       </Route>
       <Route path="/jobs/post">
         <AuthGuard><PostJob /></AuthGuard>

@@ -3,6 +3,7 @@ import { Link } from 'wouter';
 import { getStoredToken } from '@/lib/api';
 import { CheckCircle2, Circle, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useFeature } from '@/lib/features';
 
 type StrengthItem = {
   label: string;
@@ -33,8 +34,10 @@ function getScoreColor(score: number) {
 export function ProfileStrengthMeter() {
   const [data, setData] = useState<StrengthData | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const creatorIncomeEnabled = useFeature('creator_income_enabled');
 
   useEffect(() => {
+    setData(null);
     const token = getStoredToken();
     fetch('/api/users/me/profile-strength', {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -42,12 +45,19 @@ export function ProfileStrengthMeter() {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setData(d); })
       .catch(() => {});
-  }, []);
+  }, [creatorIncomeEnabled]);
 
   if (!data) return null;
 
+  const monetizationKeys = ['skills', 'endorsed', 'service', 'links', 'hire'];
+  const missing = creatorIncomeEnabled
+    ? data.missing
+    : data.missing.filter(item => !monetizationKeys.includes(item.key));
+  const completed = creatorIncomeEnabled
+    ? data.completed
+    : data.completed.filter(item => !monetizationKeys.includes(item.key));
   const colors = getScoreColor(data.score);
-  const visibleMissing = showAll ? data.missing : data.missing.slice(0, 3);
+  const visibleMissing = showAll ? missing : missing.slice(0, 3);
   const circumference = 2 * Math.PI * 36;
   const dashOffset = circumference - (data.score / 100) * circumference;
 
@@ -79,14 +89,14 @@ export function ProfileStrengthMeter() {
           </div>
           <p className={`text-sm font-medium ${colors.text} mb-1`}>{data.levelLabel}</p>
           <p className="text-xs text-muted-foreground">
-            {data.missing.length === 0
+            {missing.length === 0
               ? 'Your profile is fully optimised!'
-              : `${data.missing.length} item${data.missing.length !== 1 ? 's' : ''} left to maximise visibility`}
+              : `${missing.length} item${missing.length !== 1 ? 's' : ''} left to maximise visibility`}
           </p>
         </div>
       </div>
 
-      {data.missing.length > 0 && (
+      {missing.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Next steps</p>
           <div className="space-y-1.5">
@@ -105,29 +115,29 @@ export function ProfileStrengthMeter() {
               </Link>
             ))}
           </div>
-          {data.missing.length > 3 && (
+          {missing.length > 3 && (
             <Button
               variant="ghost"
               size="sm"
               className="w-full text-xs gap-1 h-8 text-muted-foreground hover:text-foreground"
               onClick={() => setShowAll(v => !v)}
             >
-              {showAll ? <><ChevronUp className="w-3.5 h-3.5" /> Show less</> : <><ChevronDown className="w-3.5 h-3.5" /> {data.missing.length - 3} more steps</>}
+              {showAll ? <><ChevronUp className="w-3.5 h-3.5" /> Show less</> : <><ChevronDown className="w-3.5 h-3.5" /> {missing.length - 3} more steps</>}
             </Button>
           )}
         </div>
       )}
 
-      {data.completed.length > 0 && (
+      {completed.length > 0 && (
         <details className="group">
           <summary className="text-xs font-semibold text-muted-foreground uppercase tracking-wider cursor-pointer select-none list-none flex items-center gap-1">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            {data.completed.length} completed
+            {completed.length} completed
             <ChevronDown className="w-3 h-3 ml-auto group-open:hidden" />
             <ChevronUp className="w-3 h-3 ml-auto hidden group-open:block" />
           </summary>
           <div className="mt-1.5 space-y-1">
-            {data.completed.map(item => (
+            {completed.map(item => (
               <div key={item.key} className="flex items-center gap-2.5 px-2.5 py-1.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
                 <span className="text-sm text-muted-foreground line-through">{item.label}</span>

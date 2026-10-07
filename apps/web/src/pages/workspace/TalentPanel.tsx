@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link } from 'wouter';
 import { getStoredToken } from '@/lib/api';
-import { useFeatureFlags } from '@/lib/features';
+import { useFeature } from '@/lib/features';
 import { useToast } from '@/hooks/use-toast';
 import { getInitials } from '@/lib/utils';
 import {
@@ -174,8 +174,7 @@ function CreatorCardSkeleton() {
 export function TalentPanel() {
   const { toast } = useToast();
   const token = getStoredToken();
-  const featureFlags = useFeatureFlags();
-  const checkoutEnabled = featureFlags.service_checkout_enabled === true;
+  const checkoutEnabled = useFeature('creator_income_enabled');
 
   const [creators, setCreators] = useState<Creator[]>([]);
   const [total, setTotal] = useState(0);

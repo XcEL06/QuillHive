@@ -33,6 +33,7 @@ import { recordSignup } from "../../lib/alertEngine";
 import { visiblePostExpiryCondition } from "../posts/postExpiry";
 import { postVisibilityCondition } from "../posts/postVisibility";
 import { consumeInvite } from "../invites/invites.routes";
+import { isFeatureEnabled } from "../../lib/featureFlags";
 import { sendEmail } from "../email/email.service";
 import { welcomeEmailHtml, welcomeEmailText } from "../email/email.templates";
 import { getRedis } from "../../lib/redis";
@@ -649,7 +650,8 @@ export const getUserByUsername = async (req: Request, res: Response) => {
     .orderBy(desc(postsTable.createdAt))
     .limit(6);
 
-  const creatorProfile = await getCreatorProfile(profileUser.id);
+  const creatorIncomeEnabled = await isFeatureEnabled("creator_income_enabled");
+  const creatorProfile = creatorIncomeEnabled ? await getCreatorProfile(profileUser.id) : null;
 
   return res.json({
     user: userWithCounts,
@@ -1266,14 +1268,21 @@ export const getProfileStrength = async (req: Request, res: Response) => {
     serviceListingsTable,
   } = await import("@workspace/db/schema");
   const { count: drizzleCount } = await import("drizzle-orm");
+  const creatorIncomeEnabled = await isFeatureEnabled("creator_income_enabled");
 
   const [portfolioRow, endorsementRow, creatorRow, servicesRow] = await Promise.all([
     db.select({ count: drizzleCount() }).from(portfolioItemsTable).where(eq(portfolioItemsTable.userId, userId)),
-    db.select({ count: drizzleCount() }).from(skillEndorsementsTable).where(eq(skillEndorsementsTable.toUserId, userId)),
-    db.select({ skills: creatorProfilesTable.skills, links: creatorProfilesTable.links, isAvailableForHire: creatorProfilesTable.isAvailableForHire })
-      .from(creatorProfilesTable).where(eq(creatorProfilesTable.userId, userId)).limit(1),
-    db.select({ count: drizzleCount() }).from(serviceListingsTable)
-      .where(and(eq(serviceListingsTable.creatorId, userId), eq(serviceListingsTable.isActive, true))),
+    creatorIncomeEnabled
+      ? db.select({ count: drizzleCount() }).from(skillEndorsementsTable).where(eq(skillEndorsementsTable.toUserId, userId))
+      : Promise.resolve([]),
+    creatorIncomeEnabled
+      ? db.select({ skills: creatorProfilesTable.skills, links: creatorProfilesTable.links, isAvailableForHire: creatorProfilesTable.isAvailableForHire })
+        .from(creatorProfilesTable).where(eq(creatorProfilesTable.userId, userId)).limit(1)
+      : Promise.resolve([]),
+    creatorIncomeEnabled
+      ? db.select({ count: drizzleCount() }).from(serviceListingsTable)
+        .where(and(eq(serviceListingsTable.creatorId, userId), eq(serviceListingsTable.isActive, true)))
+      : Promise.resolve([]),
   ]);
 
   const portfolioCount = Number(portfolioRow[0]?.count ?? 0);
@@ -1296,11 +1305,13 @@ export const getProfileStrength = async (req: Request, res: Response) => {
     { label: "Location", key: "location", done: !!(user.location), points: 5, category: "basics", tip: "Add your city or country to attract local opportunities.", actionUrl: "/settings" },
     { label: "Social links", key: "social", done: hasSocial, points: 10, category: "social", tip: "Connect at least one social account (Twitter, LinkedIn, Instagram, Facebook).", actionUrl: "/settings" },
     { label: "Portfolio item", key: "portfolio", done: portfolioCount >= 1, points: 10, category: "work", tip: "Add at least one portfolio piece to showcase your best work.", actionUrl: "/profile/" + user.username },
-    { label: "Creator skills", key: "skills", done: skills.length >= 2, points: 5, category: "work", tip: "List your skills so collaborators can find you.", actionUrl: "/profile/" + user.username },
-    { label: "Open for hire", key: "hire", done: !!(user.hireMeEnabled), points: 3, category: "opportunities", tip: "Toggle 'Open for Hire' so clients know you're available.", actionUrl: "/settings" },
-    { label: "Skill endorsement", key: "endorsed", done: endorsementCount >= 1, points: 5, category: "social", tip: "Get endorsed by a peer - collaborate and ask for endorsements.", actionUrl: "/profile/" + user.username },
-    { label: "Service listing", key: "service", done: servicesCount >= 1, points: 5, category: "opportunities", tip: "Add a service to unlock income and booking opportunities.", actionUrl: "/profile/" + user.username },
-    { label: "Creator links", key: "links", done: creatorLinks.length >= 1, points: 2, category: "branding", tip: "Add links to your external work, Gumroad, Patreon, or newsletter.", actionUrl: "/profile/" + user.username },
+    ...(creatorIncomeEnabled ? [
+      { label: "Open for hire", key: "hire", done: !!(user.hireMeEnabled), points: 3, category: "opportunities", tip: "Toggle 'Open for Hire' so clients know you're available.", actionUrl: "/settings" },
+      { label: "Creator skills", key: "skills", done: skills.length >= 2, points: 5, category: "work", tip: "List your skills so collaborators can find you.", actionUrl: "/profile/" + user.username },
+      { label: "Skill endorsement", key: "endorsed", done: endorsementCount >= 1, points: 5, category: "social", tip: "Get endorsed by a peer - collaborate and ask for endorsements.", actionUrl: "/profile/" + user.username },
+      { label: "Service listing", key: "service", done: servicesCount >= 1, points: 5, category: "opportunities", tip: "Add a service to unlock income and booking opportunities.", actionUrl: "/profile/" + user.username },
+      { label: "Creator links", key: "links", done: creatorLinks.length >= 1, points: 2, category: "branding", tip: "Add links to your external work, Gumroad, Patreon, or newsletter.", actionUrl: "/profile/" + user.username },
+    ] : []),
   ] as const;
 
   const totalPoints = items.reduce((s, i) => s + i.points, 0);

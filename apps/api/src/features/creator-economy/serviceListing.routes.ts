@@ -12,10 +12,13 @@ import {
   notificationsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, ilike, or, inArray } from "drizzle-orm";
+import { requireCreatorIncomeEnabled } from "../../middleware/creatorIncome";
 
 export const serviceListingsRouter = Router();
 export const endorsementsRouter = Router();
 export const creatorMarketplaceRouter = Router();
+serviceListingsRouter.use(requireCreatorIncomeEnabled);
+endorsementsRouter.use(requireCreatorIncomeEnabled);
 
 const createListingSchema = z.object({
   title: z.string().min(5).max(120),
