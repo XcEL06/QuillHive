@@ -151,7 +151,7 @@ function GroupPoll({ groupId, postId, poll }: { groupId: number; postId: number;
     })}
     <div className="flex items-center justify-between gap-3">
       <span className="text-xs text-muted-foreground">{totalVotes} votes{ended ? ' · Poll ended' : ''}</span>
-      {!ended && <Button type="button" size="sm" variant="outline" disabled={isVoting || choices.length === 0} onClick={() => void submitVote()}>{isVoting ? 'Saving...' : 'Vote'}</Button>}
+      {!ended && <Button type="button" size="sm" variant="outline" disabled={!token || isVoting || choices.length === 0} onClick={() => void submitVote()}>{isVoting ? 'Saving...' : 'Vote'}</Button>}
     </div>
   </section>;
 }

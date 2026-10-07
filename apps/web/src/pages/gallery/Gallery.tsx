@@ -30,7 +30,7 @@ export default function Gallery() {
 
   const [form, setForm] = useState({ title: '', description: '', imageUrl: '', externalLink: '' });
 
-  const { data, isLoading } = useGetPosts({ type: 'artwork' as any, limit: 50 });
+  const { data, isLoading } = useGetPosts({ type: typeFilter as any, limit: 50 });
 
   const { mutate: createPost, isPending: isUploading } = useCreatePost({
     mutation: {
@@ -58,9 +58,10 @@ export default function Gallery() {
         title: form.title || null,
         content: form.description || '<p>Artwork</p>',
         excerpt: form.description || null,
-        type: 'artwork',
+        type: typeFilter as any,
         imageUrl: form.imageUrl,
-        tags: form.externalLink ? ['gallery'] : ['gallery'],
+        externalUrl: form.externalLink.trim() || null,
+        tags: ['gallery'],
         isPublished: true,
       }
     });
@@ -227,8 +228,8 @@ export default function Gallery() {
                     <Heart className={`w-5 h-5 ${viewPost.isLiked ? 'fill-current' : ''}`} />
                     {viewPost.likesCount}
                   </button>
-                  {viewPost.excerpt?.includes('http') && (
-                    <a href={viewPost.excerpt} target="_blank" rel="noreferrer" className="ml-auto flex items-center gap-1.5 text-sm text-primary hover:underline">
+                  {viewPost.externalUrl && (
+                    <a href={viewPost.externalUrl} target="_blank" rel="noopener noreferrer" className="ml-auto flex items-center gap-1.5 text-sm text-primary hover:underline">
                       <ExternalLink className="w-4 h-4" /> View Project
                     </a>
                   )}

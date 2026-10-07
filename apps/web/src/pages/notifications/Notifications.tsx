@@ -68,10 +68,11 @@ export default function Notifications() {
   const handleDelete = async (id: string) => {
     setDeletingIds(s => new Set([...s, id]));
     try {
-      await fetch(`/api/notifications/${id}`, {
+      const res = await fetch(`/api/notifications/${id}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
+      if (!res.ok) throw new Error('Could not delete notification');
       queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
       queryClient.invalidateQueries({ queryKey: ['unread-count'] });
       queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });

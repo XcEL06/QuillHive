@@ -18,7 +18,7 @@ type IncomeEntry = {
   currency: string;
   source: string;
   description?: string;
-  earnedAt?: string;
+  date: string;
   createdAt: string;
 };
 
@@ -30,6 +30,7 @@ export default function IncomePage() {
   const token = getStoredToken();
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ amount: '', currency: 'USD', source: 'other', description: '', earnedAt: '' });
@@ -38,13 +39,16 @@ export default function IncomePage() {
 
   const fetchIncome = async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const res = await fetch('/api/income', { headers: authHeaders });
-      if (res.ok) {
-        const data = await res.json() as { logs?: IncomeEntry[] } | IncomeEntry[];
-        setEntries(Array.isArray(data) ? data : Array.isArray(data?.logs) ? data.logs : []);
-      }
-    } catch {
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      const data = await res.json() as { logs?: IncomeEntry[] } | IncomeEntry[];
+      setEntries(Array.isArray(data) ? data : Array.isArray(data?.logs) ? data.logs : []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Request failed';
+      setLoadError(message);
+      toast({ title: 'Could not load income', description: message, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -52,9 +56,13 @@ export default function IncomePage() {
 
   useEffect(() => { fetchIncome(); }, []);
 
-  const total = entries.reduce((s, e) => s + e.amount, 0);
-  const bySource: Record<string, number> = {};
-  entries.forEach(e => { bySource[e.source] = (bySource[e.source] ?? 0) + e.amount; });
+  const totalsByCurrency: Record<string, number> = {};
+  const bySource: Record<string, Record<string, number>> = {};
+  entries.forEach(e => {
+    totalsByCurrency[e.currency] = (totalsByCurrency[e.currency] ?? 0) + e.amount;
+    bySource[e.source] ??= {};
+    bySource[e.source][e.currency] = (bySource[e.source][e.currency] ?? 0) + e.amount;
+  });
 
   const handleAdd = async () => {
     const amount = parseFloat(form.amount);
@@ -108,15 +116,21 @@ export default function IncomePage() {
           <Card className="rounded-2xl border-border/60 col-span-2 md:col-span-1">
             <CardContent className="p-5">
               <p className="text-xs text-muted-foreground mb-1">{t('income.totalEarnings', 'Total Earnings')}</p>
-              <p className="text-3xl font-bold text-emerald-600">${total.toFixed(2)}</p>
+              <div className="flex flex-wrap gap-2 text-3xl font-bold text-emerald-600">
+                {Object.entries(totalsByCurrency).map(([currency, amount]) => (
+                  <span key={currency}>{currency} {amount.toFixed(2)}</span>
+                ))}
+              </div>
               <p className="text-xs text-muted-foreground mt-1">{entries.length} {entries.length === 1 ? 'entry' : 'entries'}</p>
             </CardContent>
           </Card>
-          {Object.entries(bySource).slice(0, 4).map(([src, amt]) => (
+          {Object.entries(bySource).slice(0, 4).map(([src, amounts]) => (
             <Card key={src} className="rounded-2xl border-border/60">
               <CardContent className="p-5">
                 <p className="text-xs text-muted-foreground mb-1 capitalize">{src}</p>
-                <p className="text-xl font-bold text-foreground">${amt.toFixed(2)}</p>
+                <p className="text-xl font-bold text-foreground">
+                  {Object.entries(amounts).map(([currency, amount]) => `${currency} ${amount.toFixed(2)}`).join(" · ")}
+                </p>
               </CardContent>
             </Card>
           ))}
@@ -131,7 +145,8 @@ export default function IncomePage() {
           </CardHeader>
           <CardContent>
             {loading && <div className="space-y-2">{[1,2,3].map(i => <div key={i} className="h-14 bg-muted animate-pulse rounded-xl" />)}</div>}
-            {!loading && entries.length === 0 && (
+            {!loading && loadError && <p role="alert" className="text-destructive">{loadError}</p>}
+            {!loading && !loadError && entries.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
                 <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
                 <p className="font-medium">{t('income.empty', 'No income logged yet')}</p>
@@ -150,7 +165,7 @@ export default function IncomePage() {
                       {entry.description && <span className="text-sm text-foreground">{entry.description}</span>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {entry.earnedAt ? new Date(entry.earnedAt).toLocaleDateString() : new Date(entry.createdAt).toLocaleDateString()}
+                      {new Date(entry.date).toLocaleDateString()}
                     </p>
                   </div>
                   <span className="text-base font-bold text-emerald-600">+{entry.currency} {entry.amount.toFixed(2)}</span>

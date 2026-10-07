@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link, useRoute } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { BackButton } from '@/components/ui/BackButton';
 import { Card, CardContent } from '@/components/ui/card';
@@ -7,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { useT } from '@/lib/i18n';
 import { getStoredToken } from '@/lib/api';
@@ -17,10 +17,10 @@ type SeriesItem = {
   id: number;
   title: string;
   description?: string;
-  coverUrl?: string;
-  status: string;
+  coverImage?: string;
   createdAt: string;
   postCount?: number;
+  posts?: Array<{ id: number; title: string }>;
 };
 
 export default function Series() {
@@ -33,21 +33,45 @@ export default function Series() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
+  const [seriesRoute, seriesRouteParams] = useRoute('/series/:id');
+  const [selectedSeries, setSelectedSeries] = useState<SeriesItem | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [listError, setListError] = useState('');
 
   const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
 
   const fetchSeries = async () => {
     setLoading(true);
+    setListError('');
     try {
       const res = await fetch('/api/series', { headers: authHeaders });
-      if (res.ok) setSeriesList(await res.json());
-    } catch {
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      setSeriesList(await res.json());
+    } catch (error) {
+      setListError(error instanceof Error ? error.message : 'Request failed');
+      toast({ title: 'Could not load series', description: error instanceof Error ? error.message : 'Request failed', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchSeries(); }, []);
+  useEffect(() => {
+    if (!seriesRoute || !seriesRouteParams?.id) {
+      if (!seriesRoute) fetchSeries();
+      return;
+    }
+    let cancelled = false;
+    setLoadError('');
+    setSelectedSeries(null);
+    fetch(`/api/series/${seriesRouteParams.id}`)
+      .then(async res => {
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        return res.json();
+      })
+      .then(series => { if (!cancelled) setSelectedSeries(series); })
+      .catch(error => { if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Request failed'); });
+    return () => { cancelled = true; };
+  }, [seriesRoute, seriesRouteParams?.id]);
 
   const handleCreate = async () => {
     if (!title.trim()) { toast({ title: 'Title is required', variant: 'destructive' }); return; }
@@ -65,10 +89,11 @@ export default function Series() {
         setTitle(''); setDescription('');
         toast({ title: 'Series created!' });
       } else {
-        toast({ title: 'Failed to create series', variant: 'destructive' });
+        const message = await res.text();
+        toast({ title: 'Failed to create series', description: message || `Request failed (${res.status})`, variant: 'destructive' });
       }
-    } catch {
-      toast({ title: 'Error creating series', variant: 'destructive' });
+    } catch (error) {
+      toast({ title: 'Error creating series', description: error instanceof Error ? error.message : 'Request failed', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -77,14 +102,41 @@ export default function Series() {
   const handleDelete = async (id: number) => {
     try {
       const res = await fetch(`/api/series/${id}`, { method: 'DELETE', headers: authHeaders });
-      if (res.ok) {
-        setSeriesList(prev => prev.filter(s => s.id !== id));
-        toast({ title: 'Series deleted' });
-      }
-    } catch {
-      toast({ title: 'Failed to delete', variant: 'destructive' });
+      if (!res.ok) throw new Error(`Request failed (${res.status})`);
+      setSeriesList(prev => prev.filter(s => s.id !== id));
+      toast({ title: 'Series deleted' });
+    } catch (error) {
+      toast({ title: 'Failed to delete', description: error instanceof Error ? error.message : 'Request failed', variant: 'destructive' });
     }
   };
+
+  if (seriesRoute) {
+    return (
+      <AppLayout>
+        <div className="max-w-3xl mx-auto px-4 md:px-0 pb-20 pt-4 space-y-6">
+          <BackButton />
+          {loadError ? <p role="alert" className="text-destructive">{loadError}</p> : selectedSeries ? (
+            <>
+              <div>
+                <h1 className="text-3xl font-serif font-bold">{selectedSeries.title}</h1>
+                {selectedSeries.description && <p className="text-muted-foreground mt-2">{selectedSeries.description}</p>}
+              </div>
+              <div className="space-y-3">
+                {selectedSeries.posts?.map(post => (
+                  <Link key={post.id} href={`/post/${post.id}`}>
+                    <Card className="rounded-xl hover:shadow-md transition-shadow cursor-pointer">
+                      <CardContent className="p-4 font-medium">{post.title || 'Untitled post'}</CardContent>
+                    </Card>
+                  </Link>
+                ))}
+                {!selectedSeries.posts?.length && <p className="text-muted-foreground">This series has no published posts yet.</p>}
+              </div>
+            </>
+          ) : <div className="h-28 rounded-2xl bg-muted animate-pulse" />}
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -109,7 +161,8 @@ export default function Series() {
           </div>
         )}
 
-        {!loading && seriesList.length === 0 && (
+        {!loading && listError && <p role="alert" className="text-destructive">{listError}</p>}
+        {!loading && !listError && seriesList.length === 0 && (
           <div className="text-center py-20 text-muted-foreground">
             <BookOpen className="w-12 h-12 mx-auto mb-4 opacity-30" />
             <p className="text-lg font-medium">{t('series.empty', 'No series yet')}</p>
@@ -124,15 +177,14 @@ export default function Series() {
           {seriesList.map(s => (
             <Card key={s.id} className="rounded-2xl border-border/60 hover:shadow-md transition-shadow">
               <CardContent className="p-5 flex items-start gap-4">
-                {s.coverUrl && (
-                  <img src={s.coverUrl} alt={s.title} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+                {s.coverImage && (
+                  <img src={s.coverImage} alt={s.title} className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-semibold text-base truncate">{s.title}</h3>
-                    <Badge variant="secondary" className="text-xs capitalize">{s.status}</Badge>
+                    <Link href={`/series/${s.id}`} className="font-semibold text-base truncate hover:underline">{s.title}</Link>
                     {s.postCount !== undefined && (
-                      <Badge variant="outline" className="text-xs">{s.postCount} {t('series.parts', 'parts')}</Badge>
+                      <span className="text-xs text-muted-foreground">{s.postCount} {t('series.parts', 'parts')}</span>
                     )}
                   </div>
                   {s.description && <p className="text-sm text-muted-foreground line-clamp-2">{s.description}</p>}

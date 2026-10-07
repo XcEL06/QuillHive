@@ -21,9 +21,7 @@ const router = Router();
 router.use(requireAdmin);
 
 const DEFAULT_SETTINGS: Record<string, string> = {
-  messaging_enabled: "true",
   post_creation_enabled: "true",
-  feed_type: "normal",
 };
 
 async function auditLog(adminId: number, action: string, targetType: string, targetId?: number, details?: string) {
@@ -44,7 +42,7 @@ function checkRateLimit(adminId: number, action: string, max = 20): boolean {
   return true;
 }
 
-router.get("/stats", async (req, res) => {
+router.get("/stats", requirePermission("view_analytics"), async (req, res) => {
   const [userCount] = await db.select({ count: count() }).from(usersTable).where(eq(usersTable.isDeleted, false));
   const [postCount] = await db.select({ count: count() }).from(postsTable).where(eq(postsTable.isDeleted, false));
   const [reportCount] = await db.select({ count: count() }).from(reportsTable).where(eq(reportsTable.status, "pending"));
@@ -597,21 +595,34 @@ router.patch("/users/:id/reach", requirePermission("shadowban_user"), async (req
 router.get("/settings", async (req, res) => {
   const rows = await db.select().from(systemSettingsTable);
   const settings: Record<string, string> = { ...DEFAULT_SETTINGS };
-  for (const row of rows) settings[row.key] = row.value;
+  for (const row of rows) {
+    if (Object.hasOwn(DEFAULT_SETTINGS, row.key)) settings[row.key] = row.value;
+  }
   return res.json(settings);
 });
 
 router.patch("/settings", requireSuperAdmin, async (req: any, res) => {
   const allowed = Object.keys(DEFAULT_SETTINGS);
-  const updates = req.body as Record<string, string>;
+  const updates = req.body;
+  if (!updates || typeof updates !== "object" || Array.isArray(updates) || Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "Provide at least one supported setting." });
+  }
   for (const [key, value] of Object.entries(updates)) {
-    if (!allowed.includes(key)) continue;
+    if (!allowed.includes(key)) {
+      return res.status(400).json({ error: `Unsupported setting: ${key}` });
+    }
+    if (typeof value !== "string" || !["true", "false"].includes(value)) {
+      return res.status(400).json({ error: `${key} must be "true" or "false"` });
+    }
     await db.insert(systemSettingsTable).values({ key, value }).onConflictDoUpdate({ target: systemSettingsTable.key, set: { value, updatedAt: new Date() } });
     await auditLog(req.currentUser.id, "setting_changed", "setting", undefined, `${key}=${value}`);
   }
+  await reloadFeatureFlags();
   const rows = await db.select().from(systemSettingsTable);
   const settings: Record<string, string> = { ...DEFAULT_SETTINGS };
-  for (const row of rows) settings[row.key] = row.value;
+  for (const row of rows) {
+    if (Object.hasOwn(DEFAULT_SETTINGS, row.key)) settings[row.key] = row.value;
+  }
   return res.json(settings);
 });
 

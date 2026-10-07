@@ -47,6 +47,7 @@ export const postBodySchema = z.object({
   type: z.enum(VALID_POST_TYPES),
   visibility: z.enum(["public", "followers", "private"]).optional(),
   imageUrl: z.string().url().nullable().optional(),
+  externalUrl: z.string().url().nullable().optional(),
   tags: z.array(z.string().min(1).max(40)).max(12).optional(),
   isPublished: z.boolean().optional(),
   groupId: z.number().int().positive().nullable().optional(),

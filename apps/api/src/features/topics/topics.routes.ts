@@ -156,7 +156,10 @@ topicsRouter.post("/:id/follow", async (req, res) => {
     .from(topicFollowsTable)
     .where(and(eq(topicFollowsTable.userId, viewerId), eq(topicFollowsTable.topicId, topicId)));
 
-  if (existing) return res.json({ message: "Already following" });
+  if (existing) {
+    const [topic] = await db.select({ followerCount: topicsTable.followerCount }).from(topicsTable).where(eq(topicsTable.id, topicId));
+    return res.json({ success: true, isFollowing: true, followerCount: topic?.followerCount ?? 0 });
+  }
 
   await db.insert(topicFollowsTable).values({ userId: viewerId, topicId });
   await db
@@ -164,7 +167,8 @@ topicsRouter.post("/:id/follow", async (req, res) => {
     .set({ followerCount: sql`${topicsTable.followerCount} + 1` })
     .where(eq(topicsTable.id, topicId));
 
-  return res.json({ success: true });
+  const [topic] = await db.select({ followerCount: topicsTable.followerCount }).from(topicsTable).where(eq(topicsTable.id, topicId));
+  return res.json({ success: true, isFollowing: true, followerCount: topic?.followerCount ?? 0 });
 });
 
 topicsRouter.delete("/:id/follow", async (req, res) => {
@@ -174,22 +178,33 @@ topicsRouter.delete("/:id/follow", async (req, res) => {
   const topicId = parseInt(req.params.id);
   if (isNaN(topicId)) return res.status(400).json({ error: "Invalid topic id" });
 
-  await db
-    .delete(topicFollowsTable)
+  const [existing] = await db
+    .select({ topicId: topicFollowsTable.topicId })
+    .from(topicFollowsTable)
     .where(and(eq(topicFollowsTable.userId, viewerId), eq(topicFollowsTable.topicId, topicId)));
+  if (existing) {
+    await db
+      .delete(topicFollowsTable)
+      .where(and(eq(topicFollowsTable.userId, viewerId), eq(topicFollowsTable.topicId, topicId)));
 
-  await db
-    .update(topicsTable)
-    .set({ followerCount: sql`GREATEST(0, ${topicsTable.followerCount} - 1)` })
-    .where(eq(topicsTable.id, topicId));
-
-  return res.json({ success: true });
+    await db
+      .update(topicsTable)
+      .set({ followerCount: sql`GREATEST(0, ${topicsTable.followerCount} - 1)` })
+      .where(eq(topicsTable.id, topicId));
+  }
+  const [topic] = await db.select({ followerCount: topicsTable.followerCount }).from(topicsTable).where(eq(topicsTable.id, topicId));
+  return res.json({ success: true, isFollowing: false, followerCount: topic?.followerCount ?? 0 });
 });
 
 topicFeedRouter.get("/feed/topic/:slug", async (req, res) => {
   const viewerId = getViewerId(req);
   const [topic] = await db.select().from(topicsTable).where(eq(topicsTable.slug, req.params.slug));
   if (!topic) return res.status(404).json({ error: "Topic not found" });
+  const [follow] = viewerId
+    ? await db.select({ topicId: topicFollowsTable.topicId }).from(topicFollowsTable)
+      .where(and(eq(topicFollowsTable.userId, viewerId), eq(topicFollowsTable.topicId, topic.id)))
+    : [];
+  const topicResponse = { ...topic, isFollowing: Boolean(follow) };
 
   const postLinks = await db
     .select({ postId: postTopicsTable.postId })
@@ -199,7 +214,7 @@ topicFeedRouter.get("/feed/topic/:slug", async (req, res) => {
     .limit(30);
 
   const postIds = postLinks.map(p => p.postId);
-  if (postIds.length === 0) return res.json({ topic, posts: [], total: 0 });
+  if (postIds.length === 0) return res.json({ topic: topicResponse, posts: [], total: 0 });
 
   const rawPosts = await db
     .select()
@@ -248,7 +263,7 @@ topicFeedRouter.get("/feed/topic/:slug", async (req, res) => {
     return rank(b) - rank(a);
   });
   const posts = await Promise.all(rawPosts.map(p => enrichPost(p, viewerId)));
-  return res.json({ topic, posts, total: posts.length });
+  return res.json({ topic: topicResponse, posts, total: posts.length });
 });
 
 export async function seedTopics() {

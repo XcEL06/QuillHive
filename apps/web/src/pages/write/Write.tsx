@@ -114,6 +114,32 @@ export default function Write() {
   const [quoteTargetId, setQuoteTargetId] = useState<number | null>(quoteId);
   const [quotedPost, setQuotedPost] = useState<any>(null);
   const [challengeCtx, setChallengeCtx] = useState<ChallengeContext | null>(null);
+
+  useEffect(() => {
+    if (!challengeId) {
+      setChallengeCtx(null);
+      return;
+    }
+
+    let active = true;
+    void fetch(apiUrl(`/api/challenges/${challengeId}`))
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Could not load this challenge.');
+        const data = await response.json() as { challenge: ChallengeContext };
+        if (active) setChallengeCtx(data.challenge);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setChallengeCtx(null);
+        toast({
+          title: 'Could not load challenge',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'destructive',
+        });
+      });
+
+    return () => { active = false; };
+  }, [challengeId, toast]);
   const [originalityWarning, setOriginalityWarning] = useState<string | null>(null);
   const [originalityChecking, setOriginalityChecking] = useState(false);
   const [title, setTitle] = useState('');
@@ -164,7 +190,12 @@ export default function Write() {
           }
           setBoostCtaPostId(post.id);
         } else {
-          toast({ title: t('write.published'), description: t('write.publishedDesc') });
+          toast({
+            title: (post as any).scheduledAt ? 'Post scheduled' : t('write.savedAsDraft'),
+            description: (post as any).scheduledAt
+              ? 'Your post will be published at the scheduled time.'
+              : t('write.savedAsDraftDesc'),
+          });
           setLocation(`/post/${post.id}`);
         }
       },
@@ -528,13 +559,21 @@ export default function Write() {
   const submitChallenge = async (postId: number) => {
     if (!challengeCtx || !token) return;
     try {
-      await fetch(`/api/challenges/${challengeCtx.id}/submit`, {
+      const response = await fetch(`/api/challenges/${challengeCtx.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ postId }),
       });
-    } catch {
-      /* non-fatal */
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(data?.error ?? 'Could not submit to challenge.');
+      }
+    } catch (error) {
+      toast({
+        title: 'Post published, but challenge submission failed',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 

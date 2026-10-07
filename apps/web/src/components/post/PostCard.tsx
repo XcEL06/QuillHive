@@ -1020,10 +1020,25 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
           <div className="flex items-center gap-1">
             <button
               onClick={() => {
+                if (!currentUser) {
+                  toast({ title: 'Sign in to like posts', variant: 'destructive' });
+                  return;
+                }
                 const wasLiked = optimisticLiked;
+                const previousCount = optimisticLikes;
                 setOptimisticLiked(!wasLiked);
-                setOptimisticLikes((c) => Math.max(0, c + (wasLiked ? -1 : 1)));
-                toggleLike({ id: post.id });
+                setOptimisticLikes(Math.max(0, previousCount + (wasLiked ? -1 : 1)));
+                toggleLike({ id: post.id }, {
+                  onError: (error) => {
+                    setOptimisticLiked(wasLiked);
+                    setOptimisticLikes(previousCount);
+                    toast({
+                      title: 'Could not like post',
+                      description: error instanceof Error ? error.message : 'Please try again.',
+                      variant: 'destructive',
+                    });
+                  },
+                });
               }}
               disabled={isLiking}
               title={optimisticLiked ? 'Remove curation' : 'Curate this work'}

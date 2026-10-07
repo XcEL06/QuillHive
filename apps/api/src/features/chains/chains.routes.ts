@@ -77,10 +77,12 @@ async function getChainWithEntries(chainId: number, viewerId: number | null) {
 chainsRouter.get("/chains", async (req, res) => {
   const limit = Math.min(Number(req.query.limit ?? 20), 50);
   const category = req.query.category as string | undefined;
-  const tab = (req.query.tab as string) ?? "recent";
+  const tab = z.enum(["recent", "active", "complete"]).catch("recent").parse(req.query.tab);
 
   const conditions = [eq(chainsTable.isPublic, true)];
   if (category) conditions.push(eq(chainsTable.category, category));
+  if (tab === "active") conditions.push(eq(chainsTable.isComplete, false));
+  if (tab === "complete") conditions.push(eq(chainsTable.isComplete, true));
 
   const chains = await db
     .select({

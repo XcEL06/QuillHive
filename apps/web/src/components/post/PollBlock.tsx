@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { Loader2, BarChart3, Check, Users } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Link } from 'wouter';
@@ -34,6 +35,7 @@ interface PollData {
 
 export function PollBlock({ postId }: { postId: number }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const { data, isLoading, error } = useQuery<PollData | null>({
     queryKey: ['/api/polls/post', postId],
     queryFn: async () => {
@@ -66,6 +68,11 @@ export function PollBlock({ postId }: { postId: number }) {
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['/api/polls/post', postId] }),
+    onError: (error) => toast({
+      title: 'Could not vote',
+      description: error instanceof Error ? error.message : 'Please try again.',
+      variant: 'destructive',
+    }),
   });
 
   if (isLoading || error || !data) return null;

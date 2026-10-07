@@ -329,10 +329,10 @@ function Router() {
         <Redirect to="/workspace?tab=work" />
       </Route>
       <Route path="/motion/upload">
-        <AuthGuard><StudioRoute><MotionUpload /></StudioRoute></AuthGuard>
+        <AuthGuard><FeatureRoute flag="motion_enabled"><MotionUpload /></FeatureRoute></AuthGuard>
       </Route>
       <Route path="/motion">
-        <AuthGuard><StudioRoute><Motion /></StudioRoute></AuthGuard>
+        <AuthGuard><FeatureRoute flag="motion_enabled"><Motion /></FeatureRoute></AuthGuard>
       </Route>
       <Route path="/notifications">
         <AuthGuard><Notifications /></AuthGuard>
@@ -381,6 +381,9 @@ function Router() {
       </Route>
       <Route path="/topics/:slug">
         <AuthGuard><TopicFeed /></AuthGuard>
+      </Route>
+      <Route path="/collections/:id">
+        <FeatureRoute flag="collections_enabled"><Collections /></FeatureRoute>
       </Route>
       <Route path="/collections">
         <AuthGuard><FeatureRoute flag="collections_enabled"><Collections /></FeatureRoute></AuthGuard>

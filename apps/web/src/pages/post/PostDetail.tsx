@@ -357,7 +357,12 @@ export default function PostDetail() {
 
   const { mutate: toggleLike } = useLikePost({
     mutation: {
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/posts/${postId}`] })
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/posts/${postId}`] }),
+      onError: (error) => toast({
+        title: 'Could not like post',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      }),
     }
   });
 
@@ -368,7 +373,12 @@ export default function PostDetail() {
         queryClient.invalidateQueries({ queryKey: [`/api/posts/${postId}/comments`] });
         queryClient.invalidateQueries({ queryKey: [`/api/posts/${postId}`] });
         toast({ title: 'Comment posted!' });
-      }
+      },
+      onError: (error) => toast({
+        title: 'Could not post comment',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      }),
     }
   });
 
@@ -515,7 +525,13 @@ export default function PostDetail() {
                   </Button>
                 </>
               )}
-              <Button size="icon" variant="ghost" onClick={() => toggleLike({ id: post.id })} className={post.isLiked ? 'text-rose-500 hover:text-rose-600' : 'text-muted-foreground'}>
+              <Button size="icon" variant="ghost" onClick={() => {
+                if (!user) {
+                  toast({ title: 'Sign in to like posts', variant: 'destructive' });
+                  return;
+                }
+                toggleLike({ id: post.id });
+              }} className={post.isLiked ? 'text-rose-500 hover:text-rose-600' : 'text-muted-foreground'}>
                 <Heart className={`w-5 h-5 ${post.isLiked ? 'fill-current' : ''}`} />
               </Button>
               <ShareSheet
@@ -634,7 +650,7 @@ export default function PostDetail() {
             <div className="flex justify-end mt-2 pt-2 border-t border-border/40">
               <Button
                 onClick={() => submitComment({ id: post.id, data: { content: commentText } })}
-                disabled={!commentText.trim() || isCommenting}
+                disabled={!user || !commentText.trim() || isCommenting}
                 className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 <Send className="w-4 h-4 mr-2" /> Post Comment

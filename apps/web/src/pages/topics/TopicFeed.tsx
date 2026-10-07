@@ -28,15 +28,22 @@ export default function TopicFeed() {
     fetch(`/api/feed/topic/${slug}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) throw new Error(`Could not load topic (${r.status})`);
+        return r.json();
+      })
       .then(data => {
         setTopic(data.topic ?? null);
         setPosts(Array.isArray(data.posts) ? data.posts : []);
         setIsFollowing(data.topic?.isFollowing ?? false);
       })
-      .catch(() => {})
+      .catch(error => toast({
+        title: 'Could not load topic',
+        description: error instanceof Error ? error.message : 'Request failed',
+        variant: 'destructive',
+      }))
       .finally(() => setLoading(false));
-  }, [slug]);
+  }, [slug, token, toast]);
 
   const handleToggleFollow = async () => {
     if (!topic) return;
@@ -47,13 +54,21 @@ export default function TopicFeed() {
         method,
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (res.ok) {
-        setIsFollowing(!isFollowing);
-        setTopic((t: any) => t ? { ...t, followerCount: t.followerCount + (isFollowing ? -1 : 1) } : t);
-        toast({ title: isFollowing ? t('topics.unfollowedTopic') : t('topics.followingTopic') });
-      }
-    } catch {
-      toast({ title: t('topics.followFailed'), variant: 'destructive' });
+      if (!res.ok) throw new Error(`Follow update failed (${res.status})`);
+      const refreshed = await fetch(`/api/feed/topic/${slug}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!refreshed.ok) throw new Error(`Could not refresh topic (${refreshed.status})`);
+      const data = await refreshed.json();
+      setTopic(data.topic ?? null);
+      setIsFollowing(data.topic?.isFollowing ?? false);
+      toast({ title: isFollowing ? t('topics.unfollowedTopic') : t('topics.followingTopic') });
+    } catch (error) {
+      toast({
+        title: t('topics.followFailed'),
+        description: error instanceof Error ? error.message : 'Request failed',
+        variant: 'destructive',
+      });
     } finally {
       setIsToggling(false);
     }

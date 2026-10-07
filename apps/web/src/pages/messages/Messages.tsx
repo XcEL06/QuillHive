@@ -223,28 +223,37 @@ export default function Messages() {
 
   const proposePayment = async () => {
     if (!activeConvId || !proposalAmount || Number(proposalAmount) <= 0) return;
-    const token = getStoredToken();
-    const response = await fetch(`/api/messages/conversations/${activeConvId}/payment-proposals`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ amount: Number(proposalAmount), currency: proposalCurrency, note: proposalNote.trim() || undefined }),
-    });
-    const data = await response.json();
-    if (!response.ok) return;
-    setPaymentProposals((current) => [...current, data]);
-    setProposalAmount('');
-    setProposalNote('');
+    try {
+      const token = getStoredToken();
+      const response = await fetch(`/api/messages/conversations/${activeConvId}/payment-proposals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ amount: Number(proposalAmount), currency: proposalCurrency, note: proposalNote.trim() || undefined }),
+      });
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      const data = await response.json();
+      setPaymentProposals((current) => [...current, data]);
+      setProposalAmount('');
+      setProposalNote('');
+    } catch (error) {
+      toast({ title: 'Could not propose payment', description: error instanceof Error ? error.message : 'Request failed', variant: 'destructive' });
+    }
   };
 
   const updatePaymentProposal = async (proposalId: number, status: 'accepted' | 'rejected') => {
     if (!activeConvId) return;
-    const token = getStoredToken();
-    const response = await fetch(`/api/messages/conversations/${activeConvId}/payment-proposals/${proposalId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ status }),
-    });
-    if (response.ok) setPaymentProposals((current) => current.map((proposal) => proposal.id === proposalId ? { ...proposal, status } : proposal));
+    try {
+      const token = getStoredToken();
+      const response = await fetch(`/api/messages/conversations/${activeConvId}/payment-proposals/${proposalId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error(`Request failed (${response.status})`);
+      setPaymentProposals((current) => current.map((proposal) => proposal.id === proposalId ? { ...proposal, status } : proposal));
+    } catch (error) {
+      toast({ title: 'Could not update payment proposal', description: error instanceof Error ? error.message : 'Request failed', variant: 'destructive' });
+    }
   };
 
   const handleSelectConv = (convId: number) => {

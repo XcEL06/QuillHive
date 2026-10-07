@@ -244,13 +244,23 @@ export function CollaboratePanel() {
       const [cr, cs, cmr, cms] = await Promise.all([
         apiFetch("/api/collaboration/requests/received").then(r => r.json()).catch(() => ({ requests: [] })),
         apiFetch("/api/collaboration/requests/sent").then(r => r.json()).catch(() => ({ requests: [] })),
-        creatorIncomeEnabled ? apiFetch("/api/services/commissions/received").then(r => r.json()).catch(() => ({ commissions: [] })) : Promise.resolve({ commissions: [] }),
-        creatorIncomeEnabled ? apiFetch("/api/services/commissions/sent").then(r => r.json()).catch(() => ({ commissions: [] })) : Promise.resolve({ commissions: [] }),
+        creatorIncomeEnabled
+          ? apiFetch("/api/services/commissions/received").then(async r => {
+              if (!r.ok) throw new Error(`Could not load received commissions (${r.status})`);
+              return r.json();
+            })
+          : Promise.resolve([]),
+        creatorIncomeEnabled
+          ? apiFetch("/api/services/commissions/sent").then(async r => {
+              if (!r.ok) throw new Error(`Could not load sent commissions (${r.status})`);
+              return r.json();
+            })
+          : Promise.resolve([]),
       ]);
       setCollabReceived(Array.isArray(cr?.requests) ? cr.requests : []);
       setCollabSent(Array.isArray(cs?.requests) ? cs.requests : []);
-      setCommReceived(Array.isArray(cmr?.commissions) ? cmr.commissions : []);
-      setCommSent(Array.isArray(cms?.commissions) ? cms.commissions : []);
+      setCommReceived(Array.isArray(cmr) ? cmr : []);
+      setCommSent(Array.isArray(cms) ? cms : []);
     } catch {
       toast({ title: "Failed to load collaborate data", variant: "destructive" });
     } finally {
@@ -267,10 +277,22 @@ export function CollaboratePanel() {
 
   const handleCommRespond = async (id: number, status: string, response: string) => {
     if (!creatorIncomeEnabled) return;
-    await apiFetch(`/api/services/commissions/${id}/respond`, {
-      method: "PATCH", body: JSON.stringify({ status, response: response.trim() || undefined }),
-    });
-    setCommReceived(prev => prev.map(r => r.id === id ? { ...r, status, creatorResponse: response || null } : r));
+    try {
+      const res = await apiFetch(`/api/services/commissions/${id}/respond`, {
+        method: "PATCH", body: JSON.stringify({ status, response: response.trim() || undefined }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(typeof payload?.error === "string" ? payload.error : `Request failed (${res.status})`);
+      }
+      setCommReceived(prev => prev.map(r => r.id === id ? { ...r, ...payload } : r));
+    } catch (error) {
+      toast({
+        title: "Could not update commission request",
+        description: error instanceof Error ? error.message : "Request failed",
+        variant: "destructive",
+      });
+    }
   };
 
   const pendingCollab = collabReceived.filter(r => r.status === "pending").length;

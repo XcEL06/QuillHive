@@ -323,7 +323,7 @@ export const createPost = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
 
-  const { title, titleA, titleB, content, excerpt, type, visibility, imageUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt } = req.body;
+  const { title, titleA, titleB, content, excerpt, type, visibility, imageUrl, externalUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt } = req.body;
   if (!content || !type) return res.status(400).json({ error: "Content and type are required" });
   if (groupId !== undefined && groupId !== null) {
     return res.status(400).json({ error: "Create community content inside its Group. Workspace opportunities can only be reshared into Groups." });
@@ -340,7 +340,7 @@ export const createPost = async (req: Request, res: Response) => {
   }
 
   try {
-    const post = await PostService.createPost(viewerId, { title, titleA, titleB, content, excerpt, type, visibility, imageUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt });
+    const post = await PostService.createPost(viewerId, { title, titleA, titleB, content, excerpt, type, visibility, imageUrl, externalUrl, attachments, tags, isPublished, groupId, seriesId, quotedPostId, scheduledAt });
     refreshTrustForUsers(viewerId);
     void deleteCachePattern(`feed:*`);
     void deleteCachePattern(`trending:*`); memDeletePattern("trending:");

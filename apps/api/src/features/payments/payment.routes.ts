@@ -85,6 +85,9 @@ paymentRouter.post("/service/initiate", requireCreatorIncomeEnabled, requireAuth
     });
     return res.json({ ok: true, link: result.link, txRef: result.txRef });
   } catch (err) {
+    await db.update(commissionRequestsTable)
+      .set({ status: "payment_failed", updatedAt: new Date() })
+      .where(eq(commissionRequestsTable.id, commission.id));
     await db.update(creatorPaymentTransactionsTable).set({ status: "failed" }).where(eq(creatorPaymentTransactionsTable.txRef, txRef));
     logger.error({ err, buyerId, serviceListingId }, "service_payment_initiate_failed");
     return res.status(502).json({ error: "payment_initiate_failed" });

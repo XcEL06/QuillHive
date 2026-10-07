@@ -12,7 +12,7 @@ const createSeriesSchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(1000).optional(),
   coverImage: z.string().optional(),
-  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/),
+  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/).optional(),
 });
 
 const updateSeriesSchema = createSeriesSchema.partial();
@@ -49,11 +49,18 @@ seriesRouter.get("/:id", validateParams(idParams), async (req, res) => {
 });
 
 seriesRouter.post("/", requireAuth, validateBody(createSeriesSchema), async (req: any, res) => {
-  const [existing] = await db.select({ id: seriesTable.id }).from(seriesTable).where(and(eq(seriesTable.userId, req.currentUser.id), eq(seriesTable.slug, req.body.slug)));
-  if (existing) return res.status(409).json({ error: "Slug already in use" });
+  const baseSlug = req.body.slug ?? (req.body.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "series");
+  let slug = baseSlug.slice(0, 100);
+  for (let suffix = 2; ; suffix++) {
+    const [existing] = await db.select({ id: seriesTable.id }).from(seriesTable)
+      .where(and(eq(seriesTable.userId, req.currentUser.id), eq(seriesTable.slug, slug)));
+    if (!existing) break;
+    const ending = `-${suffix}`;
+    slug = `${baseSlug.slice(0, 100 - ending.length)}${ending}`;
+  }
   const [series] = await db
     .insert(seriesTable)
-    .values({ userId: req.currentUser.id, ...req.body })
+    .values({ userId: req.currentUser.id, ...req.body, slug })
     .returning();
   return res.status(201).json(series);
 });

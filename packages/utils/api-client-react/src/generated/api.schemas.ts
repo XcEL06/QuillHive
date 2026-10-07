@@ -95,6 +95,8 @@ export interface Post {
   visibility?: "public" | "followers" | "private";
   /** @nullable */
   imageUrl?: string | null;
+  /** @nullable */
+  externalUrl?: string | null;
   attachments?: string | Array<Record<string, unknown>> | null;
   tags: string[];
   likesCount: number;
@@ -157,6 +159,8 @@ export interface CreatePostRequest {
   visibility?: "public" | "followers" | "private";
   /** @nullable */
   imageUrl?: string | null;
+  /** @nullable */
+  externalUrl?: string | null;
   attachments?: Array<Record<string, unknown>>;
   tags?: string[];
   isPublished: boolean;
@@ -173,6 +177,8 @@ export interface UpdatePostRequest {
   excerpt?: string | null;
   /** @nullable */
   imageUrl?: string | null;
+  /** @nullable */
+  externalUrl?: string | null;
   visibility?: "public" | "followers" | "private";
   attachments?: Array<Record<string, unknown>>;
   tags?: string[];

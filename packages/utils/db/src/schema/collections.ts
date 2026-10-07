@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, unique, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { usersTable } from "./users";
@@ -9,6 +9,7 @@ export const collectionsTable = pgTable("collections", {
   userId: integer("user_id").notNull().references(() => usersTable.id),
   name: text("name").notNull(),
   description: text("description"),
+  isPublic: boolean("is_public").notNull().default(false),
   postCount: integer("post_count").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

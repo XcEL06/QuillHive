@@ -19,6 +19,7 @@ export const postsTable = pgTable("posts", {
   excerpt: text("excerpt"),
   type: text("type").notNull().default("post"),
   imageUrl: text("image_url"),
+  externalUrl: text("external_url"),
   attachments: text("attachments").notNull().default("[]"),
   tags: text("tags").notNull().default("[]"),
   isPublished: boolean("is_published").notNull().default(true),

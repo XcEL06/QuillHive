@@ -169,6 +169,20 @@
       "when": 1791292500000,
       "tag": "0026_public_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791378900000,
+      "tag": "0027_collection_visibility",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791465300000,
+      "tag": "0028_post_external_url",
+      "breakpoints": true
     }
   ]
 }

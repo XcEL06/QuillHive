@@ -28,4 +28,16 @@ describe("post create validation", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("accepts a valid external project URL and rejects malformed URLs", () => {
+    const base = {
+      title: "Gallery artwork",
+      content: "<p>Artwork description</p>",
+      type: "artwork",
+      isPublished: true,
+    };
+
+    expect(postBodySchema.safeParse({ ...base, externalUrl: "https://portfolio.example/project" }).success).toBe(true);
+    expect(postBodySchema.safeParse({ ...base, externalUrl: "not a URL" }).success).toBe(false);
+  });
 });

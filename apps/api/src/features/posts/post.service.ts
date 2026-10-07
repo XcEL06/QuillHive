@@ -450,6 +450,7 @@ export async function createPost(
     type: string;
     visibility?: SparkVisibility;
     imageUrl?: string;
+    externalUrl?: string | null;
     attachments?: PostAttachment[];
     tags?: string[];
     isPublished?: boolean;
@@ -520,6 +521,7 @@ export async function createPost(
       type: data.type,
       visibility: isSpark ? data.visibility ?? "public" : "public",
       imageUrl: data.imageUrl || null,
+      externalUrl: data.externalUrl || null,
       attachments: JSON.stringify(sanitizeAttachments(data.attachments)),
       tags: JSON.stringify(tags),
       isPublished,
@@ -595,6 +597,12 @@ export async function createPost(
 export async function getPostById(id: number, viewerId: number | null) {
   const [post] = await db.select().from(postsTable).where(and(
     eq(postsTable.id, id),
+    or(
+      eq(postsTable.isPublished, true),
+      viewerId != null
+        ? eq(postsTable.authorId, viewerId)
+        : sql`false`,
+    ),
     visiblePostExpiryCondition(),
     postVisibilityCondition(viewerId),
   ));
@@ -628,6 +636,7 @@ export async function updatePost(id: number, authorId: number, data: Record<stri
   if (data.content !== undefined) updates.content = sanitizeRichText(String(data.content));
   if (data.excerpt !== undefined) updates.excerpt = data.excerpt ? sanitizePlain(String(data.excerpt)).slice(0, 500) : null;
   if (data.imageUrl !== undefined) updates.imageUrl = data.imageUrl;
+  if (data.externalUrl !== undefined) updates.externalUrl = data.externalUrl;
   if (data.attachments !== undefined) updates.attachments = JSON.stringify(sanitizeAttachments(data.attachments));
   if (data.tags !== undefined || data.content !== undefined) {
     const nextContent = typeof data.content === "string" ? data.content : post.content;

@@ -306,7 +306,9 @@ export default function Motion() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const url = `/api/feed?type=${feed}&mediaKind=video&limit=24`;
+    const params = new URLSearchParams({ limit: "24" });
+    if (feed !== "fresh") params.set("feed", feed);
+    const url = `/api/feed/motion?${params}`;
     fetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -414,7 +416,7 @@ export default function Motion() {
                 {t('motion.description', 'Short films, animated essays, video portfolios, and visual storytelling - made by the QuillHive community. Discover work, credit the makers, follow what moves you.')}
               </p>
             </div>
-            <Link href="/upload">
+            <Link href="/motion/upload">
               <Button className="gap-2 rounded-xl" data-testid="btn-upload-motion">
                 <Upload className="h-4 w-4" />
                 {t('motion.upload', 'Upload your motion')}

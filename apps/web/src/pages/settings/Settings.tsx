@@ -433,24 +433,30 @@ export default function Settings() {
       const res = await fetch('/api/notifications/preferences', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (res.ok) {
-        const data = await res.json() as { preferences: Record<string, { inApp: boolean; push: boolean; email: boolean }> };
-        setNotifPrefs(data.preferences);
-      }
-    } catch { /* silent */ } finally { setIsLoadingNotifPrefs(false); }
+      if (!res.ok) throw new Error('Could not load notification preferences');
+      const data = await res.json() as { preferences: Record<string, { inApp: boolean; push: boolean; email: boolean }> };
+      setNotifPrefs(data.preferences);
+    } catch {
+      toast({ title: 'Could not load notification preferences', variant: 'destructive' });
+    } finally { setIsLoadingNotifPrefs(false); }
   };
 
   const patchNotifPref = async (type: string, channel: 'inApp' | 'push' | 'email', value: boolean) => {
-    setNotifPrefs(prev => prev ? { ...prev, [type]: { ...(prev[type] ?? { inApp: true, push: false, email: false }), [channel]: value } } : prev);
-    if (isSavingNotifPref) return;
+    const previous = notifPrefs?.[type] ?? { inApp: true, push: false, email: false };
+    const updated = { ...previous, [channel]: value };
+    setNotifPrefs(prev => prev ? { ...prev, [type]: updated } : prev);
     setIsSavingNotifPref(true);
     try {
-      await fetch('/api/notifications/preferences', {
+      const res = await fetch('/api/notifications/preferences', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ type, channel, enabled: value }),
+        body: JSON.stringify({ [type]: updated }),
       });
-    } catch { /* silent */ } finally { setIsSavingNotifPref(false); }
+      if (!res.ok) throw new Error('Could not save notification preferences');
+    } catch {
+      setNotifPrefs(prev => prev ? { ...prev, [type]: previous } : prev);
+      toast({ title: 'Could not save notification preferences', variant: 'destructive' });
+    } finally { setIsSavingNotifPref(false); }
   };
 
   useEffect(() => {
@@ -1140,9 +1146,9 @@ export default function Settings() {
                                 return (
                                   <div key={item.key} className="grid grid-cols-[1fr_68px_68px_68px] gap-x-2 items-center px-4 py-3 hover:bg-muted/30 transition-colors">
                                     <span className="text-sm">{item.label}</span>
-                                    <div className="flex justify-center"><Switch checked={p.inApp} onCheckedChange={v => patchNotifPref(item.key, 'inApp', v)} /></div>
-                                    <div className="flex justify-center"><Switch checked={p.push} onCheckedChange={v => patchNotifPref(item.key, 'push', v)} /></div>
-                                    <div className="flex justify-center"><Switch checked={p.email} onCheckedChange={v => patchNotifPref(item.key, 'email', v)} /></div>
+                                    <div className="flex justify-center"><Switch disabled={isSavingNotifPref} checked={p.inApp} onCheckedChange={v => patchNotifPref(item.key, 'inApp', v)} /></div>
+                                    <div className="flex justify-center"><Switch disabled={isSavingNotifPref} checked={p.push} onCheckedChange={v => patchNotifPref(item.key, 'push', v)} /></div>
+                                    <div className="flex justify-center"><Switch disabled={isSavingNotifPref} checked={p.email} onCheckedChange={v => patchNotifPref(item.key, 'email', v)} /></div>
                                   </div>
                                 );
                               })}

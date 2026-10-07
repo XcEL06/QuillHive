@@ -176,11 +176,15 @@ export default function Onboarding() {
         }
 
         if (selectedSkills.length > 0) {
-          await fetch('/api/users/me/creator', {
+          const creatorRes = await fetch('/api/users/me/creator', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
             body: JSON.stringify({ skills: selectedSkills }),
-          }).catch(() => {});
+          });
+          if (!creatorRes.ok) {
+            const error = await creatorRes.json().catch(() => null) as { error?: string } | null;
+            throw new Error(error?.error || 'Could not save creator skills.');
+          }
         }
       } catch (error) {
         toast({

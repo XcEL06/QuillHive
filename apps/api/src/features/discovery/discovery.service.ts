@@ -85,7 +85,15 @@ export async function search(opts: SearchOptions) {
   const now = new Date();
   const [authors, trustScores, activeBoosts] = postIds.length > 0
     ? await Promise.all([
-        db.select({ id: usersTable.id, isOfficialAccount: usersTable.isOfficialAccount, role: usersTable.role, reachMultiplier: usersTable.reachMultiplier })
+        db.select({
+          id: usersTable.id,
+          username: usersTable.username,
+          displayName: usersTable.displayName,
+          avatarUrl: usersTable.avatarUrl,
+          isOfficialAccount: usersTable.isOfficialAccount,
+          role: usersTable.role,
+          reachMultiplier: usersTable.reachMultiplier,
+        })
           .from(usersTable).where(inArray(usersTable.id, authorIds)),
         db.select({ userId: userTrustScoresTable.userId, uti: userTrustScoresTable.uti, visibilityMultiplier: userTrustScoresTable.visibilityMultiplier, tier: userTrustScoresTable.tier, creatorLevel: userTrustScoresTable.creatorLevel })
           .from(userTrustScoresTable).where(inArray(userTrustScoresTable.userId, authorIds)),
@@ -107,6 +115,21 @@ export async function search(opts: SearchOptions) {
       const trust = trustMap.get(Number(p.authorId));
       return {
         ...p,
+        author: author ? {
+          id: author.id,
+          username: author.username,
+          displayName: author.displayName,
+          avatarUrl: author.avatarUrl,
+        } : {
+          id: Number(p.authorId),
+          username: "unknown",
+          displayName: "Unknown user",
+          avatarUrl: null,
+        },
+        authorIsOfficial: author?.isOfficialAccount ?? false,
+        authorIsSuperUser: author?.role === "super_admin",
+        authorTrustTier: trust?.tier,
+        authorCreatorLevel: trust?.creatorLevel ?? null,
         score: calculateRankingScore({
           relevanceScore: Number(p.score ?? 0),
           ageHours: (now.getTime() - new Date(p.createdAt).getTime()) / 3_600_000,

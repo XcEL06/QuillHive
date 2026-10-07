@@ -66,13 +66,13 @@ export function SessionsCard({
 
   const revokeAll = async () => {
     if (!token) return;
-    if (!confirm('Sign out of all other devices? You will stay signed in here.')) return;
+    if (!confirm('Revoke all device sessions? This device is included. Access tokens may remain valid for up to 15 minutes.')) return;
     setRevoking(true);
     try {
       const res = await fetch('/api/auth/sessions/logout-all', { method: 'POST', headers });
       if (res.ok) {
         const { revoked } = await res.json();
-        toast({ title: 'Sessions revoked', description: `${revoked} session(s) signed out.` });
+        toast({ title: 'Sessions revoked', description: `${revoked} refresh session(s) revoked. Access tokens may remain valid for up to 15 minutes.` });
         void load();
       } else {
         toast({ title: 'Failed', description: 'Could not revoke sessions.', variant: 'destructive' });
@@ -122,7 +122,7 @@ export function SessionsCard({
           className="rounded-xl"
         >
           {revoking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <LogOut className="w-4 h-4 mr-2" />}
-          Sign out everywhere
+          Revoke all sessions
         </Button>
       </div>
 

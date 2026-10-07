@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch, mediaUrl } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { usePageTitle } from "@/hooks/usePageTitle";
+import { useToast } from "@/hooks/use-toast";
 
 type NetworkUser = {
   id: number;
@@ -42,6 +43,7 @@ function PersonRow({ user, action }: { user: NetworkUser; action?: React.ReactNo
 
 export default function Network() {
   usePageTitle("My Network");
+  const { toast } = useToast();
   const { user } = useAuthStore();
   const [following, setFollowing] = useState<NetworkUser[]>([]);
   const [followers, setFollowers] = useState<NetworkUser[]>([]);
@@ -83,7 +85,19 @@ export default function Network() {
     setFollowingId(person.id);
     try {
       const response = await apiFetch(`/api/users/${encodeURIComponent(person.username)}/follow`, { method: "POST" });
-      if (response.ok) setSuggested(current => current.filter(candidate => candidate.id !== person.id));
+      if (!response.ok) throw new Error("Could not follow this person.");
+      setSuggested(current => current.filter(candidate => candidate.id !== person.id));
+      setFollowing(current =>
+        current.some(candidate => candidate.id === person.id)
+          ? current
+          : [person, ...current],
+      );
+    } catch (error) {
+      toast({
+        title: "Could not follow",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setFollowingId(null);
     }

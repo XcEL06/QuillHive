@@ -7,7 +7,7 @@ const CREATE_OPTIONS = [
   { href: '/write', icon: Newspaper, label: 'Article', color: 'bg-violet-500', desc: 'Essays, deep dives & proof of work' },
   { href: '/write?type=spark', icon: Zap, label: 'Spark', color: 'bg-amber-500', desc: 'Quick thought or work update' },
   { href: '/write?type=poll', icon: BarChart3, label: 'Poll', color: 'bg-blue-500', desc: 'Ask your audience' },
-  { href: '/motion', icon: Film, label: 'Motion', color: 'bg-pink-500', desc: 'Video pitch or showcase' },
+  { href: '/motion/upload', icon: Film, label: 'Motion', color: 'bg-pink-500', desc: 'Upload a video' },
 ];
 
 export function FloatingCreateMenu() {
