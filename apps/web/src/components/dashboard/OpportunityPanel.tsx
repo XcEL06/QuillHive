@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { Briefcase, CheckCircle2, Circle, ExternalLink, Sparkles, Target } from "lucide-react";
+import { CheckCircle2, Circle, ExternalLink, Sparkles, Target } from "lucide-react";
 import { getStoredToken } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
@@ -126,12 +126,7 @@ export function OpportunityPanel() {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-2">
-          <Link href="/services">
-            <Button size="sm" variant="outline" className="w-full h-8 text-xs rounded-xl gap-1.5">
-              <Briefcase className="w-3.5 h-3.5" /> {t("dashboard.addService", "Add Service")}
-            </Button>
-          </Link>
+        <div className="grid grid-cols-1 gap-2">
           <Link href="/settings">
             <Button size="sm" variant="outline" className="w-full h-8 text-xs rounded-xl gap-1.5">
               <ExternalLink className="w-3.5 h-3.5" /> {t("dashboard.editProfile", "Edit Profile")}

@@ -314,7 +314,7 @@ export default function Pricing() {
                       </Button>
                     ) : (
                       <Button className="w-full rounded-xl" variant="outline" asChild>
-                        <Link href="/auth">
+                        <Link href="/login">
                           <ArrowRight className="w-4 h-4 mr-2" /> Sign in to boost
                         </Link>
                       </Button>
