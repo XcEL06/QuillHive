@@ -12,7 +12,7 @@ describe("PageContainer responsive guard", () => {
 
     expect(html).toContain("w-full");
     expect(html).toContain("max-w-full");
-    expect(html).toContain("overflow-hidden");
+    expect(html).not.toContain("overflow-");
     expect(html).toContain("test-class");
   });
 });

@@ -342,9 +342,9 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 md:ml-56 pb-20 md:pb-6 min-h-[calc(100vh-4rem)] w-full max-w-full overflow-hidden">
+        <main className="flex-1 md:ml-56 pb-20 md:pb-6 min-h-[calc(100vh-4rem)] w-full max-w-full">
           {user && <StrikesBanner />}
-          <PageContainer className="w-full max-w-full overflow-hidden">
+          <PageContainer>
             {children}
           </PageContainer>
         </main>

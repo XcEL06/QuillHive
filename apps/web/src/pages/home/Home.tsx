@@ -623,29 +623,10 @@ function AuthenticatedHome() {
         </div>
 
         {(feedSource === 'explore' || feedSource === 'following') && (
-          <div className="sticky top-16 z-40 -mx-4 md:-mx-6 border-b border-border/50 bg-background/95 px-4 md:px-6 backdrop-blur">
+          <div className="sticky top-16 z-50 -mx-4 md:-mx-6 border-b border-border/50 bg-background/95 px-4 md:px-6 backdrop-blur">
             <StoriesRow onOpenViewer={setActiveStoryGroup} />
           </div>
         )}
-
-        {/* Topics Grid (Topics mode) */}
-        <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6"
-          >
-            <Link href="/write" className="flex items-center gap-4 bg-card border border-border/60 rounded-2xl p-4 shadow-sm hover:border-primary/30 hover:shadow-md transition-all cursor-text">
-              <div className="bg-primary/10 text-primary p-3 rounded-full">
-                <PenTool className="w-5 h-5" />
-              </div>
-              <p className="text-muted-foreground text-lg flex-1">
-                {t('home.writePlaceholder', "Share a thought, story, art, or anything you're working on...")}
-              </p>
-              <span className="bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium text-sm">
-                {t('home.write', 'Write')}
-              </span>
-            </Link>
-        </motion.div>
 
         <div className="space-y-6">
           {newPostsAvailable > 0 && (

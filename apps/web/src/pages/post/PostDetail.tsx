@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Heart, Send, Share2, MessageCircle, ChevronDown, ChevronRight, CornerDownRight, ShieldCheck, Clock, Sparkles, BarChart3, BadgeCheck, Award, BookOpen, Zap } from 'lucide-react';
+import { Heart, Send, Share2, MessageCircle, ChevronDown, ChevronRight, CornerDownRight, ShieldCheck, Clock, BarChart3, BadgeCheck, Award, BookOpen, Zap } from 'lucide-react';
 import { BoostModal } from '@/components/boost/BoostModal';
 import { safeHtml } from '@/lib/sanitize';
 import { linkifyHashtags } from '@/lib/hashtags';
@@ -401,6 +401,10 @@ export default function PostDetail() {
 
   const widthClass = readerMode ? 'max-w-2xl' : 'max-w-3xl';
   const fontClass = readerMode ? 'prose-xl' : 'prose-lg';
+  const postType = String(post.type);
+  const postTypeLabel = postType === 'spark' || postType === 'note'
+    ? null
+    : ({ artwork: 'Motion', blog: 'Article', article: 'Article', story: 'Story', poem: 'Story', novel: 'Story' } as Record<string, string>)[postType] ?? postType;
 
   async function createPoll() {
     if (!pollDraft || !pollDraft.question.trim()) return;
@@ -434,9 +438,11 @@ export default function PostDetail() {
 
         {/* Post Header */}
         <div className="mb-8">
-          <Badge variant="outline" className="mb-4 capitalize bg-secondary text-secondary-foreground">
-            {({ artwork: 'Motion', spark: 'Spark', blog: 'Article', article: 'Article', story: 'Story', poem: 'Story', novel: 'Story', note: 'Spark' } as Record<string, string>)[post.type] ?? post.type}
-          </Badge>
+          {postTypeLabel && (
+            <Badge variant="outline" className="mb-4 capitalize bg-secondary text-secondary-foreground">
+              {postTypeLabel}
+            </Badge>
+          )}
           {post.title && <h1 className="text-4xl md:text-5xl font-serif font-bold text-foreground mb-6 leading-tight">{post.title}</h1>}
 
           <div className="flex items-center justify-between">

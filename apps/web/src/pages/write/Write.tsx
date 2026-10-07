@@ -22,7 +22,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon,
   Heading1, Heading2, List, ListOrdered, Quote, Loader2, X,
   Lightbulb, Wand2, MessageSquare, ChevronRight, Clock, FlaskConical, Calendar, Rocket,
-  Video, Zap, ChevronDown, ChevronUp, Newspaper, Type, Hash, Copy, Check, BookOpen, ArrowUpRight
+  Video, ChevronDown, ChevronUp, Newspaper, Type, Hash, Copy, Check, BookOpen, ArrowUpRight
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { AttachmentPicker } from '@/components/post/AttachmentPicker';
@@ -54,15 +54,6 @@ const PRIMARY_POST_TYPES = [
     bg: 'bg-rose-500/10 border-rose-500/30',
     activeBg: 'bg-rose-500/15 border-rose-500',
   },
-  {
-    value: 'spark',
-    label: 'Spark',
-    icon: Zap,
-    desc: 'Quick thought or work update',
-    color: 'text-amber-500',
-    bg: 'bg-amber-500/10 border-amber-500/30',
-    activeBg: 'bg-amber-500/15 border-amber-500',
-  },
 ] as const;
 
 const ADVANCED_POST_TYPES: { value: string; label: string; icon: ComponentType<{ className?: string }> }[] = [];
@@ -88,6 +79,13 @@ function findStandaloneUrl(text: string): string | null {
     if (/^https?:\/\/[^\s<>'"]+$/.test(candidate)) return candidate;
   }
   return null;
+}
+
+function normalizePostType(type: unknown): string {
+  if (typeof type !== 'string' || !type || type === 'spark' || type === 'blog' || type === 'note') {
+    return 'post';
+  }
+  return type;
 }
 
 export default function Write() {
@@ -119,13 +117,7 @@ export default function Write() {
   const [originalityWarning, setOriginalityWarning] = useState<string | null>(null);
   const [originalityChecking, setOriginalityChecking] = useState(false);
   const [title, setTitle] = useState('');
-  const [type, setType] = useState<string>(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('qh_last_post_type') : null;
-    if (saved) return saved;
-    const { user } = useAuthStore.getState();
-    return (user as any)?.postsCount > 0 ? 'post' : 'spark';
-  });
-  const [visibility, setVisibility] = useState<'public' | 'followers' | 'private'>('public');
+  const [type, setType] = useState<string>('post');
   const [tagsStr, setTagsStr] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [originalImageUrl, setOriginalImageUrl] = useState('');
@@ -249,7 +241,7 @@ export default function Write() {
   });
 
   useEffect(() => {
-    if (!editPostId || !editor) return;
+    if (!editPostId || !editor?.isInitialized) return;
     if (!token || !user) {
       setIsLoadingEdit(false);
       toast({ title: 'Sign in to edit this post', variant: 'destructive' });
@@ -274,8 +266,7 @@ export default function Write() {
         if (authorId !== Number(user.id)) throw new Error('You can only edit your own posts.');
 
         setTitle(post.title ?? '');
-        setType(post.type === 'blog' || post.type === 'note' ? 'post' : post.type || 'post');
-        setVisibility(post.visibility === 'followers' || post.visibility === 'private' ? post.visibility : 'public');
+        setType(normalizePostType(post.type));
         setTagsStr(Array.isArray(post.tags)
           ? post.tags.join(', ')
           : typeof post.tags === 'string'
@@ -308,7 +299,7 @@ export default function Write() {
   }, [editPostId, editor, token, user?.id, toast, setLocation]);
 
   useEffect(() => {
-    const standaloneUrl = editor ? findStandaloneUrl(editor.getText()) : null;
+    const standaloneUrl = editor?.isInitialized ? findStandaloneUrl(editor.getText()) : null;
     if (!standaloneUrl || !token) {
       setLinkPreview(null);
       setIsLinkPreviewLoading(false);
@@ -351,7 +342,7 @@ export default function Write() {
   useEffect(() => {
     const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
     const draftIdParam = params.get('draftId');
-    if (editPostId || !draftIdParam || !editor || !token) return;
+    if (editPostId || !draftIdParam || !editor?.isInitialized || !token) return;
     const id = parseInt(draftIdParam, 10);
     if (!id) return;
     setServerDraftId(id);
@@ -364,8 +355,7 @@ export default function Write() {
         if (!data?.draft) return;
         const d = data.draft;
         if (d.title) setTitle(d.title);
-        if (d.type) setType(d.type === 'blog' || d.type === 'note' ? 'post' : d.type);
-        setVisibility(d.visibility === 'followers' || d.visibility === 'private' ? d.visibility : 'public');
+        if (d.type) setType(normalizePostType(d.type));
         if (d.tags) {
           try { setTagsStr(JSON.parse(d.tags).join(', ')); } catch { setTagsStr(d.tags); }
         }
@@ -398,8 +388,7 @@ export default function Write() {
     try {
       const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || '{}');
       if (d.title) setTitle(d.title);
-      if (d.type) setType(d.type);
-      setVisibility(d.visibility === 'followers' || d.visibility === 'private' ? d.visibility : 'public');
+      if (d.type) setType(normalizePostType(d.type));
       if (d.tagsStr) setTagsStr(d.tagsStr);
       if (d.imageUrl) setImageUrl(d.imageUrl);
       if (Array.isArray(d.postAttachments)) setPostAttachments(d.postAttachments);
@@ -418,14 +407,14 @@ export default function Write() {
   };
 
   useEffect(() => {
-    if (!editor || editPostId) return;
+    if (!editor?.isInitialized || editPostId) return;
     const interval = window.setInterval(() => {
+      if (!editor.isInitialized) return;
       const content = editor.getHTML();
       if (!content || content === '<p></p>') return;
       try {
         const draft = JSON.stringify({
           title, type, tagsStr,
-          visibility,
           imageUrl: imageUrl?.startsWith('data:') ? '' : imageUrl,
           postAttachments,
           content, savedAt: Date.now(),
@@ -436,10 +425,10 @@ export default function Write() {
       } catch { }
     }, 30_000);
     return () => window.clearInterval(interval);
-  }, [editor, title, type, visibility, tagsStr, imageUrl, postAttachments, DRAFT_KEY]);
+  }, [editor, title, type, tagsStr, imageUrl, postAttachments, DRAFT_KEY]);
 
   const saveDraftSilently = async (): Promise<boolean> => {
-    if (!editor || !token || editPostId) return false;
+    if (!editor?.isInitialized || !token || editPostId) return false;
     if (draftSavePromiseRef.current) {
       const currentSaveSucceeded = await draftSavePromiseRef.current;
       if (!currentSaveSucceeded) return false;
@@ -453,7 +442,6 @@ export default function Write() {
       title: title || undefined,
       content: draftContent,
       type: type as any,
-      visibility: type === 'spark' ? visibility : 'public',
       tags: tagsStr.split(',').map((tag) => tag.trim()).filter(Boolean),
       imageUrl: imageUrl || undefined,
       attachments: postAttachments,
@@ -503,12 +491,12 @@ export default function Write() {
   };
 
   useEffect(() => {
-    if (!editor || !token || editPostId || (!title.trim() && !editor.getText().trim())) return;
+    if (!editor?.isInitialized || !token || editPostId || (!title.trim() && !editor.getText().trim())) return;
     const timer = window.setTimeout(() => {
       void saveDraftSilently();
     }, 3_000);
     return () => window.clearTimeout(timer);
-  }, [editor, title, content, tagsStr, type, visibility, imageUrl, postAttachments, token, serverDraftId]);
+  }, [editor, title, content, tagsStr, type, imageUrl, postAttachments, token, serverDraftId]);
 
   const checkOriginality = async (content: string): Promise<{ ok: boolean; warning: string | null }> => {
     if (!token || content.replace(/<[^>]+>/g, '').trim().length < 100) return { ok: true, warning: null };
@@ -551,7 +539,7 @@ export default function Write() {
   };
 
   const handlePublish = async (isPublished: boolean) => {
-    if (!editor || editor.isEmpty) {
+    if (!editor?.isInitialized || editor.isEmpty) {
       toast({ title: t('write.emptyContent'), description: t('write.emptyContentDesc'), variant: 'destructive' });
       return;
     }
@@ -597,7 +585,6 @@ export default function Write() {
           body: JSON.stringify({
             title,
             content,
-            ...(type === 'spark' ? { visibility } : {}),
             excerpt: editor.getText().trim().slice(0, 500),
             ...(imageUrl !== originalImageUrl && imageUrl ? { imageUrl } : {}),
             attachments: postAttachments,
@@ -632,7 +619,6 @@ export default function Write() {
       titleB: enableAB ? (titleB || undefined) : undefined,
       content,
       type: type as any,
-      ...(type === 'spark' ? { visibility } : {}),
       imageUrl: imageUrl || undefined,
       attachments: postAttachments,
       tags: tagsStr.split(',').map(t => t.trim()).filter(Boolean),
@@ -860,7 +846,7 @@ export default function Write() {
                 <p className="text-sm capitalize text-muted-foreground">{type.replace(/_/g, ' ')}</p>
               ) : (
               <>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {PRIMARY_POST_TYPES.map(pt => {
                   const Icon = pt.icon;
                   const isActive = type === pt.value;
@@ -868,7 +854,7 @@ export default function Write() {
                     <button
                       key={pt.value}
                       type="button"
-                      onClick={() => { setType(pt.value); localStorage.setItem('qh_last_post_type', pt.value); }}
+                      onClick={() => setType(pt.value)}
                       className={`rounded-xl border p-3 text-left transition-all ${isActive ? pt.activeBg : `bg-background border-border/60 hover:${pt.bg}`}`}
                     >
                       <Icon className={`w-5 h-5 mb-1.5 ${isActive ? pt.color : 'text-muted-foreground'}`} />
@@ -897,7 +883,7 @@ export default function Write() {
                           <button
                             key={at.value}
                             type="button"
-                            onClick={() => { setType(at.value); localStorage.setItem('qh_last_post_type', at.value); }}
+                            onClick={() => setType(at.value)}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm transition-all ${isActive ? 'bg-primary/10 border-primary text-primary font-semibold' : 'bg-background border-border/60 text-muted-foreground hover:border-primary/40 hover:text-foreground'}`}
                           >
                             <Icon className="w-3.5 h-3.5" /> {at.label}
@@ -911,20 +897,6 @@ export default function Write() {
               </>
               )}
             </div>
-
-            {type === 'spark' && (
-              <div className="space-y-2 col-span-1 md:col-span-2">
-                <Label>Spark audience</Label>
-                <Select value={visibility} onValueChange={(value: 'public' | 'followers' | 'private') => setVisibility(value)}>
-                  <SelectTrigger className="rounded-xl bg-background"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="public">Public</SelectItem>
-                    <SelectItem value="followers">Followers</SelectItem>
-                    <SelectItem value="private">Only me</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             {/* Title / A-B Testing */}
             <div className="space-y-2">

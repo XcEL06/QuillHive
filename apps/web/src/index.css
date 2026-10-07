@@ -4,7 +4,7 @@
 @plugin "@tailwindcss/typography";
 
 html, body {
-  overflow-x: hidden;
+  overflow-x: clip;
   max-width: 100vw;
 }
 
@@ -147,7 +147,7 @@ img, video {
   html, body, #root {
     width: 100%;
     max-width: 100vw;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   img, video {
