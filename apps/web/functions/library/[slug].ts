@@ -74,7 +74,7 @@ export async function onRequestGet({ request, env, next }: PagesContext): Promis
     const description = entry.summary.slice(0, 400);
     const image = entry.thumbnailUrl
       ? new URL(entry.thumbnailUrl, apiOrigin).toString()
-      : `${url.origin}/logo.png`;
+      : `${url.origin}/images/logo-icon.png`;
     const keywords = Array.isArray(entry.tags) ? entry.tags.join(", ") : "";
     const schema = JSON.stringify({
       "@context": "https://schema.org",

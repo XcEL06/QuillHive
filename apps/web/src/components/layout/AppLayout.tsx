@@ -176,7 +176,7 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
         <header className="border-b border-border bg-background/95">
           <div className="max-w-7xl mx-auto flex h-16 items-center justify-between px-4">
             <Link href="/" className="flex items-center gap-2">
-              <img src="/logo.png" alt="QuillHive" className="w-8 h-8 rounded-lg" />
+              <img src="/images/logo-icon-192.png" alt="QuillHive" className="w-8 h-8 rounded-lg" />
               <span className="font-serif text-lg font-bold"><span className="text-white">Quill</span><span className="text-primary">Hive</span></span>
             </Link>
             <div className="flex items-center gap-3 text-sm">
@@ -200,7 +200,7 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
         <div className="h-full flex items-center gap-3 px-4">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 group shrink-0">
-            <img src="/logo.png" alt="QuillHive" className="w-8 h-8 rounded-lg group-hover:scale-105 transition-transform" />
+            <img src="/images/logo-icon-192.png" alt="QuillHive" className="w-8 h-8 rounded-lg group-hover:scale-105 transition-transform" />
             <span className="font-serif font-bold text-lg tracking-tight hidden sm:block"><span className="text-white">Quill</span><span className="text-primary">Hive</span></span>
           </Link>
 

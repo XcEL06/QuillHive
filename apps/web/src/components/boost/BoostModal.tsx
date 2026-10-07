@@ -229,7 +229,7 @@ export function BoostModal({ postId, postTitle, onClose, onSuccess, defaultPlan 
         customizations: {
           title: "QuillHive Boost",
           description: `${plan.label} for "${postTitle.slice(0, 50)}"`,
-          logo: `${window.location.origin}/icons/icon-192.png`,
+          logo: `${window.location.origin}/images/logo-icon-192.png`,
         },
         callback: (data) => {
           if (data.status === "successful") {

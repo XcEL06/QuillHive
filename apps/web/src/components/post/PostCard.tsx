@@ -615,7 +615,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
         customizations: {
           title: 'QuillHive Boost',
           description: data.planLabel ?? 'Post Boost',
-          logo: `${window.location.origin}/icons/icon-192.png`,
+          logo: `${window.location.origin}/images/logo-icon-192.png`,
         },
         callback: async (result) => {
           if (result.status === 'successful') {
