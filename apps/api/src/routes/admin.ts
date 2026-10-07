@@ -738,7 +738,7 @@ router.get("/settings/features", async (_req, res) => {
   return res.json(flags);
 });
 
-router.patch("/settings/features", requireSuperAdmin, async (req: any, res) => {
+router.patch("/settings/features", requirePermission("manage_settings"), async (req: any, res) => {
   const updates = req.body as Partial<Record<FeatureFlagKey, boolean>>;
   const valid = FEATURE_FLAG_KEYS as readonly string[];
   for (const [key, value] of Object.entries(updates)) {

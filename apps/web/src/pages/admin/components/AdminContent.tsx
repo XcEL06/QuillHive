@@ -10,11 +10,14 @@ import { Eye, Search, Zap } from "lucide-react";
 import { Link } from "wouter";
 import { safeHtml } from "@/lib/sanitize";
 import { mediaUrl } from "@/lib/api";
+import { AdminOverviewStats } from "./AdminOverviewStats";
 
 export default function AdminContent({ token, toast, currentUser }: AdminProps) {
   const fetchAdmin = useAdminFetch(token);
   const [posts, setPosts] = useState<any[]>([]);
+  const [totalPosts, setTotalPosts] = useState(0);
   const [reports, setReports] = useState<any[]>([]);
+  const [totalReports, setTotalReports] = useState(0);
   const [search, setSearch] = useState("");
   const [boostPost, setBoostPost] = useState<any | null>(null);
   const [previewPost, setPreviewPost] = useState<any | null>(null);
@@ -22,7 +25,7 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
   const [plan, setPlan] = useState<"starter" | "growth" | "spotlight">("starter");
   const [reason, setReason] = useState("");
   const [granting, setGranting] = useState(false);
-  useEffect(() => { void Promise.all([fetchAdmin("/api/admin/posts?limit=100"), fetchAdmin("/api/admin/reports?limit=100")]).then(([p, r]) => { setPosts(p.posts ?? p); setReports(r.reports ?? r); }).catch((err) => toast({ title: "Could not load content", description: err.message, variant: "destructive" })); }, [fetchAdmin, toast]);
+  useEffect(() => { void Promise.all([fetchAdmin("/api/admin/posts?limit=100"), fetchAdmin("/api/admin/reports?limit=100")]).then(([p, r]) => { setPosts(p.posts ?? p); setTotalPosts(Number(p.total ?? p.posts?.length ?? 0)); setReports(r.reports ?? r); setTotalReports(Number(r.total ?? r.reports?.length ?? 0)); }).catch((err) => toast({ title: "Could not load content", description: err.message, variant: "destructive" })); }, [fetchAdmin, toast]);
   const grantBoost = async () => {
     if (!boostPost) return;
     setGranting(true);
@@ -51,7 +54,15 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
   };
   const needle = search.toLowerCase();
   const canGrantBoost = currentUser.role === "admin" || currentUser.role === "super_admin";
+  const pendingReports = reports.filter((report) => report.status === "pending").length;
+  const publishedPosts = posts.filter((post) => post.isPublished && !post.isDeleted).length;
   return <>
+    <AdminOverviewStats items={[
+      { label: "Total posts", value: totalPosts, detail: "All non-deleted posts" },
+      { label: "Published posts", value: publishedPosts, detail: `Among ${posts.length} latest posts` },
+      { label: "Pending reports", value: pendingReports, detail: `Awaiting review among ${reports.length} loaded` },
+      { label: "Total reports", value: totalReports },
+    ]} />
     <div className="space-y-4"><div className="relative max-w-sm"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter posts by title, creator, or ID" className="pl-9" /></div><div className="grid gap-6 lg:grid-cols-2"><List title={`Posts (${posts.length})`} rows={posts.filter((p) => `${p.id} ${p.type} ${p.title} ${p.authorDisplayName} ${p.authorUsername}`.toLowerCase().includes(needle))} label={(p) => p.title || `${p.type || 'Post'} #${p.id}`} inspectLabel="View post" onInspect={(post) => void openPostPreview(post)} actionLabel={canGrantBoost ? "Grant Boost" : undefined} onAction={canGrantBoost ? (post) => setBoostPost(post) : undefined} /><List title={`Reports (${reports.length})`} rows={reports.filter((r) => `${r.reason} ${r.status}`.toLowerCase().includes(needle))} label={(r) => r.reason || r.category || "Reported item"} /></div></div>
     <Dialog open={!!boostPost} onOpenChange={(open) => { if (!open) { setBoostPost(null); setReason(""); } }}>
       <DialogContent className="sm:max-w-md">

@@ -8,6 +8,7 @@ import { useAdminFetch } from "../hooks/useAdminFetch";
 import { Link } from "wouter";
 import { safeHtml } from "@/lib/sanitize";
 import { mediaUrl } from "@/lib/api";
+import { AdminOverviewStats } from "./AdminOverviewStats";
 
 export default function AdminRevenue({ token, toast }: AdminProps) {
   const fetchAdmin = useAdminFetch(token);
@@ -46,8 +47,17 @@ export default function AdminRevenue({ token, toast }: AdminProps) {
     }
     return [];
   })();
+  const pendingBoosts = boosts.filter(boost => boost.status === "pending").length;
+  const approvedBoosts = boosts.filter(boost => boost.status === "approved").length;
+  const paidCents = boosts.reduce((total, boost) => total + (Number(boost.paidAmountCents) || 0), 0);
 
   return <>
+    <AdminOverviewStats items={[
+      { label: "Boost requests", value: boosts.length, detail: "Returned promotion records" },
+      { label: "Awaiting review", value: pendingBoosts },
+      { label: "Approved campaigns", value: approvedBoosts },
+      { label: "Recorded boost payments", value: `$${(paidCents / 100).toFixed(2)}`, detail: "Sum of returned paid amounts" },
+    ]} />
     <section className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
     <div className="flex items-center justify-between border-b border-border/70 px-5 py-4"><h2 className="text-sm font-semibold">Boost requests</h2><button onClick={() => void load()} title="Refresh" className="rounded-lg p-2 text-muted-foreground hover:bg-muted hover:text-foreground"><RefreshCw className="h-4 w-4" /></button></div>
     {loading ? <p className="p-8 text-sm text-muted-foreground">Loading requests...</p> : boosts.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">No boost requests.</p> : <div className="divide-y divide-border/60">{boosts.map((b) => <div key={b.id} className="px-5 py-4 text-sm">

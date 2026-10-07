@@ -158,6 +158,18 @@ describe("requireAdmin middleware", () => {
   });
 });
 
+describe("manage_settings permission", () => {
+  it.each(["admin", "super_admin"])("%s can manage feature flags", async (role) => {
+    const { hasPermission } = await import("../middleware/admin");
+    expect(hasPermission({ role }, "manage_settings")).toBe(true);
+  });
+
+  it("does not allow moderators to manage feature flags", async () => {
+    const { hasPermission } = await import("../middleware/admin");
+    expect(hasPermission({ role: "moderator" }, "manage_settings")).toBe(false);
+  });
+});
+
 describe("validateBearerTokenState middleware", () => {
   beforeEach(() => {
     authMocks.getSessionUserId.mockReturnValue(1);

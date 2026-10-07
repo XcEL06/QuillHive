@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { AdminProps } from "./types";
 import { useAdminFetch } from "../hooks/useAdminFetch";
+import { AdminOverviewStats } from "./AdminOverviewStats";
 
 interface ReviewFlag {
   id: number;
@@ -71,6 +72,12 @@ export default function AdminSpamReview({ token, toast }: AdminProps) {
       <Button variant="outline" onClick={() => void refresh().catch((error) => toast({ title: "Could not refresh queue", description: error.message, variant: "destructive" }))}><RefreshCw className="mr-2 h-4 w-4" />Refresh scan</Button>
     </header>
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-muted-foreground"><AlertTriangle className="mr-2 inline h-4 w-4 text-amber-500" />Patterns can produce false positives. Inspect the evidence and choose dismiss, warn, strike, or ban for each flag.</div>
+    <AdminOverviewStats items={[
+      { label: "Pending flags", value: flags.length, detail: "Current review queue" },
+      { label: "Affected accounts", value: new Set(flags.map((flag) => flag.userId)).size },
+      { label: "Already banned", value: flags.filter((flag) => flag.isBanned).length },
+      { label: "Signal types", value: new Set(flags.map((flag) => flag.ruleKey)).size },
+    ]} />
     {loading ? <p className="py-12 text-center text-sm text-muted-foreground">Scanning recent activity…</p> : flags.length === 0 ? <div className="rounded-xl border border-dashed border-border p-12 text-center"><ShieldAlert className="mx-auto h-8 w-8 text-muted-foreground" /><p className="mt-3 font-medium">Queue is clear</p><p className="mt-1 text-sm text-muted-foreground">No pending heuristic flags were found.</p></div> : (
       <div className="space-y-4">{flags.map((flag) => (
         <article key={flag.id} className="rounded-xl border border-border/70 bg-background p-5 shadow-sm">

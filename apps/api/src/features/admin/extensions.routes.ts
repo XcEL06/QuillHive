@@ -50,7 +50,7 @@ adminExtensionsRouter.patch("/jobs/:id/feature", requirePermission("manage_jobs"
 adminExtensionsRouter.patch("/jobs/:id/reject", requirePermission("manage_jobs"), async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
-  await db.update(jobsTable).set({ isActive: false, moderationStatus: "rejected" }).where(eq(jobsTable.id, id));
+  await db.update(jobsTable).set({ isActive: false, isApproved: false, moderationStatus: "rejected" }).where(eq(jobsTable.id, id));
   await audit(adminId, "job_reject", "job", id);
   res.json({ ok: true });
 });

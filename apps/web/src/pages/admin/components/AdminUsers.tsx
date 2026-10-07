@@ -8,10 +8,12 @@ import { Search, ChevronLeft, ChevronRight, Send, ShieldAlert, Ban, ChevronDown,
 import type { AdminProps } from "./types";
 import { useAdminFetch } from "../hooks/useAdminFetch";
 import { Link } from "wouter";
+import { AdminOverviewStats } from "./AdminOverviewStats";
 
 export default function AdminUsers({ token, toast }: AdminProps) {
   const fetchAdmin = useAdminFetch(token);
   const [users, setUsers] = useState<any[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -22,7 +24,7 @@ export default function AdminUsers({ token, toast }: AdminProps) {
   const [clustersLoading, setClustersLoading] = useState(true);
   const [openCluster, setOpenCluster] = useState<string | null>(null);
   const [banningCluster, setBanningCluster] = useState<string | null>(null);
-  useEffect(() => { setLoading(true); void fetchAdmin(`/api/admin/users?page=${page}&limit=25`).then((d) => setUsers(d.users ?? d)).catch((err) => toast({ title: "Could not load users", description: err.message, variant: "destructive" })).finally(() => setLoading(false)); }, [fetchAdmin, toast, page]);
+  useEffect(() => { setLoading(true); void fetchAdmin(`/api/admin/users?page=${page}&limit=25`).then((d) => { setUsers(d.users ?? d); setTotalUsers(Number(d.total ?? d.users?.length ?? 0)); }).catch((err) => toast({ title: "Could not load users", description: err.message, variant: "destructive" })).finally(() => setLoading(false)); }, [fetchAdmin, toast, page]);
   useEffect(() => { setClustersLoading(true); void fetchAdmin("/api/admin/suspicious-clusters").then((d) => setClusters(d.clusters ?? [])).catch((err) => toast({ title: "Could not load suspicious clusters", description: err.message, variant: "destructive" })).finally(() => setClustersLoading(false)); }, [fetchAdmin, toast]);
 
   const banAll = async (cluster: any) => {
@@ -54,7 +56,14 @@ export default function AdminUsers({ token, toast }: AdminProps) {
     }
   };
   const filtered = users.filter((u) => `${u.displayName} ${u.username} ${u.email}`.toLowerCase().includes(search.toLowerCase()));
+  const bannedVisible = users.filter((u) => u.isBanned).length;
   return <>
+    <AdminOverviewStats items={[
+      { label: "Total accounts", value: totalUsers, detail: "All non-deleted accounts" },
+      { label: "Banned on this page", value: bannedVisible, detail: `Page ${page} · ${users.length} records loaded` },
+      { label: "Flagged signup clusters", value: clusters.length, detail: "Shared signup IP hash signals" },
+      { label: "Visible after search", value: filtered.length, detail: "Current page results" },
+    ]} />
     <section className="space-y-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3"><ShieldAlert className="mt-0.5 h-5 w-5 text-amber-600" /><div><h2 className="text-sm font-semibold">Suspicious clusters</h2><p className="mt-1 text-xs text-muted-foreground">Three or more accounts sharing a signup IP hash within 24 hours.</p></div></div>
