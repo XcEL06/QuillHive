@@ -8,7 +8,6 @@ import { PostCard } from '@/components/post/PostCard';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import AchievementBadgeRow from '@/components/profile/AchievementBadgeRow';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,13 +18,12 @@ import { useToast } from '@/hooks/use-toast';
 import {
   MapPin, Link as LinkIcon, Calendar, UserPlus, UserCheck, Plus, Loader2, Handshake,
   Pencil, X, ExternalLink, Sparkles, Globe, Facebook, Linkedin, Twitter, Instagram,
-  MessageCircle, Zap, Rocket, TrendingUp, Camera,
+  MessageCircle, Zap, Camera, Share2,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { apiFetch, apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
 import { uploadFile } from '@/lib/uploadFile';
 import { useT } from '@/lib/i18n';
-import { CreatorLevelBadge } from '@/components/trust/CreatorLevelBadge';
 import { BackButton } from '@/components/ui/BackButton';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { useFeature } from '@/lib/features';
@@ -39,6 +37,7 @@ interface ProfilePost {
   id: number;
   authorId?: number;
   type: string;
+  visibility?: 'public' | 'followers' | 'private';
   title?: string | null;
   content?: string | null;
   excerpt?: string | null;
@@ -153,9 +152,28 @@ export default function Profile() {
     }
   }
 
-  const { data: rawData, isLoading, refetch } = useGetUserByUsername(username);
+  const { data: rawData, isLoading, isError, refetch } = useGetUserByUsername(username);
   const data = rawData as ExtendedProfileData | undefined;
   const { mutate: toggleFollow, isPending: isFollowing } = useFollowUser({ mutation: { onSuccess: () => refetch() } });
+
+  const shareProfile = async () => {
+    if (!data?.user) return;
+    const url = `${window.location.origin}/profile/${encodeURIComponent(data.user.username)}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: `${data.user.displayName} on QuillHive`, text: 'Find this voice on QuillHive.', url });
+        toast({ title: 'Profile shared' });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        toast({ title: 'Profile link copied', description: 'Your QuillHive profile is ready to share.' });
+      } else {
+        throw new Error('Sharing is not available in this browser.');
+      }
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return;
+      toast({ title: 'Could not share profile', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' });
+    }
+  };
 
   useEffect(() => {
     setCoverImageError(false);
@@ -169,15 +187,14 @@ export default function Profile() {
   const [profileContentPage, setProfileContentPage] = useState(1);
   const [profileContentHasMore, setProfileContentHasMore] = useState(false);
   const [profileContentLoadingMore, setProfileContentLoadingMore] = useState(false);
+  const [profileContentError, setProfileContentError] = useState(false);
+  const [profileContentRetryCount, setProfileContentRetryCount] = useState(0);
 
   // Creator profile state
   const [creatorProfile, setCreatorProfile] = useState<CreatorProfile>({ skills: [], links: [], verified: false, isAvailableForHire: false, availableFor: [] });
   const [isEditCreatorOpen, setIsEditCreatorOpen] = useState(false);
   const [creatorForm, setCreatorForm] = useState({ skills: '', links: '', isAvailableForHire: false, availableFor: [] as string[] });
   const [isSavingCreator, setIsSavingCreator] = useState(false);
-
-  // Trust state
-  const [profileTrust, setProfileTrust] = useState<{ creatorLevel?: string } | null>(null);
 
   // Collaboration state
   const [isCollaborateOpen, setIsCollaborateOpen] = useState(false);
@@ -204,6 +221,7 @@ export default function Profile() {
     }
     if (data?.user?.id) {
       setProfileContentLoading(true);
+      setProfileContentError(false);
       setProfileContentPage(1);
       setProfileContentPosts([]);
       fetch(`/api/users/${encodeURIComponent(data.user.username)}/posts?page=1&limit=30`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
@@ -214,12 +232,8 @@ export default function Profile() {
           setProfileContentPage(Number(d?.page) || 1);
           setProfileContentHasMore(Boolean(d?.hasMore));
         })
-        .catch(() => { setProfileContentPosts([]); setProfileContentHasMore(false); })
+        .catch(() => { setProfileContentPosts([]); setProfileContentHasMore(false); setProfileContentError(true); })
         .finally(() => setProfileContentLoading(false));
-      fetch(`/api/trust/${data.user.id}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) setProfileTrust({ creatorLevel: d.creatorLevel }); })
-        .catch(() => {});
     }
     if (creatorIncomeEnabled) {
       const cp = (data as { creatorProfile?: CreatorProfile })?.creatorProfile;
@@ -257,7 +271,7 @@ export default function Profile() {
     }
 
     return () => { creatorProfileRequestCancelled = true; };
-  }, [creatorIncomeEnabled, data?.user?.id, data?.user?.username, token, toast]);
+  }, [creatorIncomeEnabled, data?.user?.id, data?.user?.username, token, toast, profileContentRetryCount]);
 
   const loadMoreProfilePosts = async () => {
     if (!data?.user?.username || profileContentLoadingMore || !profileContentHasMore) return;
@@ -368,6 +382,18 @@ export default function Profile() {
     );
   }
 
+  if (isError && !data) {
+    return (
+      <AppLayout>
+        <div className="mx-auto max-w-xl px-4 py-20 text-center">
+          <p className="font-medium text-foreground">This profile is unavailable right now.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Your hive is still here. Try loading this profile again.</p>
+          <Button onClick={() => void refetch()} variant="outline" className="mt-5 min-h-11 rounded-xl">Try again</Button>
+        </div>
+      </AppLayout>
+    );
+  }
+
   if (!data) {
     return <AppLayout><div className="py-20 text-center text-muted-foreground">{t('profile.userNotFound', 'User not found')}</div></AppLayout>;
   }
@@ -414,9 +440,9 @@ export default function Profile() {
             <button
               onClick={() => coverInputRef.current?.click()}
               disabled={uploadingCover}
-              className="absolute bottom-3 right-3 flex items-center gap-1.5 text-xs font-medium bg-black/60 text-white px-3 py-1.5 rounded-full hover:bg-black/75 transition-colors"
+              className="absolute bottom-3 right-3 flex min-h-11 items-center gap-1.5 text-xs font-medium bg-black/65 text-white px-3 py-2 rounded-full hover:bg-black/80 transition-colors"
             >
-              {uploadingCover ? 'Uploading...' : 'Change cover'}
+              {uploadingCover ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading cover…</> : <><Camera className="h-4 w-4" /> Change cover</>}
             </button>
           </>
         )}
@@ -448,9 +474,11 @@ export default function Profile() {
                   <button
                     onClick={() => avatarInputRef.current?.click()}
                     disabled={uploadingAvatar}
+                    aria-label={uploadingAvatar ? 'Uploading profile photo' : 'Change profile photo'}
+                    title={uploadingAvatar ? 'Uploading profile photo' : 'Change profile photo'}
                     className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
                   >
-                    <Camera className="w-3.5 h-3.5" />
+                    {uploadingAvatar ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
                   </button>
                 </>
               )}
@@ -462,54 +490,12 @@ export default function Profile() {
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {isMe ? (
-              <>
-                <Link href="/settings">
-                  <Button variant="outline" className="rounded-xl border-border/80">{t('profile.editProfile', 'Edit Profile')}</Button>
-                </Link>
-                {creatorIncomeEnabled && <Button variant="outline" onClick={openEditCreator} className="rounded-xl gap-2">
-                  <Pencil className="w-4 h-4" /> {t('profile.creatorProfile', 'Creator Profile')}
-                </Button>}
-                <Link href="/inbox">
-                  <Button variant="outline" className="rounded-xl gap-2">
-                    <Handshake className="w-4 h-4" /> {t('profile.collabInbox', 'Collab Inbox')}
-                  </Button>
-                </Link>
-              </>
-            ) : (
-              <>
-                {creatorIncomeEnabled && creatorProfile.isAvailableForHire && (
-                  <Button onClick={handleHireMe} className="rounded-xl gap-2 bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-500/30 font-semibold">
-                    <Zap className="w-4 h-4" /> {t('profile.inviteToCollaborate', 'Message about a project')}
-                  </Button>
-                )}
-                <Button onClick={() => setIsCollaborateOpen(true)} variant="outline" className="rounded-xl gap-2 border-primary/50 text-primary hover:bg-primary/5">
-                  <Handshake className="w-4 h-4" /> {t('profile.collaborate', 'Request collaboration')}
-                </Button>
-                {currentUser && (
-                  <Button onClick={handleHireMe} variant="outline" className="rounded-xl gap-2 border-border/60 hover:border-primary/40">
-                    <MessageCircle className="w-4 h-4" /> {t('profile.message', 'Message')}
-                  </Button>
-                )}
-                <Button
-                  onClick={() => toggleFollow({ username })}
-                  disabled={isFollowing}
-                  className={`rounded-xl shadow-md transition-all ${user.isFollowing ? 'bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground' : 'bg-primary text-primary-foreground hover:-translate-y-0.5'}`}
-                >
-                  {user.isFollowing ? <><UserCheck className="w-4 h-4 mr-2" />{t('profile.following', 'Following')}</> : <><UserPlus className="w-4 h-4 mr-2" />{t('profile.follow', 'Follow')}</>}
-                </Button>
-                <ReportDialog targetType="user" targetId={user.id} label="Report" />
-              </>
-            )}
-          </div>
         </div>
 
         {/* User Info */}
         <div className="mb-8">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl font-serif font-bold text-foreground">{user.displayName}</h1>
-            <CreatorLevelBadge level={profileTrust?.creatorLevel} size="sm" />
             {creatorIncomeEnabled && creatorProfile.isAvailableForHire && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold border border-amber-300 dark:border-amber-700">
                 <Zap className="w-3.5 h-3.5" />
@@ -627,10 +613,10 @@ export default function Profile() {
           {/* Social Links */}
           {(user.facebook || user.linkedin || user.twitter || user.instagram) && (
             <div className="flex flex-wrap items-center gap-3 mb-4">
-              {user.facebook && <a href={user.facebook} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 flex items-center justify-center hover:scale-110 transition-transform" aria-label="Facebook"><Facebook className="w-4 h-4 text-blue-600" /></a>}
-              {user.linkedin && <a href={user.linkedin} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 flex items-center justify-center hover:scale-110 transition-transform" aria-label="LinkedIn"><Linkedin className="w-4 h-4 text-blue-700" /></a>}
-              {user.twitter && <a href={user.twitter} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:scale-110 transition-transform" aria-label="Twitter"><Twitter className="w-4 h-4 text-slate-700 dark:text-slate-300" /></a>}
-              {user.instagram && <a href={user.instagram} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-lg bg-pink-50 dark:bg-pink-950/30 border border-pink-200 dark:border-pink-800 flex items-center justify-center hover:scale-110 transition-transform" aria-label="Instagram"><Instagram className="w-4 h-4 text-pink-600" /></a>}
+              {user.facebook && <a href={user.facebook} target="_blank" rel="noreferrer" className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-muted text-muted-foreground hover:text-primary" aria-label="Facebook"><Facebook className="w-4 h-4" /></a>}
+              {user.linkedin && <a href={user.linkedin} target="_blank" rel="noreferrer" className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-muted text-muted-foreground hover:text-primary" aria-label="LinkedIn"><Linkedin className="w-4 h-4" /></a>}
+              {user.twitter && <a href={user.twitter} target="_blank" rel="noreferrer" className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-muted text-muted-foreground hover:text-primary" aria-label="Twitter"><Twitter className="w-4 h-4" /></a>}
+              {user.instagram && <a href={user.instagram} target="_blank" rel="noreferrer" className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-muted text-muted-foreground hover:text-primary" aria-label="Instagram"><Instagram className="w-4 h-4" /></a>}
             </div>
           )}
 
@@ -639,35 +625,26 @@ export default function Profile() {
             <div className="flex flex-col"><span className="text-xl font-bold text-foreground">{user.followingCount}</span><span className="text-sm text-muted-foreground">{t('profile.following', 'Following')}</span></div>
           </div>
         </div>
-
-        {/* Growth CTA for owner */}
-        {isMe && (
-          <div className="mb-6 bg-gradient-to-r from-primary/8 via-violet-500/5 to-transparent border border-primary/20 rounded-2xl p-4 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                <TrendingUp className="w-4 h-4 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Grow your creator presence</p>
-                <p className="text-xs text-muted-foreground truncate">Post, get discovered, and boost your reach across QuillHive.</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Link href="/write">
-                <Button size="sm" variant="outline" className="rounded-xl text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10">
-                  <Zap className="w-3.5 h-3.5" /> Post
-                </Button>
-              </Link>
-              <Link href="/pricing">
-                <Button size="sm" className="rounded-xl text-xs gap-1.5 bg-gradient-to-r from-primary to-violet-500 border-0 text-white">
-                  <Rocket className="w-3.5 h-3.5" /> Boost
-                </Button>
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {data?.user?.username && <div className="mb-8"><AchievementBadgeRow username={data.user.username} isMe={isMe} /></div>}
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {isMe ? (
+            <>
+              <Link href="/settings"><Button variant="outline" className="min-h-11 rounded-xl border-border/80"><Pencil className="mr-2 h-4 w-4" />{t('profile.editProfile', 'Edit Profile')}</Button></Link>
+              {creatorIncomeEnabled && <Button variant="outline" onClick={openEditCreator} className="min-h-11 rounded-xl gap-2"><Sparkles className="h-4 w-4" />{t('profile.creatorProfile', 'Creator Profile')}</Button>}
+              <Link href="/inbox"><Button variant="outline" className="min-h-11 rounded-xl gap-2"><Handshake className="h-4 w-4" />{t('profile.collabInbox', 'Collab Inbox')}</Button></Link>
+            </>
+          ) : (
+            <>
+              {creatorIncomeEnabled && creatorProfile.isAvailableForHire && <Button onClick={handleHireMe} className="min-h-11 rounded-xl gap-2"><Zap className="h-4 w-4" />{t('profile.inviteToCollaborate', 'Message about a project')}</Button>}
+              {currentUser && <Button onClick={handleHireMe} variant="outline" className="min-h-11 rounded-xl gap-2"><MessageCircle className="h-4 w-4" />{t('profile.message', 'Message')}</Button>}
+              <Button onClick={() => toggleFollow({ username })} disabled={isFollowing} className={`min-h-11 rounded-xl ${user.isFollowing ? 'bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground' : 'bg-primary text-primary-foreground'}`}>
+                {user.isFollowing ? <><UserCheck className="mr-2 h-4 w-4" />{t('profile.following', 'Following')}</> : <><UserPlus className="mr-2 h-4 w-4" />{t('profile.follow', 'Follow')}</>}
+              </Button>
+              <Button onClick={() => setIsCollaborateOpen(true)} variant="outline" className="min-h-11 rounded-xl gap-2"><Handshake className="h-4 w-4" />{t('profile.collaborate', 'Request collaboration')}</Button>
+              <ReportDialog targetType="user" targetId={user.id} label="Report" />
+            </>
+          )}
+          <Button variant="outline" onClick={() => void shareProfile()} className="min-h-11 rounded-xl gap-2"><Share2 className="h-4 w-4" />Share profile</Button>
+        </div>
 
         {/* Profile Tabs */}
         <Tabs defaultValue="posts" className="w-full">
@@ -683,33 +660,56 @@ export default function Profile() {
           </TabsList>
 
           <TabsContent value="posts" className="space-y-6 focus-visible:outline-none">
-            {profileContentLoading && profileContentPosts.length === 0 ? (
+            {profileContentError ? (
+              <div className="rounded-2xl border border-border/60 bg-card px-5 py-10 text-center">
+                <p className="text-sm text-muted-foreground">Posts could not be loaded. Nothing has been changed.</p>
+                <Button variant="outline" className="mt-4 min-h-11 rounded-xl" onClick={() => setProfileContentRetryCount(count => count + 1)}>Try again</Button>
+              </div>
+            ) : profileContentLoading && profileContentPosts.length === 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-2xl" />)}
               </div>
             ) : allUserPosts.length === 0 ? (
-              <p className="text-muted-foreground text-center py-10 bg-muted/20 rounded-2xl">{profileContentHasMore ? 'No posts on this page yet. Load more to check older posts.' : t('profile.noPostsYet', 'This person has no posts yet.')}</p>
+              <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-5 py-10 text-center">
+                <p className="font-medium text-foreground">{profileContentHasMore ? 'No posts on this page yet.' : isMe ? 'Your voice starts with a post.' : t('profile.noPostsYet', 'No posts here yet.')}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{profileContentHasMore ? 'There may be older posts in the hive.' : isMe ? 'Put an idea into words and let it find its people.' : 'Check back when this creator shares something new.'}</p>
+                {isMe && !profileContentHasMore && <Link href="/write"><Button className="mt-4 min-h-11 rounded-xl"><Pencil className="mr-2 h-4 w-4" />Write a post</Button></Link>}
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {allUserPosts.map((post) => <PostCard key={post.id} post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} />)}
+                {allUserPosts.map((post) => <PostCard key={post.id} post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} hideAnalytics hideBoost hideReputation />)}
               </div>
             )}
             {profileContentHasMore && <div className="text-center"><Button variant="outline" onClick={() => void loadMoreProfilePosts()} disabled={profileContentLoadingMore}>{profileContentLoadingMore ? 'Loading…' : 'Load more posts'}</Button></div>}
           </TabsContent>
 
           <TabsContent value="sparks" className="space-y-6 focus-visible:outline-none">
-            {profileContentLoading ? (
+            {profileContentError ? (
+              <div className="rounded-2xl border border-border/60 bg-card px-5 py-10 text-center">
+                <p className="text-sm text-muted-foreground">Sparks could not be loaded. Nothing has been changed.</p>
+                <Button variant="outline" className="mt-4 min-h-11 rounded-xl" onClick={() => setProfileContentRetryCount(count => count + 1)}>Try again</Button>
+              </div>
+            ) : profileContentLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-2xl" />)}
               </div>
             ) : sparkPosts.length === 0 ? (
-              <p className="text-muted-foreground text-center py-10 bg-muted/20 rounded-2xl">{profileContentHasMore ? 'No Sparks on this page yet. Load more to check older Sparks.' : 'This person has no Sparks yet.'}</p>
+              <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-5 py-10 text-center">
+                <p className="font-medium text-foreground">{profileContentHasMore ? 'No Sparks on this page yet.' : isMe ? 'A small spark can start something big.' : 'No Sparks here yet.'}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{profileContentHasMore ? 'There may be older Sparks to discover.' : isMe ? 'Share a quick thought, a work-in-progress, or a bright idea.' : 'Come back when this creator has a thought to share.'}</p>
+                {isMe && !profileContentHasMore && <Link href="/write?type=spark"><Button className="mt-4 min-h-11 rounded-xl"><Sparkles className="mr-2 h-4 w-4" />Share a Spark</Button></Link>}
+              </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {sparkPosts.map(post => <PostCard key={post.id} post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} />)}
+                {sparkPosts.map(post => (
+                  <div key={post.id} className="min-w-0">
+                    {isMe && post.visibility && <p className="mb-2 text-xs font-medium text-muted-foreground">Visibility: {post.visibility}</p>}
+                    <PostCard post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} hideAnalytics hideBoost hideReputation />
+                  </div>
+                ))}
               </div>
             )}
-            {profileContentHasMore && <div className="text-center"><Button variant="outline" onClick={() => void loadMoreProfilePosts()} disabled={profileContentLoadingMore}>{profileContentLoadingMore ? 'Loading…' : 'Load more Sparks'}</Button></div>}
+            {profileContentHasMore && <div className="text-center"><Button variant="outline" className="min-h-11 rounded-xl" onClick={() => void loadMoreProfilePosts()} disabled={profileContentLoadingMore}>{profileContentLoadingMore ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading…</> : 'Load more Sparks'}</Button></div>}
           </TabsContent>
 
 

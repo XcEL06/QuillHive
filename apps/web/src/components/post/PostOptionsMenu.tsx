@@ -103,6 +103,8 @@ export type PostOptionsMenuProps = {
   isSaved?: boolean;
   isFollowingAuthor?: boolean;
   hasApplied?: boolean;
+  hideAnalytics?: boolean;
+  hideBoost?: boolean;
   onAction?: (action: PostOptionAction, post: PostOptionPost) => void | Promise<void>;
   onDeletePermanently?: () => void | Promise<void>;
   className?: string;
@@ -136,6 +138,8 @@ export function PostOptionsMenu({
   isSaved = false,
   isFollowingAuthor = false,
   hasApplied = false,
+  hideAnalytics = false,
+  hideBoost = false,
   onAction,
   onDeletePermanently,
   className,
@@ -180,8 +184,8 @@ export function PostOptionsMenu({
       items: [
         { label: isPinned ? 'Unpin from Profile' : 'Pin to Profile', action: 'pin', icon: isPinned ? PinOff : Pin },
         { label: 'Edit Post', action: 'edit', icon: Edit3 },
-        { label: post.type === 'job' ? 'View Proposals' : 'View Analytics', action: post.type === 'job' ? 'proposals' : 'analytics', icon: post.type === 'job' ? BriefcaseBusiness : BarChart3 },
-        ...(post.type !== 'job' ? [{ label: 'Boost Post', action: 'boost' as const, icon: CircleDollarSign }] : []),
+        ...(post.type === 'job' || !hideAnalytics ? [{ label: post.type === 'job' ? 'View Proposals' : 'View Analytics', action: post.type === 'job' ? 'proposals' as const : 'analytics' as const, icon: post.type === 'job' ? BriefcaseBusiness : BarChart3 }] : []),
+        ...(post.type !== 'job' && !hideBoost ? [{ label: 'Boost Post', action: 'boost' as const, icon: CircleDollarSign }] : []),
       ],
     },
     ...(post.type !== 'job' ? [{

@@ -334,7 +334,7 @@ function TrustBadge({ tier, isAdmin }: { tier?: string; isAdmin?: boolean }) {
   return null;
 }
 
-export function PostCard({ post: initialPost, compact = false }: { post: EnrichedPost; compact?: boolean }) {
+export function PostCard({ post: initialPost, compact = false, hideAnalytics = false, hideBoost = false, hideReputation = false }: { post: EnrichedPost; compact?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean }) {
   const [, setLocation] = useLocation();
   const { user: currentUser } = useAuthStore();
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
@@ -800,7 +800,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
                 {post.author.displayName}
               </Link>
 
-              {post.authorCreatorLevel === 'luminary' ? (
+              {!hideReputation && (post.authorCreatorLevel === 'luminary' ? (
                 <CreatorLevelBadge level={post.authorCreatorLevel} size="xs" />
               ) : (
                 <>
@@ -808,7 +808,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
                   <SuperUserBadge isSuperUser={post.authorIsSuperUser} />
                   <TrustBadge tier={post.authorTrustTier} isAdmin={isAdmin} />
                 </>
-              )}
+              ))}
 
               <span className="text-muted-foreground">•</span>
               {postTimestamp && (
@@ -823,6 +823,8 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
               currentUserId={currentUser?.id}
               isOwner={isOwner}
               isSaved={post.isSaved}
+              hideAnalytics={hideAnalytics}
+              hideBoost={hideBoost}
               onAction={handlePostOptionAction}
               onDeletePermanently={handleDeleteWithUndo}
             />
@@ -879,7 +881,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
                 className="h-full w-full"
                 imageClassName="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
               />
-              {isBoostActive && (
+              {isBoostActive && !hideBoost && (
                 <div className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-violet-500/30 bg-violet-500/15 px-2 py-1 backdrop-blur-sm">
                   <Sparkles className="h-3 w-3 text-violet-400" />
                   <span className="text-[10px] font-medium text-violet-200">Boosted</span>
@@ -1081,14 +1083,14 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
         </div>
 
         {/* Visibility signal (owner only or if viewsCount available) */}
-        {((isOwner && isFirst24h) || (post.viewsCount ?? 0) > 0) && (
+        {((isOwner && isFirst24h && !hideBoost) || (post.viewsCount ?? 0) > 0) && (
           <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/30">
             <Eye className="w-3.5 h-3.5 text-muted-foreground" />
             {(post.viewsCount ?? 0) > 0 ? (
               <span className="text-xs text-muted-foreground">
                 Seen by <span className="font-semibold text-foreground">{(post.viewsCount ?? 0).toLocaleString()}</span> people
               </span>
-            ) : isFirst24h && isOwner ? (
+            ) : isFirst24h && isOwner && !hideBoost ? (
               <span className="text-xs text-muted-foreground">Your first 24h - posts get extra reach right now. <button onClick={() => setBoostOpen(true)} className="text-primary hover:underline font-medium">Boost to grow faster →</button></span>
             ) : null}
           </div>
@@ -1112,7 +1114,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
       </motion.article>
 
       {/* Boost Dialog */}
-      <Dialog open={boostOpen} onOpenChange={setBoostOpen}>
+      {!hideBoost && <Dialog open={boostOpen} onOpenChange={setBoostOpen}>
         <DialogContent className="rounded-2xl border-border/50 sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1158,7 +1160,7 @@ export function PostCard({ post: initialPost, compact = false }: { post: Enriche
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>}
 
       {/* Why am I seeing this? Dialog */}
       <Dialog open={showWhyDialog} onOpenChange={setShowWhyDialog}>
