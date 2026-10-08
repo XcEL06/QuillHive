@@ -45,6 +45,7 @@ type EnrichedPost = Post & {
   reason?: string;
   reasonDetails?: string;
   editedCount?: number;
+  isEdited?: boolean;
   trustScore?: { cis: number; retention: number; tier: TrustTier } | null;
   groupId?: number | null;
   titleA?: string | null;
@@ -813,6 +814,15 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
               <span className="text-muted-foreground">•</span>
               {postTimestamp && (
                 <time className="text-xs text-muted-foreground" dateTime={postTimestamp.dateTime} title={postTimestamp.title}>{postTimestamp.label}</time>
+              )}
+              {(post.isEdited || (post.editedCount ?? 0) > 0) && (
+                isOwner ? (
+                  <button type="button" onClick={(event) => { event.stopPropagation(); setShowHistoryModal(true); }} className="text-xs font-medium text-primary hover:underline" aria-label="View edit history">
+                    Edited
+                  </button>
+                ) : (
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">Edited</Badge>
+                )
               )}
             </div>
           </div>

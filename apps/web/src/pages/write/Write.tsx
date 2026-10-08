@@ -148,6 +148,8 @@ export default function Write() {
   const [imageUrl, setImageUrl] = useState('');
   const [originalImageUrl, setOriginalImageUrl] = useState('');
   const [postAttachments, setPostAttachments] = useState<import('@/components/post/AttachmentPicker').Attachment[]>([]);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false);
   const [isLoadingEdit, setIsLoadingEdit] = useState(Boolean(editPostId));
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [enableSchedule, setEnableSchedule] = useState(false);
@@ -578,6 +580,10 @@ export default function Write() {
   };
 
   const handlePublish = async (isPublished: boolean) => {
+    if (isUploadingImage || isUploadingAttachments) {
+      toast({ title: 'Upload still in progress', description: 'Wait for your media to finish uploading before saving this post.', variant: 'destructive' });
+      return;
+    }
     if (!editor?.isInitialized || editor.isEmpty) {
       toast({ title: t('write.emptyContent'), description: t('write.emptyContentDesc'), variant: 'destructive' });
       return;
@@ -854,7 +860,7 @@ export default function Write() {
               <Button
                 variant="outline"
                 onClick={() => handlePublish(false)}
-                disabled={isCreating}
+                disabled={isCreating || isUploadingImage || isUploadingAttachments}
                 className="rounded-xl"
               >
                 <Save className="w-4 h-4 mr-2" /> {t('write.draft')}
@@ -862,7 +868,7 @@ export default function Write() {
             )}
             <Button
               onClick={() => handlePublish(true)}
-              disabled={isCreating || isSavingEdit || isLoadingEdit || (!editPostId && enableSchedule && !scheduledAt)}
+              disabled={isCreating || isSavingEdit || isLoadingEdit || isUploadingImage || isUploadingAttachments || (!editPostId && enableSchedule && !scheduledAt)}
               className="rounded-xl bg-gradient-to-r from-primary to-violet-500 text-white border-0 shadow-lg"
             >
               {isCreating || isSavingEdit || isLoadingEdit
@@ -1002,7 +1008,7 @@ export default function Write() {
               <Label className="flex items-center gap-2">
                 <ImageIcon className="w-4 h-4" /> {t('write.coverImageLabel')}
               </Label>
-              <ImageUploadField value={imageUrl} onChange={setImageUrl} category="post" label={t('write.chooseCoverImage', 'Choose cover image')} />
+              <ImageUploadField value={imageUrl} onChange={setImageUrl} onUploadingChange={setIsUploadingImage} category="post" label={t('write.chooseCoverImage', 'Choose cover image')} />
             </div>
             {/* Attachments */}
             <div className="space-y-2 col-span-1 md:col-span-2">
@@ -1012,6 +1018,7 @@ export default function Write() {
               <AttachmentPicker
                 attachments={postAttachments}
                 onChange={setPostAttachments}
+                onUploadingChange={setIsUploadingAttachments}
                 max={20}
                 label={t('write.addFiles')}
               />

@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { Link2, Copy, Check, Users, Gift, Share2, ChevronRight } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
-import { apiFetch, getApiErrorMessage } from "@/lib/api";
+import { apiFetch, copyTextToClipboard, getApiErrorMessage } from "@/lib/api";
 import { BackButton } from "@/components/ui/BackButton";
+import { useToast } from "@/hooks/use-toast";
 
 interface InviteCode {
   id: number;
@@ -27,6 +28,7 @@ interface GenerateInviteResponse {
 
 export default function InvitePage() {
   const { user } = useAuthStore();
+  const { toast } = useToast();
   const [data, setData] = useState<InviteStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
@@ -79,12 +81,15 @@ export default function InvitePage() {
     }
   };
 
-  const copyLink = (code: string) => {
+  const copyLink = async (code: string) => {
     const url = `${appUrl}/signup?invite=${encodeURIComponent(code)}`;
-    void navigator.clipboard.writeText(url).then(() => {
+    try {
+      await copyTextToClipboard(url);
       setCopiedCode(code);
       setTimeout(() => setCopiedCode(null), 2000);
-    });
+    } catch {
+      toast({ title: "Could not copy invite link", description: "Try copying the link from the field.", variant: "destructive" });
+    }
   };
 
   const codes = Array.isArray(data?.codes) ? data.codes : [];

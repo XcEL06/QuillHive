@@ -46,9 +46,10 @@ interface AttachmentPickerProps {
   label?: string;
   compact?: boolean;
   category?: UploadCategory;
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
-export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS, label = 'Attach files', compact = false, category = 'post' }: AttachmentPickerProps) {
+export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS, label = 'Attach files', compact = false, category = 'post', onUploadingChange }: AttachmentPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [failedPreviews, setFailedPreviews] = useState<Set<string>>(() => new Set());
@@ -61,6 +62,7 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
       return;
     }
     setUploading(true);
+    onUploadingChange?.(true);
     const next: Attachment[] = [...attachments];
     try {
       for (const file of Array.from(files)) {
@@ -79,6 +81,7 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
           filename: file.name,
           sizeBytes: file.size,
         });
+        onChange([...next]);
       }
       onChange(next);
     } catch (err) {
@@ -86,6 +89,7 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
       toast({ title: 'Upload failed', description: message, variant: 'destructive' });
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -142,6 +146,7 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
                 <button
                   type="button"
                   onClick={() => remove(i)}
+                  disabled={uploading}
                   className="ml-1 p-1 rounded-full hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
                   aria-label="Remove attachment"
                 >

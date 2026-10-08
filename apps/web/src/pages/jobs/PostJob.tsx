@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { apiUrl, getStoredToken } from '@/lib/api';
+import { apiUrl, getApiErrorMessage, getStoredToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { BackButton } from '@/components/ui/BackButton';
 import {
@@ -58,7 +58,7 @@ export default function PostJob() {
     void (async () => {
       try {
         const res = await fetch(apiUrl(`/api/jobs/${editId}`), { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-        if (!res.ok) throw new Error("Could not load this opportunity");
+        if (!res.ok) throw new Error(await getApiErrorMessage(res, "Could not load this opportunity."));
         const job: {
           id?: number; authorId?: number; author?: { id?: number };
           title?: string; type?: string; companyName?: string | null; description?: string;
@@ -165,8 +165,8 @@ export default function PostJob() {
           isActive,
         }),
       });
-      const data: { error?: string; id?: number; message?: string } = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Failed to post');
+      const data: { error?: string; id?: number; message?: string } = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not save this opportunity.'));
       toast({
         title: editId ? 'Opportunity updated.' : data.message ? 'Opportunity submitted for review' : 'Opportunity posted! 🎉',
         description: data.message ?? (editId ? undefined : 'Creators can now discover your opportunity.'),

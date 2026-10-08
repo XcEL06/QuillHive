@@ -980,6 +980,7 @@ function GroupsList() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', category: 'general', privacy: 'open', coverUrl: '', iconUrl: '', tags: '', rules: '', isAnnouncementOnly: false });
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [isUploadingIcon, setIsUploadingIcon] = useState(false);
 
   const { data, isLoading } = useGetGroups({ search: search || undefined });
 
@@ -1142,7 +1143,7 @@ function GroupsList() {
               <Textarea maxLength={280} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 placeholder={t('groups.descriptionPlaceholder', 'What is this group about?')} className="mt-1.5 rounded-xl resize-none" rows={3} />
             </div>
-            <ImageUploadField value={form.iconUrl} onChange={iconUrl => setForm(f => ({ ...f, iconUrl }))} category="group" label="Community icon" />
+            <ImageUploadField value={form.iconUrl} onChange={iconUrl => setForm(f => ({ ...f, iconUrl }))} onUploadingChange={setIsUploadingIcon} category="group" label="Community icon" />
             <div>
               <Label>{t('groups.coverPhoto', 'Cover photo')}</Label>
               <Input ref={fileInputRef} type="file" accept="image/*" onChange={handleCoverUpload} className="mt-1.5 rounded-xl file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm" />
@@ -1188,7 +1189,7 @@ function GroupsList() {
                   isAnnouncementOnly: form.isAnnouncementOnly,
                 } as any,
               })}
-              disabled={isCreating || isUploadingCover || !form.name.trim()}
+              disabled={isCreating || isUploadingCover || isUploadingIcon || !form.name.trim()}
               className="w-full rounded-xl"
             >
               {isCreating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}

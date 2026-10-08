@@ -11,9 +11,10 @@ interface ImageUploadFieldProps {
   category: UploadCategory;
   label: string;
   previewClassName?: string;
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
-export function ImageUploadField({ value, onChange, category, label, previewClassName = 'h-32' }: ImageUploadFieldProps) {
+export function ImageUploadField({ value, onChange, category, label, previewClassName = 'h-32', onUploadingChange }: ImageUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [previewError, setPreviewError] = useState(false);
@@ -30,6 +31,7 @@ export function ImageUploadField({ value, onChange, category, label, previewClas
       return;
     }
     setUploading(true);
+    onUploadingChange?.(true);
     try {
       const uploaded = await uploadFile(file, category);
       onChange(uploaded.url);
@@ -41,6 +43,7 @@ export function ImageUploadField({ value, onChange, category, label, previewClas
       });
     } finally {
       setUploading(false);
+      onUploadingChange?.(false);
     }
   };
 
