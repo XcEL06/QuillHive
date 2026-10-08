@@ -5,6 +5,7 @@ import { oauthAccountsTable, usersTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
 import { createAuthTokens } from "../../lib/auth";
 import { logger } from "../../lib/logger";
+import { isFeatureEnabled } from "../../lib/featureFlags";
 
 export const oauthRouter = Router();
 
@@ -56,9 +57,21 @@ function frontendUrl(): string {
 
 const KNOWN_PROVIDERS: Provider[] = ["google", "github"];
 
-oauthRouter.get("/:provider/start", (req, res: Response) => {
+function providerFlag(provider: Provider): string {
+  return provider === "google" ? "google_oauth_enabled" : "github_oauth_enabled";
+}
+
+function redirectProviderDisabled(res: Response, provider: Provider) {
+  const target = new URL("/login", frontendUrl());
+  target.searchParams.set("error", "provider_disabled");
+  target.searchParams.set("provider", provider);
+  return res.redirect(target.toString());
+}
+
+oauthRouter.get("/:provider/start", async (req, res: Response) => {
   const provider = req.params.provider as Provider;
   if (!KNOWN_PROVIDERS.includes(provider)) return res.status(404).send("Unknown provider");
+  if (!(await isFeatureEnabled(providerFlag(provider)))) return redirectProviderDisabled(res, provider);
   const cfg = configFor(provider);
   if (!cfg.clientId || !cfg.clientSecret) {
     const target = new URL("/login", frontendUrl());
@@ -225,6 +238,7 @@ async function handleGithubCallback(req: Request, res: Response): Promise<void> 
 
 async function handleCallback(req: Request, res: Response, provider: string) {
   if (!KNOWN_PROVIDERS.includes(provider as Provider)) return res.status(404).send("Unknown provider");
+  if (!(await isFeatureEnabled(providerFlag(provider as Provider)))) return redirectProviderDisabled(res, provider as Provider);
   if (provider === "github") return handleGithubCallback(req, res);
 
   const cfg = configFor(provider as Provider);

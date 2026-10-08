@@ -1126,7 +1126,7 @@ function GroupsList() {
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain sm:max-w-md rounded-3xl border-border/50">
+        <DialogContent className="sm:max-w-md rounded-3xl border-border/50">
           <DialogHeader>
             <DialogTitle className="font-serif text-xl flex items-center gap-2">
               <Users className="w-5 h-5 text-primary" /> {t('groups.createAGroup', 'Create a Group')}

@@ -12,6 +12,7 @@ import toast from "react-hot-toast";
 import { Toaster } from "react-hot-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useI18n, useT, SUPPORTED_LANGS } from "@/lib/i18n";
+import { useFeature } from "@/lib/features";
 
 const MAGIC_LINK_COOLDOWN_S = 60;
 
@@ -35,6 +36,8 @@ export default function Auth() {
     return window.location.pathname !== "/signup" && mode !== "signup" && mode !== "register";
   });
   const [, setLocation] = useLocation();
+  const googleOAuthEnabled = useFeature("google_oauth_enabled");
+  const githubOAuthEnabled = useFeature("github_oauth_enabled");
   const { setAuth, user, refreshUser } = useAuthStore();
   const [inviteCode, setInviteCode] = useState("");
   const [refSource, setRefSource] = useState("");
@@ -114,6 +117,7 @@ export default function Auth() {
     if (oauthError) {
       const messages: Record<string, string> = {
         provider_not_configured: `${url.searchParams.get("provider") === "github" ? "GitHub" : "OAuth provider"} sign-in is not configured. Contact the site administrator.`,
+        provider_disabled: `${url.searchParams.get("provider") === "github" ? "GitHub" : "Google"} sign-in is currently turned off.`,
         oauth_cancelled: "GitHub sign-in was cancelled.",
         oauth_failed: "GitHub sign-in could not be completed. Please try again.",
         no_email: "GitHub did not provide a verified email address. Add a verified email to your GitHub account and try again.",
@@ -641,6 +645,7 @@ export default function Auth() {
                   )}
                 </form>
 
+                {(isLogin || googleOAuthEnabled || githubOAuthEnabled) && <>
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/60" /></div>
                   <div className="relative flex justify-center text-xs uppercase tracking-wide">
@@ -649,6 +654,7 @@ export default function Auth() {
                 </div>
 
                 <div className="space-y-3">
+                  {isLogin && <>
                   {/* Magic link */}
                   <Button
                     type="button" variant="outline"
@@ -680,9 +686,10 @@ export default function Auth() {
                       Dev link: <a href={devMagicLink} className="underline">{devMagicLink}</a>
                     </p>
                   )}
+                  </>}
 
                   {/* Google OAuth */}
-                  <div>
+                  {googleOAuthEnabled && <div>
                     <Button
                       type="button" variant="outline" className="h-11 w-full rounded-xl gap-2"
                       onClick={() => startOAuth("google")}
@@ -690,10 +697,10 @@ export default function Auth() {
                     >
                       <Chrome className="w-4 h-4" /> {t("auth.google", "Continue with Google")}
                     </Button>
-                  </div>
+                  </div>}
 
                   {/* GitHub OAuth */}
-                  <div>
+                  {githubOAuthEnabled && <div>
                     <a
                       href={apiUrl("/api/auth/oauth/github/start")}
                       className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5
@@ -714,12 +721,13 @@ export default function Auth() {
                       </svg>
                       {t("auth.continueWithGithub", "Continue with GitHub")}
                     </a>
-                  </div>
+                  </div>}
 
-                  <p className="text-[11px] text-muted-foreground text-center">
+                  {isLogin && <p className="text-[11px] text-muted-foreground text-center">
                     {t("auth.passkeyHint", "Passkey sign-in is available in Settings → Security after you sign in once.")}
-                  </p>
+                  </p>}
                 </div>
+                </>}
               </CardContent>
             </Card>
 

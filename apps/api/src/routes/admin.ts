@@ -751,6 +751,10 @@ router.get("/settings/features", async (_req, res) => {
 
 router.patch("/settings/features", requirePermission("manage_settings"), async (req: any, res) => {
   const updates = req.body as Partial<Record<FeatureFlagKey, boolean>>;
+  const providerFlags = new Set(["google_oauth_enabled", "github_oauth_enabled"]);
+  if (Object.keys(updates).some((key) => providerFlags.has(key)) && req.currentUser?.role !== "super_admin") {
+    return res.status(403).json({ error: "Only super admins can change OAuth provider settings." });
+  }
   const valid = FEATURE_FLAG_KEYS as readonly string[];
   for (const [key, value] of Object.entries(updates)) {
     if (!valid.includes(key)) continue;

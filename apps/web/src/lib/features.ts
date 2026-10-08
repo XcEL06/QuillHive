@@ -24,6 +24,8 @@ export function useFeature(flag: string): boolean {
     flag === "maintenance_mode" ||
     flag === "ai_tools_enabled" ||
     flag === "ads_enabled" ||
+    flag === "google_oauth_enabled" ||
+    flag === "github_oauth_enabled" ||
     flag === "creator_income_enabled"
       ? false
       : true
