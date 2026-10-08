@@ -183,6 +183,13 @@
       "when": 1791465300000,
       "tag": "0028_post_external_url",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791465300001,
+      "tag": "0029_login_email_challenges",
+      "breakpoints": true
     }
   ]
 }

@@ -27,7 +27,8 @@ import {
   verifyEmailToken,
   getPublicAppUrl,
 } from "../email/email.service";
-import { recordLoginIntegrity, getLoginMeta } from "../security/locationIntegrity";
+import { acceptLoginIntegrity, recordLoginIntegrity, getLoginMeta } from "../security/locationIntegrity";
+import { createLoginEmailChallenge, verifyLoginEmailChallenge } from "./loginEmailChallenge.service";
 import { emitEvent, maskIp } from "../../lib/events";
 import { recordSignup } from "../../lib/alertEngine";
 import { visiblePostExpiryCondition } from "../posts/postExpiry";
@@ -280,7 +281,29 @@ export const login = async (req: Request, res: Response) => {
   }
   if (!user.emailVerified) return res.status(403).json({ error: "Please verify your email before signing in." });
 
-  const loginIntegrity = await recordLoginIntegrity(user.id, req);
+  const loginIntegrity = await recordLoginIntegrity(user.id, req, { deferReviewBaseline: true });
+  if (loginIntegrity.integrityStatus === "review") {
+    let challenge;
+    try {
+      challenge = await createLoginEmailChallenge({
+        userId: user.id,
+        authVersion: user.authVersion,
+        email: user.email,
+        metadata: loginIntegrity,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("We could not send a verification code")) {
+        return res.status(503).json({ error: error.message });
+      }
+      throw error;
+    }
+    return res.status(202).json({
+      requiresEmailCode: true,
+      ...challenge,
+      message: "We sent a sign-in code to your email. Enter it to finish signing in.",
+    });
+  }
+
   const authTokens = await createAuthTokens(user.id, { userAgent: loginIntegrity.userAgent, ipHash: loginIntegrity.ipHash });
   const userWithCounts = await getUserWithCounts(user.id, null);
   emitEvent({
@@ -296,6 +319,27 @@ export const login = async (req: Request, res: Response) => {
     },
   });
   return res.json({ ...authTokens, user: userWithCounts, loginIntegrity: { status: loginIntegrity.integrityStatus, riskScore: loginIntegrity.riskScore } });
+};
+
+export const verifyLoginEmailCode = async (req: Request, res: Response) => {
+  const challenge = await verifyLoginEmailChallenge(Number(req.body.challengeId), String(req.body.code));
+  if (!challenge) return res.status(400).json({ error: "The sign-in code is invalid, expired, or has reached its attempt limit. Sign in again to request a new code." });
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, challenge.userId));
+  if (!user || !user.emailVerified || user.isDeleted || user.isBanned || user.authVersion !== challenge.authVersion) {
+    return res.status(401).json({ error: "This sign-in request is no longer valid. Please sign in again." });
+  }
+
+  await acceptLoginIntegrity(user.id, challenge);
+  const authTokens = await createAuthTokens(user.id, { userAgent: challenge.userAgent ?? undefined, ipHash: challenge.ipHash });
+  const userWithCounts = await getUserWithCounts(user.id, null);
+  emitEvent({
+    type: "USER_EVENT",
+    severity: "low",
+    message: `User login: ${user.username}`,
+    metadata: { type: "login", userId: user.id, username: user.username, country: challenge.country || undefined, source: "email_code" },
+  });
+  return res.json({ ...authTokens, user: userWithCounts, loginIntegrity: { status: "normal", riskScore: 0 } });
 };
 
 export const logout = async (req: Request, res: Response) => {

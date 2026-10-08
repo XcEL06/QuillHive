@@ -93,6 +93,9 @@ export default function Auth() {
   const [devMagicLink, setDevMagicLink] = useState<string | null>(null);
   const [magicCooldown, setMagicCooldown] = useState(0);
   const [resendVerificationLoading, setResendVerificationLoading] = useState(false);
+  const [loginChallengeId, setLoginChallengeId] = useState<number | null>(null);
+  const [loginChallengeEmail, setLoginChallengeEmail] = useState("");
+  const [loginChallengeCode, setLoginChallengeCode] = useState("");
 
   // Countdown timer for magic link resend
   useEffect(() => {
@@ -271,6 +274,22 @@ export default function Auth() {
 
     try {
       if (isLogin) {
+        if (loginChallengeId) {
+          const res = await fetch(apiUrl("/api/auth/login/verify-email-code"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ challengeId: loginChallengeId, code: loginChallengeCode }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || "Could not verify this sign-in code.");
+          storeAuth(data);
+          setLoginChallengeId(null);
+          setLoginChallengeCode("");
+          toast.success(t("auth.welcomeBackToast", "Welcome back!"));
+          setLocation("/");
+          return;
+        }
+
         const res = await fetch(apiUrl("/api/auth/login"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -283,6 +302,14 @@ export default function Auth() {
           data = { error: `Something went wrong (status ${res.status}). Please try again.` };
         }
         if (!res.ok) throw new Error(data.error || t("auth.loginFailed", "Login failed"));
+        if (data.requiresEmailCode && Number.isInteger(Number(data.challengeId)) && Number(data.challengeId) > 0) {
+          setLoginChallengeId(Number(data.challengeId));
+          setLoginChallengeEmail(data.email || email);
+          setLoginChallengeCode("");
+          setPassword("");
+          toast.success(data.message || "We sent a sign-in code to your email.");
+          return;
+        }
         storeAuth(data);
         toast.success(t("auth.welcomeBackToast", "Welcome back!"));
         setLocation("/");
@@ -457,7 +484,7 @@ export default function Auth() {
                       id="email" type="email" autoComplete="email" placeholder="name@example.com" required
                       value={email} onChange={e => setEmail(e.target.value)}
                       className="rounded-xl h-12 bg-muted/30"
-                      disabled={isLoading}
+                      disabled={isLoading || loginChallengeId !== null}
                     />
                     {!isLogin && (isCheckingEmail || emailStatus) && (
                       <div className={`flex items-center gap-2 text-xs ${emailStatus?.allowed ? "text-emerald-600" : "text-destructive"}`} role="status" aria-live="polite">
@@ -477,7 +504,30 @@ export default function Auth() {
                     )}
                   </div>
 
-                  <div className="space-y-2">
+                  {loginChallengeId ? (
+                    <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+                      <div>
+                        <p className="text-sm font-semibold">Verify it’s you</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Enter the six-digit sign-in code sent to {loginChallengeEmail}. It expires in 10 minutes.</p>
+                      </div>
+                      <Label htmlFor="login-code">Email sign-in code</Label>
+                      <Input
+                        id="login-code"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        pattern="[0-9]{6}"
+                        required
+                        value={loginChallengeCode}
+                        onChange={event => setLoginChallengeCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                        className="h-12 rounded-xl bg-background text-center font-mono text-lg"
+                        disabled={isLoading}
+                      />
+                      <Button type="button" variant="ghost" className="w-full rounded-xl" disabled={isLoading} onClick={() => { setLoginChallengeId(null); setLoginChallengeEmail(""); setLoginChallengeCode(""); }}>
+                        Back to sign in
+                      </Button>
+                    </div>
+                  ) : <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="password">{t("auth.password", "Password")}</Label>
                       {isLogin && (
@@ -503,7 +553,7 @@ export default function Auth() {
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                  </div>
+                  </div>}
 
                   {!isLogin && (
                     <div className="space-y-2">
@@ -536,7 +586,7 @@ export default function Auth() {
                     </div>
                   )}
 
-                  {import.meta.env.VITE_TURNSTILE_SITE_KEY && (
+                  {!loginChallengeId && import.meta.env.VITE_TURNSTILE_SITE_KEY && (
                     <div
                       className="cf-turnstile"
                       data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
@@ -546,12 +596,12 @@ export default function Auth() {
 
                   <Button
                     type="submit"
-                    disabled={isLoading || (!isLogin && !termsAccepted)}
+                    disabled={isLoading || (!isLogin && !termsAccepted) || (loginChallengeId !== null && loginChallengeCode.length !== 6)}
                     className="w-full h-12 rounded-xl text-base font-semibold bg-gradient-to-r from-primary to-violet-500 hover:-translate-y-0.5 shadow-lg shadow-primary/25 transition-all mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading
                       ? <><Loader2 className="w-5 h-5 animate-spin mr-2" />{isLogin ? "Signing in…" : "Creating account…"}</>
-                      : isLogin ? t("auth.login", "Sign In") : t("auth.register", "Create Account")
+                      : loginChallengeId ? "Verify code" : isLogin ? t("auth.login", "Sign In") : t("auth.register", "Create Account")
                     }
                   </Button>
 
@@ -677,7 +727,12 @@ export default function Auth() {
               <p className="text-muted-foreground">
                 {isLogin ? t("auth.noAccount", "Don't have an account?") : t("auth.hasAccount", "Already have an account?")}{" "}
                 <button
-                  onClick={() => setIsLogin(!isLogin)}
+                  onClick={() => {
+                    setLoginChallengeId(null);
+                    setLoginChallengeEmail("");
+                    setLoginChallengeCode("");
+                    setIsLogin(!isLogin);
+                  }}
                   className="font-semibold text-primary hover:underline"
                 >
                   {isLogin ? t("auth.signUp", "Sign up") : t("auth.signIn", "Sign in")}

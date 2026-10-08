@@ -29,7 +29,7 @@ export function getLoginMeta(req: Request) {
   };
 }
 
-export async function recordLoginIntegrity(userId: number, req: Request) {
+export async function recordLoginIntegrity(userId: number, req: Request, options: { deferReviewBaseline?: boolean } = {}) {
   const meta = getLoginMeta(req);
   try {
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
@@ -49,17 +49,34 @@ export async function recordLoginIntegrity(userId: number, req: Request) {
       riskScore,
     });
 
-    await db.update(usersTable).set({
-      lastKnownIPHash: meta.ipHash,
-      lastKnownCountry: meta.country ?? user?.lastKnownCountry ?? null,
-      lastKnownTimezone: meta.timezone ?? user?.lastKnownTimezone ?? null,
-      locationIntegrityStatus: integrityStatus,
-      locationRiskScore: riskScore,
-      updatedAt: new Date(),
-    }).where(eq(usersTable.id, userId));
+    if (!(options.deferReviewBaseline && integrityStatus === "review")) {
+      await db.update(usersTable).set({
+        lastKnownIPHash: meta.ipHash,
+        lastKnownCountry: meta.country ?? user?.lastKnownCountry ?? null,
+        lastKnownTimezone: meta.timezone ?? user?.lastKnownTimezone ?? null,
+        locationIntegrityStatus: integrityStatus,
+        locationRiskScore: riskScore,
+        updatedAt: new Date(),
+      }).where(eq(usersTable.id, userId));
+    }
 
     return { ...meta, integrityStatus, riskScore };
   } catch {
     return { ...meta, integrityStatus: "unknown", riskScore: 0 };
   }
+}
+
+export async function acceptLoginIntegrity(userId: number, meta: {
+  ipHash: string;
+  country: string | null;
+  timezone: string | null;
+}) {
+  await db.update(usersTable).set({
+    lastKnownIPHash: meta.ipHash,
+    lastKnownCountry: meta.country,
+    lastKnownTimezone: meta.timezone,
+    locationIntegrityStatus: "normal",
+    locationRiskScore: 0,
+    updatedAt: new Date(),
+  }).where(eq(usersTable.id, userId));
 }

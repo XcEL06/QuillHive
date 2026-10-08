@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, index } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
 export const magicLinkTokensTable = pgTable("magic_link_tokens", {
@@ -33,3 +33,21 @@ export const oauthAccountsTable = pgTable("oauth_accounts", {
   isPrimary: boolean("is_primary").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const loginEmailChallengesTable = pgTable("login_email_challenges", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+  authVersion: integer("auth_version").notNull(),
+  codeHash: text("code_hash").notNull(),
+  nonce: text("nonce").notNull(),
+  ipHash: text("ip_hash").notNull(),
+  userAgent: text("user_agent"),
+  country: text("country"),
+  timezone: text("timezone"),
+  attempts: integer("attempts").notNull().default(0),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  idxLoginEmailChallengesUserExpiry: index("idx_login_email_challenges_user_expiry").on(table.userId, table.expiresAt),
+}));

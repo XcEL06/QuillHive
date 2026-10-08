@@ -1,6 +1,6 @@
 # QuillHive project overview
 
-> Generated on 2026-10-06 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
+> Generated on 2026-10-08 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
 
 ## Project shape
 
@@ -199,6 +199,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `PATCH /api/collections/:id` — Update collections. ([source](apps/api/src/features/collections/collections.routes.ts)).
 - `DELETE /api/collections/:id/posts/:postId` — Remove collections posts. ([source](apps/api/src/features/collections/collections.routes.ts)).
 - `POST /api/collections/:id/posts/:postId` — Create or submit collections posts. ([source](apps/api/src/features/collections/collections.routes.ts)).
+- `GET /api/collections/public/:id` — Read or list collections public. ([source](apps/api/src/features/collections/collections.routes.ts)).
 
 ### features / creator-economy / opportunities
 
@@ -461,6 +462,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `POST /api/auth/change-password` — Create or submit auth change password. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `POST /api/auth/forgot-password` — Create or submit auth forgot password. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `POST /api/auth/login` — Authenticate a user (auth). ([source](apps/api/src/features/profiles/profile.routes.ts)).
+- `POST /api/auth/login/verify-email-code` — Create or submit login verify email code. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `POST /api/auth/logout` — End a user session (auth). ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `DELETE /api/auth/me` — Remove auth me. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `GET /api/auth/me` — Read or list auth me. ([source](apps/api/src/features/profiles/profile.routes.ts)).
@@ -697,6 +699,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 - `GET /api/auth/login-activity` — Read or list auth login activity. ([source](apps/api/src/routes/index.ts)).
 - `GET /api/auth/sessions` — Read or list auth sessions. ([source](apps/api/src/routes/index.ts)).
+- `DELETE /api/auth/sessions/:id` — Remove auth sessions. ([source](apps/api/src/routes/index.ts)).
 - `POST /api/auth/sessions/logout-all` — Create or submit sessions logout all. ([source](apps/api/src/routes/index.ts)).
 
 ### routes / jobs
@@ -808,6 +811,7 @@ Every PostgreSQL table exported from the current Drizzle schema index is listed 
 | `webhooks` | User webhook endpoint configuration and signing secrets. | [schema](packages/utils/db/src/schema/webhooks.ts) |
 | `invite_codes` | Referral/invitation codes and redemption state. | [schema](packages/utils/db/src/schema/inviteCodes.ts) |
 | `featured_slots` | Scheduled public featured-content slots. | [schema](packages/utils/db/src/schema/featuredSlots.ts) |
+| `login_email_challenges` | Stores login email challenges data for the associated feature. | [schema](packages/utils/db/src/schema/auth.ts) |
 | `magic_link_tokens` | One-time passwordless login tokens. | [schema](packages/utils/db/src/schema/auth.ts) |
 | `oauth_accounts` | External OAuth identities linked to user accounts. | [schema](packages/utils/db/src/schema/auth.ts) |
 | `passkeys` | WebAuthn credentials registered to user accounts. | [schema](packages/utils/db/src/schema/auth.ts) |

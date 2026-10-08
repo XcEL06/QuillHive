@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS "posts" (
 	"excerpt" text,
 	"type" text DEFAULT 'post' NOT NULL,
 	"image_url" text,
+	"external_url" text,
 	"attachments" text DEFAULT '[]' NOT NULL,
 	"tags" text DEFAULT '[]' NOT NULL,
 	"is_published" boolean DEFAULT true NOT NULL,
@@ -770,6 +771,7 @@ CREATE TABLE IF NOT EXISTS "collections" (
 	"user_id" integer NOT NULL,
 	"name" text NOT NULL,
 	"description" text,
+	"is_public" boolean DEFAULT false NOT NULL,
 	"post_count" integer DEFAULT 0 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
@@ -947,6 +949,22 @@ CREATE TABLE IF NOT EXISTS "featured_slots" (
 	"ends_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	CONSTRAINT "featured_slots_slot_key_unique" UNIQUE("slot_key")
+);
+
+CREATE TABLE IF NOT EXISTS "login_email_challenges" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"auth_version" integer NOT NULL,
+	"code_hash" text NOT NULL,
+	"nonce" text NOT NULL,
+	"ip_hash" text NOT NULL,
+	"user_agent" text,
+	"country" text,
+	"timezone" text,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"expires_at" timestamp NOT NULL,
+	"used_at" timestamp,
+	"created_at" timestamp DEFAULT now() NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "magic_link_tokens" (
@@ -3597,6 +3615,21 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column image_url on posts: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "external_url" text;
+  ELSE
+    RAISE NOTICE 'Skipped column external_url: posts is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column external_url on posts: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -9785,6 +9818,21 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('collections') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "collections" ADD COLUMN IF NOT EXISTS "is_public" boolean DEFAULT false NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column is_public: collections is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column is_public on collections: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('collections') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "collections" ADD COLUMN IF NOT EXISTS "post_count" integer DEFAULT 0 NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column post_count: collections is not a table';
@@ -11667,6 +11715,201 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column created_at on featured_slots: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "id" serial NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column id: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column id on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "user_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column user_id: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column user_id on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "auth_version" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column auth_version: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column auth_version on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "code_hash" text;
+  ELSE
+    RAISE NOTICE 'Skipped column code_hash: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column code_hash on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "nonce" text;
+  ELSE
+    RAISE NOTICE 'Skipped column nonce: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column nonce on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "ip_hash" text;
+  ELSE
+    RAISE NOTICE 'Skipped column ip_hash: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column ip_hash on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "user_agent" text;
+  ELSE
+    RAISE NOTICE 'Skipped column user_agent: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column user_agent on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "country" text;
+  ELSE
+    RAISE NOTICE 'Skipped column country: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column country on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "timezone" text;
+  ELSE
+    RAISE NOTICE 'Skipped column timezone: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column timezone on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "attempts" integer DEFAULT 0 NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column attempts: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column attempts on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "expires_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column expires_at: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column expires_at on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "used_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column used_at: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column used_at on login_email_challenges: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('login_email_challenges') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD COLUMN IF NOT EXISTS "created_at" timestamp DEFAULT now() NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column created_at: login_email_challenges is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column created_at on login_email_challenges: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -16771,6 +17014,20 @@ DO $schema_sync$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'login_email_challenges'::regclass AND contype = 'p'
+  ) THEN
+    ALTER TABLE "login_email_challenges" ADD CONSTRAINT "login_email_challenges_pkey" PRIMARY KEY ("id");
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped primary key login_email_challenges_pkey: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
     WHERE conrelid = 'magic_link_tokens'::regclass AND contype = 'p'
   ) THEN
     ALTER TABLE "magic_link_tokens" ADD CONSTRAINT "magic_link_tokens_pkey" PRIMARY KEY ("id");
@@ -19334,6 +19591,25 @@ DO $schema_sync$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'login_email_challenges'::regclass AND conname = 'login_email_challenges_user_id_users_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "login_email_challenges" LIMIT 1) THEN
+      ALTER TABLE "login_email_challenges" ADD CONSTRAINT "login_email_challenges_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+    ELSE
+      ALTER TABLE "login_email_challenges" ADD CONSTRAINT "login_email_challenges_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key login_email_challenges_user_id_users_id_fk NOT VALID because login_email_challenges contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key login_email_challenges_user_id_users_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
     WHERE conrelid = 'oauth_accounts'::regclass AND conname = 'oauth_accounts_user_id_users_id_fk'
   ) THEN
     IF NOT EXISTS (SELECT 1 FROM "oauth_accounts" LIMIT 1) THEN
@@ -21061,6 +21337,15 @@ EXCEPTION
     RAISE NOTICE 'Skipped unique index reading_streaks_user_idx: existing rows contain duplicate values';
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped unique index reading_streaks_user_idx: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  CREATE INDEX IF NOT EXISTS "idx_login_email_challenges_user_expiry" ON "login_email_challenges" USING btree ("user_id","expires_at");
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped index idx_login_email_challenges_user_expiry: %', SQLERRM;
 END
 $schema_sync$;
 
