@@ -25,7 +25,7 @@ export function CreatorModeToggle() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ enabled: !isCreatorMode }),
+        body: JSON.stringify({ isCreatorMode: !isCreatorMode }),
       });
       if (!res.ok) throw new Error();
       const data = await res.json();

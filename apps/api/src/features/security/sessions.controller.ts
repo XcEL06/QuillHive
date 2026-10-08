@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { db } from "@workspace/db";
 import { sessionsTable, loginEventsTable } from "@workspace/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { getViewerId } from "../../lib/auth-types";
 
 function maskIpHash(hash: string | null): string | null {
@@ -72,4 +72,22 @@ export async function revokeAllMySessions(req: Request, res: Response) {
     .returning({ id: sessionsTable.id });
 
   return res.json({ revoked: deleted.length });
+}
+
+export async function revokeMySession(req: Request, res: Response) {
+  const userId = getViewerId(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const sessionId = Number(req.params.id);
+  if (!Number.isInteger(sessionId) || sessionId < 1) {
+    return res.status(400).json({ error: "Invalid session id" });
+  }
+
+  const deleted = await db
+    .delete(sessionsTable)
+    .where(and(eq(sessionsTable.id, sessionId), eq(sessionsTable.userId, userId)))
+    .returning({ id: sessionsTable.id });
+
+  if (deleted.length === 0) return res.status(404).json({ error: "Session not found" });
+  return res.json({ revoked: true });
 }

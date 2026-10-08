@@ -30,7 +30,7 @@ import {
   CheckCircle2, Clock, XCircle,
 } from 'lucide-react';
 
-type Section = 'profile' | 'account' | 'security' | 'privacy' | 'experience' | 'education' | 'notifications' | 'appearance' | 'connectedApps' | 'language' | 'invites' | 'warnings' | 'blocked' | 'billing' | 'apiKeys' | 'danger';
+type Section = 'profile' | 'account' | 'security' | 'privacy' | 'experience' | 'education' | 'notifications' | 'appearance' | 'connectedApps' | 'language' | 'invites' | 'warnings' | 'blocked' | 'billing' | 'apiKeys' | 'sessions' | 'creatorTools' | 'danger';
 
 interface WorkEntry { id: number; title: string; organization: string; startYear: number; endYear?: number | null; description?: string | null; }
 interface EduEntry { id: number; school: string; degree: string; field?: string | null; startYear: number; endYear?: number | null; description?: string | null; }
@@ -63,7 +63,7 @@ export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const token = getStoredToken();
-  const [activeSection, setActiveSection] = useState<Section>('profile');
+  const [activeSection, setActiveSection] = useState<Section>('account');
   const { lang: currentLang, setLang } = useI18n();
   const t = useT();
   const [language, setLanguage] = useState(currentLang || (user as any)?.lang || localStorage.getItem('qh_lang') || 'en');
@@ -87,15 +87,12 @@ export default function Settings() {
     linkedin: (user as any)?.linkedin || '',
     twitter: (user as any)?.twitter || '',
     instagram: (user as any)?.instagram || '',
-    profileVisibility: (user as any)?.profileVisibility || 'public',
-    showEmail: (user as any)?.showEmail ?? false,
-    showWebsite: (user as any)?.showWebsite ?? true,
-    showLocation: (user as any)?.showLocation ?? true,
   });
 
   type NotifPrefs = Record<string, { inApp: boolean; push: boolean; email: boolean }>;
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs | null>(null);
   const [isLoadingNotifPrefs, setIsLoadingNotifPrefs] = useState(false);
+  const [notifPrefsLoadFailed, setNotifPrefsLoadFailed] = useState(false);
   const [isSavingNotifPref, setIsSavingNotifPref] = useState(false);
   const [creatorSettings, setCreatorSettings] = useState({
     emailDigestEnabled: (user as any)?.emailDigestEnabled ?? true,
@@ -143,6 +140,8 @@ export default function Settings() {
     showInSearch: true,
   });
   const [privacyLoaded, setPrivacyLoaded] = useState(false);
+  const [privacyLoading, setPrivacyLoading] = useState(false);
+  const [privacyLoadFailed, setPrivacyLoadFailed] = useState(false);
   const [privacySaving, setPrivacySaving] = useState<string | null>(null);
 
   // Passkeys state
@@ -159,14 +158,20 @@ export default function Settings() {
   };
 
   const fetchPrivacy = async () => {
+    setPrivacyLoading(true);
+    setPrivacyLoadFailed(false);
     try {
       const res = await fetch('/api/users/me/privacy', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (res.ok) {
-        const data = await res.json();
-        setPrivacy((p) => ({ ...p, ...data }));
-        setPrivacyLoaded(true);
-      }
-    } catch {}
+      if (!res.ok) throw new Error('Could not load your privacy settings.');
+      const data = await res.json();
+      setPrivacy((p) => ({ ...p, ...data }));
+      setPrivacyLoaded(true);
+    } catch (error) {
+      setPrivacyLoadFailed(true);
+      toast({ title: error instanceof Error ? error.message : 'Could not load your privacy settings.', variant: 'destructive' });
+    } finally {
+      setPrivacyLoading(false);
+    }
   };
 
   const updatePrivacy = async <K extends keyof PrivacyPrefs>(key: K, value: PrivacyPrefs[K]) => {
@@ -182,6 +187,7 @@ export default function Settings() {
       if (!res.ok) throw new Error('Save failed');
       const data = await res.json();
       setPrivacy((p) => ({ ...p, ...data }));
+      toast({ title: 'Privacy saved', description: 'Your visibility settings are up to date.' });
     } catch {
       setPrivacy(previous);
       toast({ title: t('settings.couldNotSavePrivacy'), variant: 'destructive' });
@@ -250,6 +256,7 @@ export default function Settings() {
       });
       if (!res.ok) throw new Error('Delete failed');
       setPasskeys((ps) => ps.filter((p) => p.id !== id));
+      toast({ title: 'Passkey removed' });
     } catch {
       toast({ title: t('settings.couldNotRemovePasskey'), variant: 'destructive' });
     }
@@ -368,20 +375,42 @@ export default function Settings() {
   const handleSaveAccountInfo = async () => {
     setIsSavingAccountInfo(true);
     try {
-      const res = await fetch('/api/users/me', {
+      const username = profileForm.username.trim();
+      const usernameChanged = username !== user?.username;
+      const lastUsernameChangeAt = (user as any)?.lastUsernameChangeAt;
+      if (usernameChanged && lastUsernameChangeAt && Date.now() - new Date(lastUsernameChangeAt).getTime() < 14 * 24 * 60 * 60 * 1000) {
+        throw new Error('You can change your username once every 14 days.');
+      }
+      const res = await apiFetch('/api/users/me/profile', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ username: profileForm.username.trim(), displayName: profileForm.displayName.trim() }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...(usernameChanged ? { username } : {}), displayName: profileForm.displayName.trim() }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || t('settings.failedToSaveProfile'));
       setUser(data);
+      setProfileForm((form) => ({ ...form, username: data.username, displayName: data.displayName }));
       queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
       toast({ title: t('settings.accountSaved', 'Account information saved'), description: t('settings.yourChangesSaved') });
     } catch (error: any) {
       toast({ title: error?.message || t('settings.failedToSaveProfile'), variant: 'destructive' });
     } finally {
       setIsSavingAccountInfo(false);
+    }
+  };
+
+  const resendEmailVerification = async () => {
+    try {
+      const res = await apiFetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user?.email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || 'Could not send a verification email.');
+      toast({ title: 'Verification email sent', description: 'Check your inbox for a fresh link.' });
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Could not send a verification email.', variant: 'destructive' });
     }
   };
 
@@ -429,6 +458,7 @@ export default function Settings() {
   const loadNotifPrefs = async () => {
     if (isLoadingNotifPrefs) return;
     setIsLoadingNotifPrefs(true);
+    setNotifPrefsLoadFailed(false);
     try {
       const res = await fetch('/api/notifications/preferences', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -437,6 +467,7 @@ export default function Settings() {
       const data = await res.json() as { preferences: Record<string, { inApp: boolean; push: boolean; email: boolean }> };
       setNotifPrefs(data.preferences);
     } catch {
+      setNotifPrefsLoadFailed(true);
       toast({ title: 'Could not load notification preferences', variant: 'destructive' });
     } finally { setIsLoadingNotifPrefs(false); }
   };
@@ -453,6 +484,7 @@ export default function Settings() {
         body: JSON.stringify({ [type]: updated }),
       });
       if (!res.ok) throw new Error('Could not save notification preferences');
+      toast({ title: 'Notification preference saved' });
     } catch {
       setNotifPrefs(prev => prev ? { ...prev, [type]: previous } : prev);
       toast({ title: 'Could not save notification preferences', variant: 'destructive' });
@@ -575,6 +607,7 @@ export default function Settings() {
     { id: 'account' as Section, icon: Lock, label: t('settings.account') },
     { id: 'security' as Section, icon: KeyRound, label: t('settings.security', 'Security') },
     { id: 'privacy' as Section, icon: Shield, label: t('settings.privacy') },
+    { id: 'creatorTools' as Section, icon: Briefcase, label: 'Creator tools' },
     { id: 'experience' as Section, icon: Briefcase, label: t('settings.workExperience') },
     { id: 'education' as Section, icon: GraduationCap, label: t('settings.educationSection') },
     { id: 'notifications' as Section, icon: Bell, label: t('settings.notifications') },
@@ -588,27 +621,54 @@ export default function Settings() {
     ...((user as { role?: string } | null)?.role === 'super_admin' ? [{ id: 'apiKeys' as Section, icon: KeyRound, label: t('settings.apiKeys') }] : []),
     { id: 'danger' as Section, icon: Trash2, label: t('settings.deleteAccount'), danger: true },
   ];
+  const sectionGroups = [
+    { id: 'account', icon: User, label: 'Account', description: 'Your account is the name people find and the language QuillHive speaks with you.', defaultSection: 'account' as Section },
+    { id: 'privacy', icon: Eye, label: 'Privacy', description: 'Choose what your hive can see and how people can reach you.', defaultSection: 'privacy' as Section },
+    { id: 'security', icon: Shield, label: 'Security', description: 'Keep the keys to your voice in your hands.', defaultSection: 'security' as Section },
+    { id: 'notifications', icon: Bell, label: 'Notifications', description: 'Choose which signals are worth a tap, and where they should land.', defaultSection: 'notifications' as Section },
+    { id: 'sessions', icon: Smartphone, label: 'Sessions', description: 'See where your account is signed in and close doors you no longer use.', defaultSection: 'sessions' as Section },
+    { id: 'creator', icon: Briefcase, label: 'Creator', description: 'Shape how your work is discovered and where it can grow.', defaultSection: 'creatorTools' as Section },
+    { id: 'danger', icon: Trash2, label: 'Danger zone', description: 'Take your data with you or close your QuillHive account.', defaultSection: 'danger' as Section },
+  ];
+  const getGroupId = (section: Section) => {
+    if (section === 'privacy' || section === 'security' || section === 'notifications' || section === 'sessions' || section === 'danger') return section;
+    if (section === 'profile' || section === 'experience' || section === 'education' || section === 'creatorTools') return 'creator';
+    return 'account';
+  };
+  const activeGroup = sectionGroups.find((group) => group.id === getGroupId(activeSection)) ?? sectionGroups[0];
+  const groupedSections = sections.filter((section) => getGroupId(section.id) === activeGroup.id && section.id !== activeGroup.defaultSection);
 
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto px-4 md:px-0 py-4">
         <BackButton />
-        <h1 className="text-3xl font-serif font-bold mb-8">{t('settings.title')}</h1>
+        <h1 className="text-3xl font-serif font-bold mb-2">{t('settings.title')}</h1>
+        <p className="text-sm text-muted-foreground mb-6">Your quill is your voice. Your hive is where it grows.</p>
+
+        <div className="grid grid-cols-2 gap-2 mb-5 md:hidden">
+          {sectionGroups.map((group) => {
+            const Icon = group.icon;
+            const isActive = activeGroup.id === group.id;
+            return (
+              <button key={group.id} onClick={() => setActiveSection(group.defaultSection)} aria-current={isActive ? 'page' : undefined}
+                className={`min-h-12 flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm font-medium ${isActive ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border/60 bg-card text-muted-foreground'}`}>
+                <Icon className="w-4 h-4 shrink-0" />{group.label}
+              </button>
+            );
+          })}
+        </div>
 
         <div className="flex flex-col md:flex-row gap-6">
-          <nav className="md:w-64 shrink-0">
-            <div className="bg-card border border-border/60 rounded-2xl overflow-hidden shadow-sm">
-              {sections.map((s, i) => {
-                const Icon = s.icon;
-                const isActive = activeSection === s.id;
+          <nav aria-label="Settings sections" className="hidden md:block md:w-60 shrink-0">
+            <div className="space-y-1">
+              {sectionGroups.map((group) => {
+                const Icon = group.icon;
+                const isActive = activeGroup.id === group.id;
                 return (
-                  <button key={s.id} onClick={() => setActiveSection(s.id)}
-                    className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors
-                      ${i > 0 ? 'border-t border-border/40' : ''}
-                      ${isActive ? 'bg-primary/10 text-primary' : (s as any).danger ? 'text-destructive hover:bg-destructive/10' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}`}
-                  >
+                  <button key={group.id} onClick={() => setActiveSection(group.defaultSection)} aria-current={isActive ? 'page' : undefined}
+                    className={`w-full min-h-12 flex items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'}`}>
                     <Icon className="w-4 h-4 shrink-0" />
-                    <span className="font-medium text-sm">{s.label}</span>
+                    <span className="font-medium text-sm">{group.label}</span>
                     <ChevronRight className={`w-3 h-3 ml-auto ${isActive ? 'opacity-100' : 'opacity-40'}`} />
                   </button>
                 );
@@ -616,9 +676,22 @@ export default function Settings() {
             </div>
           </nav>
 
-          {/* Content */}
           <div className="flex-1 min-w-0">
-            <div className="bg-card border border-border/60 rounded-2xl shadow-sm p-6">
+            <header className="mb-5">
+              <h2 className="text-xl font-semibold mb-1">{activeGroup.label}</h2>
+              <p className="text-sm text-muted-foreground">{activeGroup.description}</p>
+              {groupedSections.length > 0 && (
+                <nav aria-label={`${activeGroup.label} settings`} className="flex flex-wrap gap-2 mt-4">
+                  {[{ id: activeGroup.defaultSection, label: activeGroup.label }, ...groupedSections.map(({ id, label }) => ({ id, label }))].map((section) => (
+                    <button key={section.id} onClick={() => setActiveSection(section.id)} aria-current={activeSection === section.id ? 'page' : undefined}
+                      className={`min-h-10 rounded-lg border px-3 py-2 text-sm ${activeSection === section.id ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border/60 bg-card text-muted-foreground hover:text-foreground'}`}>
+                      {section.label}
+                    </button>
+                  ))}
+                </nav>
+              )}
+            </header>
+            <div className="min-w-0">
 
               {/* PROFILE SECTION */}
               {activeSection === 'profile' && (
@@ -720,35 +793,6 @@ export default function Settings() {
 
                   <Separator />
 
-                  {/* Visibility */}
-                  <div className="space-y-4">
-                    <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wider">{t('settings.visibilityPrivacySection')}</h3>
-                    <div>
-                      <Label>{t('settings.profileVisibilityLabel')}</Label>
-                      <Select value={profileForm.profileVisibility} onValueChange={v => setProfileForm(f => ({ ...f, profileVisibility: v }))}>
-                        <SelectTrigger className="mt-1.5 rounded-xl"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="public">{t('settings.publicProfileOption')}</SelectItem>
-                          <SelectItem value="followers">{t('settings.followersOnlyOption')}</SelectItem>
-                          <SelectItem value="private">{t('settings.privateProfileOption')}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="p-4 bg-muted/30 rounded-xl border border-border/40 space-y-3">
-                      <p className="text-sm font-medium">{t('settings.contactInfoVisibility')}</p>
-                      {[
-                        { key: 'showEmail', label: t('settings.showEmailAddress'), desc: t('settings.showEmailAddressDesc') },
-                        { key: 'showWebsite', label: t('settings.showWebsiteLink'), desc: t('settings.showWebsiteLinkDesc') },
-                        { key: 'showLocation', label: t('settings.showLocationCountry'), desc: t('settings.showLocationCountryDesc') },
-                      ].map(item => (
-                        <div key={item.key} className="flex items-center justify-between">
-                          <div><p className="text-sm font-medium">{item.label}</p><p className="text-xs text-muted-foreground">{item.desc}</p></div>
-                          <Switch checked={(profileForm as any)[item.key]} onCheckedChange={v => setProfileForm(f => ({ ...f, [item.key]: v }))} />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
                   <Button onClick={() => updateProfile({ data: profileForm as any })} disabled={isSaving} className="rounded-xl">
                     {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} {t('settings.saveProfile')}
                   </Button>
@@ -761,23 +805,77 @@ export default function Settings() {
                   <div><h2 className="text-xl font-semibold mb-1">{t('settings.accountSectionTitle')}</h2><p className="text-sm text-muted-foreground">{t('settings.accountSectionDesc')}</p></div>
                   <Separator />
                   <div className="space-y-4">
-                    <div><Label>{t('settings.username')}</Label><Input value={profileForm.username} onChange={e => setProfileForm(f => ({ ...f, username: e.target.value }))} className="mt-1.5 rounded-xl" /><p className="text-xs text-muted-foreground mt-1.5">Use 3–32 letters, numbers, or underscores.</p></div>
+                    <div>
+                      <Label>{t('settings.username')}</Label>
+                      <Input value={profileForm.username} onChange={e => setProfileForm(f => ({ ...f, username: e.target.value }))} className="mt-1.5 rounded-xl" />
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Use 3–32 letters, numbers, or underscores. {((user as any)?.lastUsernameChangeAt && Date.now() - new Date((user as any).lastUsernameChangeAt).getTime() < 14 * 24 * 60 * 60 * 1000)
+                          ? `Your next handle change is available ${new Date(new Date((user as any).lastUsernameChangeAt).getTime() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString()}.`
+                          : 'You can change your handle once every 14 days.'}
+                      </p>
+                    </div>
                     <div><Label>{t('settings.displayNameLabel', 'Display Name')}</Label><Input value={profileForm.displayName} onChange={e => setProfileForm(f => ({ ...f, displayName: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
                     <Button onClick={handleSaveAccountInfo} disabled={isSavingAccountInfo} className="rounded-xl">
                       {isSavingAccountInfo ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Save changes
                     </Button>
-                    <div><Label>{t('settings.email')}</Label><Input defaultValue={user?.email} className="mt-1.5 rounded-xl" /></div>
-                    <Separator />
-                    <div>
-                      <h3 className="font-medium mb-4">{t('settings.changePassword')}</h3>
-                      <div className="space-y-3">
-                        <div><Label>{t('settings.currentPassword')}</Label><Input type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={e => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
-                        <div><Label>{t('settings.newPassword')}</Label><Input type="password" autoComplete="new-password" value={passwordForm.newPassword} onChange={e => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
-                        <div><Label>{t('settings.confirmNewPassword')}</Label><Input type="password" autoComplete="new-password" value={passwordForm.confirmPassword} onChange={e => setPasswordForm(f => ({ ...f, confirmPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
+                    <div className="rounded-xl border border-border/60 p-4">
+                      <Label htmlFor="account-email">{t('settings.email')}</Label>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <Input id="account-email" value={user?.email ?? ''} readOnly className="min-w-0 flex-1 rounded-xl" />
+                        <span className={`inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 text-xs font-medium ${Boolean((user as any)?.emailVerified) ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'}`}>
+                          {Boolean((user as any)?.emailVerified) ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                          {Boolean((user as any)?.emailVerified) ? 'Verified' : 'Not verified'}
+                        </span>
                       </div>
+                      {!Boolean((user as any)?.emailVerified) && (
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs text-muted-foreground">Verify this address to keep account recovery and important hive updates available.</p>
+                          <Button variant="outline" size="sm" className="min-h-10 rounded-lg" onClick={() => void resendEmailVerification()}>Resend verification</Button>
+                        </div>
+                      )}
                     </div>
-                    <Button className="rounded-xl" onClick={handleChangePassword} disabled={isChangingPassword || !passwordForm.currentPassword || passwordForm.newPassword.length < 8 || !passwordForm.confirmPassword}>
-                      {isChangingPassword ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} {t('settings.changePassword')}
+                  </div>
+                </div>
+              )}
+
+              {activeSection === 'creatorTools' && (
+                <div className="space-y-6">
+                  <CreatorModeToggle />
+                  <div className="border-t border-border/50 pt-5">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-medium">{t('settings.hireMeButton')}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">{t('settings.hireMeButtonDesc')}</p>
+                      </div>
+                      <Switch
+                        checked={creatorSettings.hireMeEnabled}
+                        onCheckedChange={(checked) => setCreatorSettings((settings) => ({ ...settings, hireMeEnabled: checked }))}
+                      />
+                    </div>
+                    <Button
+                      className="mt-4 rounded-xl"
+                      disabled={isSavingCreatorSettings}
+                      onClick={async () => {
+                        setIsSavingCreatorSettings(true);
+                        try {
+                          const res = await apiFetch('/api/users/me/settings', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ hireMeEnabled: creatorSettings.hireMeEnabled }),
+                          });
+                          const updated = await res.json();
+                          if (!res.ok) throw new Error(updated.error || 'Could not save creator settings.');
+                          setUser(updated as any);
+                          toast({ title: 'Creator settings saved' });
+                        } catch (error) {
+                          toast({ title: error instanceof Error ? error.message : 'Could not save creator settings.', variant: 'destructive' });
+                        } finally {
+                          setIsSavingCreatorSettings(false);
+                        }
+                      }}
+                    >
+                      {isSavingCreatorSettings ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
+                      Save creator settings
                     </Button>
                   </div>
                 </div>
@@ -791,6 +889,21 @@ export default function Settings() {
                     <p className="text-sm text-muted-foreground">{t('settings.securitySectionDesc')}</p>
                   </div>
                   <Separator />
+
+                  <div className="rounded-2xl border border-border/60 p-5 space-y-4">
+                    <div>
+                      <h3 className="font-medium">{t('settings.changePassword')}</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">Choose a password you do not use elsewhere.</p>
+                    </div>
+                    <div className="space-y-3">
+                      <div><Label>{t('settings.currentPassword')}</Label><Input type="password" autoComplete="current-password" value={passwordForm.currentPassword} onChange={e => setPasswordForm(f => ({ ...f, currentPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
+                      <div><Label>{t('settings.newPassword')}</Label><Input type="password" autoComplete="new-password" value={passwordForm.newPassword} onChange={e => setPasswordForm(f => ({ ...f, newPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
+                      <div><Label>{t('settings.confirmNewPassword')}</Label><Input type="password" autoComplete="new-password" value={passwordForm.confirmPassword} onChange={e => setPasswordForm(f => ({ ...f, confirmPassword: e.target.value }))} className="mt-1.5 rounded-xl" /></div>
+                    </div>
+                    <Button className="rounded-xl" onClick={handleChangePassword} disabled={isChangingPassword || !passwordForm.currentPassword || passwordForm.newPassword.length < 8 || !passwordForm.confirmPassword}>
+                      {isChangingPassword ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} {t('settings.changePassword')}
+                    </Button>
+                  </div>
 
                   <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
                     <div className="flex items-start justify-between gap-4">
@@ -862,8 +975,6 @@ export default function Settings() {
                     )}
                   </div>
 
-                  <SessionsCard token={token} toast={toast} />
-
                   <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3">
@@ -905,6 +1016,8 @@ export default function Settings() {
                 </div>
               )}
 
+              {activeSection === 'sessions' && <SessionsCard token={token} toast={toast} />}
+
               {/* PRIVACY SECTION */}
               {activeSection === 'privacy' && (
                 <div className="space-y-6">
@@ -913,40 +1026,52 @@ export default function Settings() {
                     <p className="text-sm text-muted-foreground">{t('settings.privacySectionDesc')}</p>
                   </div>
                   <Separator />
-                  <div className="space-y-5">
-                    {([
-                      { key: 'publicProfile' as const, icon: Globe, label: t('settings.publicProfile'), desc: t('settings.publicProfileDesc') },
-                      { key: 'showPostsToEveryone' as const, icon: Eye, label: t('settings.showPostsToEveryone'), desc: t('settings.showPostsToEveryoneDesc') },
-                      { key: 'allowMessagesFromAnyone' as const, icon: MessageCircle, label: t('settings.allowMessagesFromAnyone'), desc: t('settings.allowMessagesFromAnyoneDesc') },
-                      { key: 'showInSearch' as const, icon: User, label: t('settings.showInSearchResults'), desc: t('settings.showInSearchResultsDesc') },
-                    ]).map(item => {
-                      const checked = item.key === 'publicProfile'
-                        ? privacy.profileVisibility === 'public'
-                        : privacy[item.key];
-                      const onCheckedChange = (v: boolean) => {
-                        if (item.key === 'publicProfile') updatePrivacy('profileVisibility', v ? 'public' : 'private');
-                        else updatePrivacy(item.key, v);
-                      };
-                      const saving = privacySaving === (item.key === 'publicProfile' ? 'profileVisibility' : item.key);
-                      return (
-                        <div key={item.label} className="flex items-center justify-between py-3 border-b border-border/40 last:border-0">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center">
-                              <item.icon className="w-4 h-4 text-muted-foreground" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">{item.label}</p>
+                  {!privacyLoaded ? (
+                    privacyLoadFailed ? (
+                      <div className="py-6">
+                        <p className="text-sm text-muted-foreground">Your saved privacy choices are unavailable right now.</p>
+                        <Button className="mt-3 rounded-xl" variant="outline" onClick={() => void fetchPrivacy()}>Try again</Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> {privacyLoading ? 'Loading your privacy settings…' : 'Preparing privacy settings…'}</div>
+                    )
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="max-w-lg">
+                        <Label>{t('settings.profileVisibilityLabel')}</Label>
+                        <Select value={privacy.profileVisibility} onValueChange={(value) => updatePrivacy('profileVisibility', value as PrivacyPrefs['profileVisibility'])}>
+                          <SelectTrigger className="mt-1.5 min-h-11 rounded-xl"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="public">Public: visible across QuillHive</SelectItem>
+                            <SelectItem value="followers">Followers: visible to people who follow you</SelectItem>
+                            <SelectItem value="private">Private: only you can see your profile</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="divide-y divide-border/40 rounded-xl border border-border/50 px-4">
+                        <p className="py-3 text-sm font-medium">Profile details</p>
+                        {([
+                          { key: 'showEmail', label: t('settings.showEmailAddress'), desc: t('settings.showEmailAddressDesc') },
+                          { key: 'showWebsite', label: t('settings.showWebsiteLink'), desc: t('settings.showWebsiteLinkDesc') },
+                          { key: 'showLocation', label: t('settings.showLocationCountry'), desc: t('settings.showLocationCountryDesc') },
+                          { key: 'showPostsToEveryone', label: t('settings.showPostsToEveryone'), desc: t('settings.showPostsToEveryoneDesc') },
+                          { key: 'showInSearch', label: t('settings.showInSearchResults'), desc: t('settings.showInSearchResultsDesc') },
+                          { key: 'allowMessagesFromAnyone', label: t('settings.allowMessagesFromAnyone'), desc: t('settings.allowMessagesFromAnyoneDesc') },
+                        ] as const).map((item) => (
+                          <div key={item.key} className="flex min-h-16 items-center justify-between gap-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium">{item.label}</p>
                               <p className="text-xs text-muted-foreground">{item.desc}</p>
                             </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {privacySaving === item.key && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+                              <Switch aria-label={item.label} checked={privacy[item.key]} disabled={privacySaving !== null} onCheckedChange={(value) => updatePrivacy(item.key, value)} data-testid={`switch-privacy-${item.key}`} />
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {saving && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
-                            <Switch checked={Boolean(checked)} onCheckedChange={onCheckedChange} data-testid={`switch-privacy-${item.key}`} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <Separator />
                   <div>
@@ -1082,6 +1207,12 @@ export default function Settings() {
                   {isLoadingNotifPrefs && (
                     <div className="flex items-center gap-2 text-muted-foreground py-6"><Loader2 className="w-4 h-4 animate-spin" /> Loading preferences…</div>
                   )}
+                  {!isLoadingNotifPrefs && !notifPrefs && notifPrefsLoadFailed && (
+                    <div className="py-5">
+                      <p className="text-sm text-muted-foreground">Your notification choices could not be loaded. Nothing has been changed.</p>
+                      <Button variant="outline" className="mt-3 min-h-11 rounded-xl" onClick={() => void loadNotifPrefs()}>Try again</Button>
+                    </div>
+                  )}
                   {!isLoadingNotifPrefs && notifPrefs && (() => {
                     const GROUPS: Array<{ label: string; types: Array<{ key: string; label: string }> }> = [
                       { label: 'Social', types: [
@@ -1134,9 +1265,9 @@ export default function Settings() {
                       <div className="space-y-6">
                         {GROUPS.map(group => (
                           <div key={group.label}>
-                            <div className="grid grid-cols-[1fr_68px_68px_68px] gap-x-2 items-center px-1 mb-2">
+                            <div className="grid grid-cols-[minmax(0,1fr)_repeat(3,44px)] sm:grid-cols-[minmax(0,1fr)_repeat(3,68px)] gap-x-1 sm:gap-x-2 items-center px-1 mb-2">
                               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</h4>
-                              <span className="text-[10px] text-center text-muted-foreground">In-app</span>
+                              <span className="text-[10px] text-center leading-tight text-muted-foreground">In-app</span>
                               <span className="text-[10px] text-center text-muted-foreground">Push</span>
                               <span className="text-[10px] text-center text-muted-foreground">Email</span>
                             </div>
@@ -1144,11 +1275,11 @@ export default function Settings() {
                               {group.types.map(item => {
                                 const p = notifPrefs[item.key] ?? { inApp: true, push: false, email: false };
                                 return (
-                                  <div key={item.key} className="grid grid-cols-[1fr_68px_68px_68px] gap-x-2 items-center px-4 py-3 hover:bg-muted/30 transition-colors">
-                                    <span className="text-sm">{item.label}</span>
-                                    <div className="flex justify-center"><Switch disabled={isSavingNotifPref} checked={p.inApp} onCheckedChange={v => patchNotifPref(item.key, 'inApp', v)} /></div>
-                                    <div className="flex justify-center"><Switch disabled={isSavingNotifPref} checked={p.push} onCheckedChange={v => patchNotifPref(item.key, 'push', v)} /></div>
-                                    <div className="flex justify-center"><Switch disabled={isSavingNotifPref} checked={p.email} onCheckedChange={v => patchNotifPref(item.key, 'email', v)} /></div>
+                                  <div key={item.key} className="grid grid-cols-[minmax(0,1fr)_repeat(3,44px)] sm:grid-cols-[minmax(0,1fr)_repeat(3,68px)] gap-x-1 sm:gap-x-2 items-center px-2 sm:px-4 py-3 hover:bg-muted/30 transition-colors">
+                                    <span className="min-w-0 text-sm">{item.label}</span>
+                                    <div className="flex justify-center"><Switch aria-label={`${item.label}: in-app`} disabled={isSavingNotifPref} checked={p.inApp} onCheckedChange={v => patchNotifPref(item.key, 'inApp', v)} /></div>
+                                    <div className="flex justify-center"><Switch aria-label={`${item.label}: push`} disabled={isSavingNotifPref} checked={p.push} onCheckedChange={v => patchNotifPref(item.key, 'push', v)} /></div>
+                                    <div className="flex justify-center"><Switch aria-label={`${item.label}: email`} disabled={isSavingNotifPref} checked={p.email} onCheckedChange={v => patchNotifPref(item.key, 'email', v)} /></div>
                                   </div>
                                 );
                               })}
@@ -1183,16 +1314,6 @@ export default function Settings() {
                           onCheckedChange={(checked) => setCreatorSettings(s => ({ ...s, topicNotificationEnabled: checked }))}
                         />
                       </div>
-                      <div className="flex items-center justify-between py-4">
-                        <div>
-                          <p className="font-medium text-sm">{t('settings.hireMeButton')}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{t('settings.hireMeButtonDesc')}</p>
-                        </div>
-                        <Switch
-                          checked={creatorSettings.hireMeEnabled}
-                          onCheckedChange={(checked) => setCreatorSettings(s => ({ ...s, hireMeEnabled: checked }))}
-                        />
-                      </div>
                     </div>
                   </div>
                   <Button
@@ -1204,7 +1325,7 @@ export default function Settings() {
                         const res = await fetch('/api/users/me/settings', {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                          body: JSON.stringify(creatorSettings),
+                          body: JSON.stringify({ emailDigestEnabled: creatorSettings.emailDigestEnabled, topicNotificationEnabled: creatorSettings.topicNotificationEnabled }),
                         });
                         if (res.ok) {
                           const updated = await res.json();
@@ -1233,8 +1354,6 @@ export default function Settings() {
                     <h2 className="text-xl font-semibold mb-1">{t('settings.appearanceSectionTitle')}</h2>
                     <p className="text-sm text-muted-foreground">{t('settings.appearanceSectionDesc')}</p>
                   </div>
-                  <Separator />
-                  <CreatorModeToggle />
                   <Separator />
                   <div>
                     <h3 className="font-medium mb-4">{t('settings.themeSection')}</h3>
@@ -1309,18 +1428,18 @@ export default function Settings() {
                   </div>
                   <Button className="rounded-xl" onClick={async () => {
                     try {
-                      setLang(language, true);
                       const res = await fetch('/api/user/language', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
                         body: JSON.stringify({ lang: language }),
                       });
-                      if (!res.ok) throw new Error();
-                      const updated = await res.json();
+                      const updated = await res.json().catch(() => ({}));
+                      if (!res.ok) throw new Error(updated.error || 'Could not save your language preference.');
+                      setLang(language, true);
                       setUser(updated as any);
                       toast({ title: t('settings.languageSaved', 'Language saved'), description: t('settings.languageSavedDesc', 'Your preference is synced and UI updated.') });
-                    } catch {
-                      toast({ title: t('settings.savedLocally', 'Saved locally'), description: t('settings.savedLocallyDesc', 'Language changed. We could not sync with the server right now.') });
+                    } catch (error) {
+                      toast({ title: error instanceof Error ? error.message : t('settings.errSavingPreferences'), variant: 'destructive' });
                     }
                   }}>
                     <Save className="w-4 h-4 mr-2" /> {t('settings.saveLanguage', 'Save Language')}

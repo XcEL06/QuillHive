@@ -114,6 +114,7 @@ router.use("/auth/2fa", twofaRouter);
 // Login activity & sessions
 router.get("/auth/sessions", Sessions.listMySessions);
 router.get("/auth/login-activity", Sessions.listMyLoginActivity);
+router.delete("/auth/sessions/:id", Sessions.revokeMySession);
 router.post("/auth/sessions/logout-all", Sessions.revokeAllMySessions);
 
 // Post version history
