@@ -200,6 +200,7 @@ export default function Profile() {
   const [isCollaborateOpen, setIsCollaborateOpen] = useState(false);
   const [collaborateMsg, setCollaborateMsg] = useState('');
   const [isSendingCollab, setIsSendingCollab] = useState(false);
+  const [isOpeningMessage, setIsOpeningMessage] = useState(false);
 
   useEffect(() => {
     const action = new URLSearchParams(location.split("?")[1] ?? "").get("action");
@@ -332,26 +333,44 @@ export default function Profile() {
     finally { setIsSavingCreator(false); }
   };
 
-  const handleHireMe = async () => {
-    if (!data?.user?.id) return;
+  const openDirectMessage = async (initialMessage?: string) => {
+    if (!data?.user?.id || !currentUser || isOpeningMessage) return;
+    setIsOpeningMessage(true);
     try {
-      const startRes = await fetch('/api/messages/start', {
+      const startRes = await apiFetch('/api/messages/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: data.user.id }),
       });
-      const startJson = await startRes.json();
-      const convId = startJson.conversationId;
-      if (convId) {
-        await fetch('/api/messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ conversationId: convId, content: `Hi ${data.user.displayName}, I'm interested in hiring you for a project!`, type: 'hire_request' }),
-        });
+      const startJson = await startRes.json().catch(() => null);
+      const conversationId = Number(startJson?.conversationId);
+      if (!startRes.ok || !Number.isInteger(conversationId) || conversationId < 1) {
+        throw new Error(startJson?.error || 'Could not open this conversation.');
       }
-      navigate(`/messages?conv=${convId}`);
-    } catch { toast({ title: t('profile.couldNotOpenChat', 'Could not open chat'), variant: 'destructive' }); }
+
+      if (initialMessage) {
+        const sendRes = await apiFetch('/api/messages/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversationId, content: initialMessage }),
+        });
+        const sendJson = await sendRes.json().catch(() => null);
+        if (!sendRes.ok) throw new Error(sendJson?.error || 'Could not send your message.');
+      }
+      void queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+      navigate(`/messages?conv=${conversationId}`);
+    } catch (error) {
+      toast({
+        title: initialMessage ? 'Could not send your message' : t('profile.couldNotOpenChat', 'Could not open chat'),
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsOpeningMessage(false);
+    }
   };
+
+  const handleHireMe = () => openDirectMessage(`Hi ${data?.user?.displayName}, I'm interested in hiring you for a project!`);
 
   const handleCollaborate = async () => {
     if (!data?.user?.id || !collaborateMsg.trim()) return;
@@ -634,8 +653,8 @@ export default function Profile() {
             </>
           ) : (
             <>
-              {creatorIncomeEnabled && creatorProfile.isAvailableForHire && <Button onClick={handleHireMe} className="min-h-11 rounded-xl gap-2"><Zap className="h-4 w-4" />{t('profile.inviteToCollaborate', 'Message about a project')}</Button>}
-              {currentUser && <Button onClick={handleHireMe} variant="outline" className="min-h-11 rounded-xl gap-2"><MessageCircle className="h-4 w-4" />{t('profile.message', 'Message')}</Button>}
+              {creatorIncomeEnabled && creatorProfile.isAvailableForHire && <Button onClick={handleHireMe} disabled={isOpeningMessage} className="min-h-11 rounded-xl gap-2"><Zap className="h-4 w-4" />{t('profile.inviteToCollaborate', 'Message about a project')}</Button>}
+              {currentUser && <Button onClick={() => void openDirectMessage()} disabled={isOpeningMessage} variant="outline" className="min-h-11 rounded-xl gap-2"><MessageCircle className="h-4 w-4" />{isOpeningMessage ? 'Opening…' : t('profile.message', 'Message')}</Button>}
               <Button onClick={() => toggleFollow({ username })} disabled={isFollowing} className={`min-h-11 rounded-xl ${user.isFollowing ? 'bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground' : 'bg-primary text-primary-foreground'}`}>
                 {user.isFollowing ? <><UserCheck className="mr-2 h-4 w-4" />{t('profile.following', 'Following')}</> : <><UserPlus className="mr-2 h-4 w-4" />{t('profile.follow', 'Follow')}</>}
               </Button>

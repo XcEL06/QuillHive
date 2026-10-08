@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useGetConversations, useGetMessages, useSendMessage, getGetMessagesQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { useAuthStore } from '@/store/auth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -63,6 +63,7 @@ interface PaymentProposal {
 
 export default function Messages() {
   usePageTitle('Messages');
+  const [location] = useLocation();
   const { user: currentUser } = useAuthStore();
   const t = useT();
   const { toast } = useToast();
@@ -261,6 +262,13 @@ export default function Messages() {
     setLocalMessages([]);
     setTypingUsers(new Set());
   };
+
+  useEffect(() => {
+    const requestedId = Number(new URLSearchParams(window.location.search).get('conv'));
+    if (Number.isInteger(requestedId) && requestedId > 0) {
+      handleSelectConv(requestedId);
+    }
+  }, [location]);
 
   const handleConversationStart = (convId: number) => {
     queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
