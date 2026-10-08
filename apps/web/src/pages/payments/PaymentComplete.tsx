@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'wouter';
+import { Link, useSearch } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
@@ -7,12 +7,12 @@ import { getStoredToken } from '@/lib/api';
 import { BackButton } from '@/components/ui/BackButton';
 
 export default function PaymentComplete() {
-  const [location] = useLocation();
+  const search = useSearch();
   const [state, setState] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Confirming your payment...');
 
   useEffect(() => {
-    const params = new URLSearchParams(location.split('?')[1] ?? '');
+    const params = new URLSearchParams(search);
     const transactionId = params.get('transaction_id');
     const txRef = params.get('tx_ref');
     if (!transactionId || !txRef) {
@@ -34,7 +34,7 @@ export default function PaymentComplete() {
         setState('error');
         setMessage(error instanceof Error ? error.message : 'Payment verification failed.');
       });
-  }, [location]);
+  }, [search]);
 
   return (
     <AppLayout>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useGetConversations, useGetMessages, useSendMessage, getGetMessagesQueryKey } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation } from 'wouter';
+import { Link, useLocation, useSearch } from 'wouter';
 import { useAuthStore } from '@/store/auth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -16,7 +16,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useSocketEvent, useJoinConversation } from '@/hooks/useSocket';
 import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
-import { getStoredToken } from '@/lib/api';
+import { apiFetch, getStoredToken } from '@/lib/api';
 import { reportCaughtError } from '@/lib/reportCaughtError';
 import { AttachmentPicker, type Attachment } from '@/components/post/AttachmentPicker';
 import { useToast } from '@/hooks/use-toast';
@@ -63,7 +63,8 @@ interface PaymentProposal {
 
 export default function Messages() {
   usePageTitle('Messages');
-  const [location] = useLocation();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const { user: currentUser } = useAuthStore();
   const t = useT();
   const { toast } = useToast();
@@ -82,6 +83,7 @@ export default function Messages() {
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const requestedUserStartRef = useRef<number | null>(null);
 
   const { data: conversations, isLoading: isConvsLoading } = useGetConversations();
   const conversationList = Array.isArray(conversations) ? conversations : [];
@@ -261,14 +263,52 @@ export default function Messages() {
     setActiveConvId(convId);
     setLocalMessages([]);
     setTypingUsers(new Set());
+    if (Number(new URLSearchParams(search).get('conv')) !== convId) {
+      setLocation(`/messages?conv=${convId}`);
+    }
   };
 
   useEffect(() => {
-    const requestedId = Number(new URLSearchParams(window.location.search).get('conv'));
-    if (Number.isInteger(requestedId) && requestedId > 0) {
-      handleSelectConv(requestedId);
+    const params = new URLSearchParams(search);
+    const requestedConversationId = Number(params.get('conv'));
+    if (Number.isInteger(requestedConversationId) && requestedConversationId > 0) {
+      requestedUserStartRef.current = null;
+      if (requestedConversationId !== activeConvId) handleSelectConv(requestedConversationId);
+      return;
     }
-  }, [location]);
+
+    const requestedUserId = Number(params.get('userId'));
+    if (!Number.isInteger(requestedUserId) || requestedUserId < 1) {
+      requestedUserStartRef.current = null;
+      return;
+    }
+    if (!currentUser || requestedUserStartRef.current === requestedUserId) return;
+    requestedUserStartRef.current = requestedUserId;
+
+    void (async () => {
+      try {
+        const response = await apiFetch('/api/messages/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: requestedUserId }),
+        });
+        const result = await response.json().catch(() => null);
+        const conversationId = Number(result?.conversationId);
+        if (!response.ok || !Number.isInteger(conversationId) || conversationId < 1) {
+          throw new Error(result?.error || 'Could not open this conversation.');
+        }
+        void queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+        setLocation(`/messages?conv=${conversationId}`);
+      } catch (error) {
+        requestedUserStartRef.current = null;
+        toast({
+          title: 'Could not open this conversation',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'destructive',
+        });
+      }
+    })();
+  }, [search, activeConvId, currentUser, queryClient, setLocation, toast]);
 
   const handleConversationStart = (convId: number) => {
     queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });

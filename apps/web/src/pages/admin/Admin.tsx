@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactElement } from "react";
-import { Redirect, useLocation } from "wouter";
+import { Redirect, useLocation, useSearch } from "wouter";
 import {
   Activity, BarChart3, BookOpen, Gauge, Languages, LayoutDashboard, MessageSquare, Send,
   ListTodo, Settings, Shield, ToggleRight, Users, SearchCheck, Crown, CircleDollarSign, ClipboardList,
@@ -45,9 +45,10 @@ const VALID_ADMIN_TABS = new Set<AdminTabKey>(["dashboard", "users", "referrals"
 
 export default function Admin({ initialTab }: { initialTab?: AdminTabKey }) {
   const { user, logout } = useAuthStore();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
+  const search = useSearch();
   const { toast } = useToast();
-  const requestedTab = new URLSearchParams(location.split("?")[1] ?? "").get("section");
+  const requestedTab = new URLSearchParams(search).get("section");
   const initialSection = initialTab ?? (requestedTab && VALID_ADMIN_TABS.has(requestedTab as AdminTabKey) ? requestedTab as AdminTabKey : "dashboard");
   const [activeTab, setActiveTab] = useState<AdminTabKey>(initialSection);
   useEffect(() => {
@@ -55,9 +56,9 @@ export default function Admin({ initialTab }: { initialTab?: AdminTabKey }) {
       setActiveTab(initialTab);
       return;
     }
-    const section = new URLSearchParams(location.split("?")[1] ?? "").get("section");
+    const section = new URLSearchParams(search).get("section");
     if (section && VALID_ADMIN_TABS.has(section as AdminTabKey)) setActiveTab(section as AdminTabKey);
-  }, [initialTab, location]);
+  }, [initialTab, search]);
   const role = (user as { role?: string } | null)?.role;
   if (!user || !["moderator", "admin", "super_admin"].includes(role ?? "")) {
     return <Redirect to="/" />;

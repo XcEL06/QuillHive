@@ -92,7 +92,7 @@ function CollabCard({ req, mode, onAct }: {
         <p className="text-xs text-muted-foreground">{new Date(req.createdAt).toLocaleDateString()}</p>
         <div className="flex flex-wrap items-center gap-2">
           {req.status === "accepted" && (
-            <Link href={`/messages?user=${other?.username}`}>
+            <Link href={`/messages?userId=${mode === "received" ? req.senderId : req.receiverId}`}>
               <Button size="sm" variant="outline" className="h-7 text-xs gap-1">
                 <MessageSquare className="w-3 h-3" /> Message
               </Button>

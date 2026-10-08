@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useRoute, Link, useLocation } from 'wouter';
+import { useRoute, Link, useLocation, useSearch } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetUserByUsername, useFollowUser } from '@workspace/api-client-react';
 import { useAuthStore } from '@/store/auth';
@@ -89,7 +89,8 @@ const AVAILABLE_FOR_OPTIONS = [
 export default function Profile() {
   const [, profileParams] = useRoute('/profile/:username');
   const [, publicParams] = useRoute('/u/:username');
-  const [location, navigate] = useLocation();
+  const [, navigate] = useLocation();
+  const search = useSearch();
   const { user: currentUser } = useAuthStore();
   const queryClient = useQueryClient();
   const username = profileParams?.username || publicParams?.username || currentUser?.username || '';
@@ -203,9 +204,9 @@ export default function Profile() {
   const [isOpeningMessage, setIsOpeningMessage] = useState(false);
 
   useEffect(() => {
-    const action = new URLSearchParams(location.split("?")[1] ?? "").get("action");
+    const action = new URLSearchParams(search).get("action");
     if (action === "collaborate" && !isMe && data?.user?.id) setIsCollaborateOpen(true);
-  }, [location, isMe, data?.user?.id]);
+  }, [search, isMe, data?.user?.id]);
 
   useEffect(() => {
     let creatorProfileRequestCancelled = false;

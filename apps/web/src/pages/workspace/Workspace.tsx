@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useSearch } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Briefcase, Users2, Handshake, X } from "lucide-react";
@@ -20,15 +20,20 @@ function hasDismissedSafetyNotice() {
 }
 
 export default function Workspace() {
-  const [location] = useLocation();
+  const search = useSearch();
   const creatorIncomeEnabled = useFeature("creator_income_enabled");
-  const params = new URLSearchParams(location.split("?")[1] ?? "");
+  const params = new URLSearchParams(search);
   const [tab, setTab] = useState(params.get("tab") ?? "work");
   const [showSafetyNotice, setShowSafetyNotice] = useState(() => !hasDismissedSafetyNotice());
 
   useEffect(() => {
     if (!creatorIncomeEnabled && tab === "talent") setTab("work");
   }, [creatorIncomeEnabled, tab]);
+
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(search).get("tab") ?? "work";
+    setTab(!creatorIncomeEnabled && requestedTab === "talent" ? "work" : requestedTab);
+  }, [creatorIncomeEnabled, search]);
 
   const dismissSafetyNotice = () => {
     try {

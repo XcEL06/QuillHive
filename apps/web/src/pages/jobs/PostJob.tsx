@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, useSearch } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,7 +27,8 @@ const OPPORTUNITY_TYPES = [
 
 export default function PostJob() {
   const [locationPath, setLocation] = useLocation();
-  const editId = new URLSearchParams(locationPath.split("?")[1] ?? "").get("edit");
+  const search = useSearch();
+  const editId = new URLSearchParams(search).get("edit");
   const { toast } = useToast();
   const { user } = useAuthStore();
   const token = getStoredToken();
