@@ -10,10 +10,11 @@ import {
   topicsTable,
   achievementsTable,
 } from "@workspace/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { hashPassword, verifyPassword } from "../lib/auth";
 import { logger } from "../lib/logger";
 import { ACHIEVEMENT_DEFS } from "../features/achievements/achievement.service";
+import { assertOfficialSystemAccount, OFFICIAL_SYSTEM_ACCOUNT } from "../lib/officialSystemAccount";
 
 // ── Default topics ──────────────────────────────────────────────────────────
 const DEFAULT_TOPICS = [
@@ -41,40 +42,59 @@ const DEFAULT_TOPICS = [
 
 // ── Official QuillHive account ───────────────────────────────────────────────
 const QUILLHIVE_ACCOUNT = {
-  username: "quillhive",
-  email: "system@quillhive.app",
+  ...OFFICIAL_SYSTEM_ACCOUNT,
   displayName: "QuillHive",
   bio: "The official QuillHive account. Tips, updates, and featured stories.",
   isOfficialAccount: true,
   reachMultiplier: 10,
   role: "super_admin" as const,
   emailVerified: true,
-  passwordHash: "QuillHiveoff.acct.hq",
+  passwordHash: "",
 };
 
 // ── Seed functions ───────────────────────────────────────────────────────────
 
-async function seedOfficialAccount(): Promise<void> {
-  try {
-    const [existing] = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(eq(usersTable.username, QUILLHIVE_ACCOUNT.username));
+export async function seedOfficialAccount(database: typeof db = db): Promise<void> {
+  assertOfficialSystemAccount(QUILLHIVE_ACCOUNT);
+  const [existing] = await database
+    .select({ id: usersTable.id, username: usersTable.username, email: usersTable.email, isOfficialAccount: usersTable.isOfficialAccount })
+    .from(usersTable)
+    .where(eq(usersTable.email, OFFICIAL_SYSTEM_ACCOUNT.email))
+    .limit(1);
 
-    if (existing) {
-      await db
-        .update(usersTable)
-        .set({ isOfficialAccount: true, reachMultiplier: 10, passwordHash: "" })
-        .where(eq(usersTable.id, existing.id));
-      logger.info("[Seed] @quillhive account already exists - flags verified");
-      return;
-    }
-
-    await db.insert(usersTable).values(QUILLHIVE_ACCOUNT).onConflictDoNothing();
-    logger.info("[Seed] Created @quillhive official account");
-  } catch (err) {
-    logger.warn({ err }, "[Seed] Failed to seed @quillhive account");
+  if (existing) {
+    assertOfficialSystemAccount(existing);
+    await database
+      .update(usersTable)
+      .set({ reachMultiplier: 10, passwordHash: "" })
+      .where(and(
+        eq(usersTable.id, existing.id),
+        eq(usersTable.username, OFFICIAL_SYSTEM_ACCOUNT.username),
+        eq(usersTable.email, OFFICIAL_SYSTEM_ACCOUNT.email),
+        eq(usersTable.isOfficialAccount, true),
+      ));
+    logger.info("[Seed] @quillhive account already exists - flags verified");
+    return;
   }
+
+  const [usernameCollision] = await database
+    .select({ id: usersTable.id, username: usersTable.username, email: usersTable.email, isOfficialAccount: usersTable.isOfficialAccount })
+    .from(usersTable)
+    .where(eq(usersTable.username, OFFICIAL_SYSTEM_ACCOUNT.username))
+    .limit(1);
+  if (usernameCollision) {
+    assertOfficialSystemAccount(usernameCollision);
+    throw new Error("Official system account email lookup returned no matching account.");
+  }
+
+  assertOfficialSystemAccount(QUILLHIVE_ACCOUNT);
+  const [created] = await database
+    .insert(usersTable)
+    .values(QUILLHIVE_ACCOUNT)
+    .onConflictDoNothing()
+    .returning({ id: usersTable.id });
+  if (!created) throw new Error("Could not create the official system account because its identity conflicts with an existing account.");
+  logger.info("[Seed] Created @quillhive official account");
 }
 
 async function seedCareereviveAdmin(): Promise<void> {
@@ -86,13 +106,6 @@ async function seedCareereviveAdmin(): Promise<void> {
       .where(eq(usersTable.email, "careerevive@gmail.com"));
 
     if (!password || password.length < 16) {
-      if (existing?.passwordHash) {
-        await db.update(usersTable).set({
-          passwordHash: "",
-          authVersion: sql`${usersTable.authVersion} + 1`,
-        }).where(eq(usersTable.id, existing.id));
-        await db.delete(sessionsTable).where(eq(sessionsTable.userId, existing.id));
-      }
       logger.warn("[Seed] CAREEREVIVE_ADMIN_PASSWORD is missing or shorter than 16 characters; admin seed skipped");
       return;
     }
@@ -169,7 +182,7 @@ async function seedAchievements(): Promise<void> {
 
 export async function runSeed(): Promise<void> {
   logger.info("[Seed] Starting platform seed…");
-  await Promise.allSettled([
+  await Promise.all([
     seedOfficialAccount(),
     seedCareereviveAdmin(),
     seedTopics(),

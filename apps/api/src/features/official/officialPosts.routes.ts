@@ -10,6 +10,7 @@ import { eq, desc, and, inArray, sql, or } from "drizzle-orm";
 import { requireAuth, requireAdmin } from "../../middleware/admin";
 import { z } from "zod";
 import { getIO } from "../../lib/socket";
+import { assertOfficialSystemAccount, OFFICIAL_SYSTEM_ACCOUNT } from "../../lib/officialSystemAccount";
 
 export const officialPostsRouter: Router = Router();
 export const officialPublicRouter: Router = Router();
@@ -96,28 +97,43 @@ async function auditLog(adminId: number, action: string, targetId?: number, deta
 }
 
 async function ensureQuillHiveAccount(): Promise<number> {
+  const officialIdentity = { ...OFFICIAL_SYSTEM_ACCOUNT, isOfficialAccount: true };
+  assertOfficialSystemAccount(officialIdentity);
   const [existing] = await db
-    .select({ id: usersTable.id })
+    .select({ id: usersTable.id, username: usersTable.username, email: usersTable.email, isOfficialAccount: usersTable.isOfficialAccount })
     .from(usersTable)
-    .where(eq(usersTable.username, "quillhive"))
+    .where(eq(usersTable.email, OFFICIAL_SYSTEM_ACCOUNT.email))
     .limit(1);
-  if (existing) return existing.id;
+  if (existing) {
+    assertOfficialSystemAccount(existing);
+    return existing.id;
+  }
+
+  const [usernameCollision] = await db
+    .select({ id: usersTable.id, username: usersTable.username, email: usersTable.email, isOfficialAccount: usersTable.isOfficialAccount })
+    .from(usersTable)
+    .where(eq(usersTable.username, OFFICIAL_SYSTEM_ACCOUNT.username))
+    .limit(1);
+  if (usernameCollision) {
+    assertOfficialSystemAccount(usernameCollision);
+    throw new Error("Official system account email lookup returned no matching account.");
+  }
 
   const [created] = await db
     .insert(usersTable)
     .values({
-      username: "quillhive",
+      ...OFFICIAL_SYSTEM_ACCOUNT,
       displayName: "QuillHive",
-      email: "system@quillhive.internal",
       passwordHash: "",
       bio: "Your quill is your voice. Your hive is where it grows. For everyone.",
       role: "admin",
-      isOfficialAccount: true,
+      isOfficialAccount: officialIdentity.isOfficialAccount,
       reachMultiplier: 3.0,
       visibilityPenalty: 0,
       isEmailVerified: true,
     } as typeof usersTable.$inferInsert)
     .returning({ id: usersTable.id });
+  if (!created) throw new Error("Could not create the official system account because its identity conflicts with an existing account.");
   return created.id;
 }
 
@@ -127,38 +143,20 @@ async function ensureQuillHiveAccount(): Promise<number> {
  */
 export async function seedQuillHiveAccount(): Promise<void> {
   try {
-    const [existing] = await db
-      .select({ id: usersTable.id, isOfficialAccount: usersTable.isOfficialAccount, reachMultiplier: usersTable.reachMultiplier })
-      .from(usersTable)
-      .where(eq(usersTable.username, "quillhive"))
-      .limit(1);
-
-    if (existing) {
-      if (!existing.isOfficialAccount || Number(existing.reachMultiplier) < 2.5) {
-        await db
-          .update(usersTable)
-          .set({ isOfficialAccount: true, reachMultiplier: 3.0, visibilityPenalty: 0 })
-          .where(eq(usersTable.id, existing.id));
-      }
-      return;
-    }
-
-    await db.insert(usersTable).values({
-      username: "quillhive",
-      displayName: "QuillHive",
-      email: "system@quillhive.internal",
-      passwordHash: "",
-      bio: "Your quill is your voice. Your hive is where it grows. For everyone.",
-      role: "admin",
-      isOfficialAccount: true,
-      reachMultiplier: 3.0,
-      visibilityPenalty: 0,
-      isEmailVerified: true,
-    } as typeof usersTable.$inferInsert);
+    const accountId = await ensureQuillHiveAccount();
+    await db
+      .update(usersTable)
+      .set({ reachMultiplier: 3.0, visibilityPenalty: 0 })
+      .where(and(
+        eq(usersTable.id, accountId),
+        eq(usersTable.username, OFFICIAL_SYSTEM_ACCOUNT.username),
+        eq(usersTable.email, OFFICIAL_SYSTEM_ACCOUNT.email),
+        eq(usersTable.isOfficialAccount, true),
+      ));
   } catch (err) {
-    // Non-fatal: log but don't crash startup
     const { logger } = await import("../../lib/logger");
-    logger.warn({ err }, "Failed to seed @quillhive account");
+    logger.error({ err }, "Failed to seed @quillhive account");
+    throw err;
   }
 }
 
