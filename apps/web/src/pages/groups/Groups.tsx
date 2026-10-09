@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Timestamp } from '@/lib/postTimestamp';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -868,13 +869,13 @@ function GroupDetail({ id }: { id: number }) {
                 {joinRequests.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No pending join requests.</p> : joinRequests.map(request => <article key={request.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
-                    <div className="min-w-0"><p className="truncate text-sm font-semibold">{request.displayName || request.username}</p><p className="truncate text-xs text-muted-foreground">@{request.username} · requested {new Date(request.createdAt).toLocaleDateString()}</p>{request.trustScore != null && <p className="mt-0.5 text-xs text-muted-foreground">Trust score {request.trustScore}</p>}</div>
+                    <div className="min-w-0"><p className="truncate text-sm font-semibold">{request.displayName || request.username}</p><p className="truncate text-xs text-muted-foreground">@{request.username} · requested <Timestamp value={request.createdAt} mode="date" /></p>{request.trustScore != null && <p className="mt-0.5 text-xs text-muted-foreground">Trust score {request.trustScore}</p>}</div>
                   </div>
                   <div className="flex gap-2"><Button size="sm" onClick={() => void reviewJoinRequest(request.id, 'approve')}><Check className="mr-1.5 h-4 w-4" />Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewJoinRequest(request.id, 'deny')}><X className="mr-1.5 h-4 w-4" />Deny</Button></div>
                 </article>)}
               </div> : activeTab === 'reports' ? <div className="divide-y divide-border border-y">
                 {moderationReports.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No reports need group review.</p> : moderationReports.map(report => <article key={report.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
-                  <div className="min-w-0"><p className="text-sm font-semibold">{report.postTitle || `Post #${report.targetId}`}</p><p className="mt-1 text-xs text-muted-foreground">{report.reason.replace(/_/g, ' ')} · reported by {report.reporterName || `@${report.reporterUsername}`} · {new Date(report.createdAt).toLocaleDateString()}</p></div>
+                  <div className="min-w-0"><p className="text-sm font-semibold">{report.postTitle || `Post #${report.targetId}`}</p><p className="mt-1 text-xs text-muted-foreground">{report.reason.replace(/_/g, ' ')} · reported by {report.reporterName || `@${report.reporterUsername}`} · <Timestamp value={report.createdAt} mode="date" /></p></div>
                   <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void reviewGroupReport(report.id, 'dismiss')}>Dismiss</Button><Button size="sm" variant="destructive" onClick={() => void reviewGroupReport(report.id, 'remove_post')}>Remove post</Button><Button size="sm" variant="ghost" onClick={() => void reviewGroupReport(report.id, 'escalate')}>Escalate</Button></div>
                 </article>)}
               </div> : (postsLoading || (activeTab === 'pending' && pendingLoading)) ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}</div> : visiblePosts.length === 0 ? <div className="flex min-h-64 flex-col items-center justify-center border-y border-dashed border-border px-6 text-center">

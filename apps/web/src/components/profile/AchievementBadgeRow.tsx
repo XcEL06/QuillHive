@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import {
   Award,
   PenTool,
@@ -103,7 +104,7 @@ export default function AchievementBadgeRow({ username, isMe }: Props) {
                   <div className="font-semibold">{a.name}</div>
                   <div className="text-muted-foreground mt-0.5">{a.description}</div>
                   <div className="text-muted-foreground/70 mt-1">
-                    Unlocked {new Date(a.unlockedAt).toLocaleDateString()}
+                    Unlocked <Timestamp value={a.unlockedAt} mode="date" />
                   </div>
                 </div>
               </TooltipContent>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { useLocation } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,18 +32,6 @@ const TYPE_COLORS: Record<string, string> = {
   blog: "bg-purple-500/10 text-purple-400 border-purple-500/20",
   note: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20",
 };
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 30) return `${d}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
 
 function preview(content: string, len = 160): string {
   const stripped = content.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
@@ -221,7 +210,7 @@ export default function Drafts() {
                       </h2>
                       <div className="flex items-center gap-2 mt-0.5">
                         <Clock className="w-3 h-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">{timeAgo(draft.updatedAt)}</span>
+                        <Timestamp value={draft.updatedAt} />
                       </div>
                     </div>
                     <Badge variant="outline" className={`shrink-0 text-xs capitalize border ${typeColor}`}>

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { Link } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -89,7 +90,7 @@ function CollabCard({ req, mode, onAct }: {
       {req.message && <p className="text-sm text-muted-foreground line-clamp-3 mb-3">{req.message}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">{new Date(req.createdAt).toLocaleDateString()}</p>
+        <p className="text-xs text-muted-foreground"><Timestamp value={req.createdAt} mode="date" /></p>
         <div className="flex flex-wrap items-center gap-2">
           {req.status === "accepted" && (
             <Link href={`/messages?userId=${mode === "received" ? req.senderId : req.receiverId}`}>
@@ -166,7 +167,7 @@ function CommissionCard({ commission, mode, onRespond }: {
                   <Calendar className="w-3 h-3" />By {new Date(commission.deadline).toLocaleDateString(undefined, { dateStyle: "medium" })}
                 </span>
               )}
-              <span className="text-xs text-muted-foreground ml-auto">{new Date(commission.createdAt).toLocaleDateString(undefined, { dateStyle: "short" })}</span>
+              <span className="text-xs text-muted-foreground ml-auto"><Timestamp value={commission.createdAt} mode="date" /></span>
             </div>
           </div>
         </div>

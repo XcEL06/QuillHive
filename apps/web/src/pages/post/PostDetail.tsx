@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { formatDistanceToNow, format } from 'date-fns';
+import { Timestamp, formatPostTimestamp } from '@/lib/postTimestamp';
 import { Heart, Send, Share2, MessageCircle, ChevronDown, ChevronRight, CornerDownRight, ShieldCheck, Clock, BarChart3, BadgeCheck, Award, BookOpen, Zap } from 'lucide-react';
 import { BoostModal } from '@/components/boost/BoostModal';
 import { safeHtml } from '@/lib/sanitize';
@@ -231,7 +231,7 @@ function CommentNode({
                   <ShieldCheck className="w-3 h-3 text-emerald-500" />
                 )}
               </span>
-              <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(comment.createdAt))} ago</span>
+              <Timestamp value={comment.createdAt} className="text-xs text-muted-foreground" />
             </div>
             <p className="text-sm text-foreground/90 whitespace-pre-wrap">{comment.content}</p>
           </div>
@@ -476,13 +476,13 @@ export default function PostDetail() {
                   )}
                 </h3>
                 <p className="text-sm text-muted-foreground flex items-center gap-2">
-                  <span>{format(new Date(post.createdAt), 'MMM d, yyyy')}</span>
+                  <Timestamp value={post.createdAt} mode="date" />
                   {(post.updatedAt && post.updatedAt !== post.createdAt) || (post as { isEdited?: boolean }).isEdited ? (
                     <button
                       type="button"
                       onClick={() => setHistoryOpen(true)}
                       className="inline-flex items-center text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
-                      title={`Edited ${format(new Date(post.updatedAt || post.createdAt), 'MMM d, yyyy h:mm a')}`}
+                      title={`Edited ${formatPostTimestamp(post.updatedAt || post.createdAt)?.title ?? ''}`}
                       data-testid="button-edit-history"
                     >
                       · {t('post.edited')}

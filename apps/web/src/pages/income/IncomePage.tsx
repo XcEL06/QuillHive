@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Timestamp } from '@/lib/postTimestamp';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -165,7 +166,7 @@ export default function IncomePage() {
                       {entry.description && <span className="text-sm text-foreground">{entry.description}</span>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(entry.date).toLocaleDateString()}
+                      <Timestamp value={entry.date} mode="date" />
                     </p>
                   </div>
                   <span className="text-base font-bold text-emerald-600">+{entry.currency} {entry.amount.toFixed(2)}</span>

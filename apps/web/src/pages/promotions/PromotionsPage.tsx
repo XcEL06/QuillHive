@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { Zap, TrendingUp, Eye, MousePointerClick, Clock, CheckCircle2, XCircle, Plus, BarChart3 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -422,7 +423,7 @@ export default function PromotionsPage() {
               <tbody className="divide-y divide-white/10">
                 {transactions.map(transaction => (
                   <tr key={transaction.id}>
-                    <td className="p-3 text-white/60 whitespace-nowrap">{new Date(transaction.date).toLocaleDateString()}</td>
+                    <td className="p-3 text-white/60 whitespace-nowrap"><Timestamp value={transaction.date} mode="date" /></td>
                     <td className="p-3 text-white/70 capitalize">{transaction.source}</td>
                     <td className="p-3 text-white/50 hidden md:table-cell">{transaction.description ?? "-"}</td>
                     <td className="p-3 text-right text-emerald-400 font-medium whitespace-nowrap">
@@ -535,9 +536,7 @@ function CampaignCard({
           {campaign.postTitle ?? `Post #${campaign.postId}`}
         </p>
         <div className="flex items-center gap-4 mt-1">
-          <span className="text-xs text-white/40">
-            {new Date(campaign.createdAt).toLocaleDateString()}
-          </span>
+          <Timestamp value={campaign.createdAt} mode="date" className="text-xs text-white/40" />
           {campaign.boostEndsAt && (
             <span className="text-xs text-white/40">
               {active ? "Ends" : "Ended"} {new Date(campaign.boostEndsAt).toLocaleDateString()}

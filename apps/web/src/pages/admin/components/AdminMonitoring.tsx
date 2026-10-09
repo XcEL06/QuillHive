@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { Badge } from "@/components/ui/badge";
 import type { AdminProps } from "./types";
 import { useAdminFetch } from "../hooks/useAdminFetch";
@@ -106,9 +107,7 @@ export default function AdminMonitoring({ token, toast }: AdminProps) {
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={severityVariant(event.severity)} className="capitalize">{event.severity || "Information"}</Badge>
                   <h3 className="text-sm font-medium">{EVENT_LABELS[event.type] || "System event"}</h3>
-                  <time className="ml-auto text-xs text-muted-foreground" dateTime={new Date(event.timestamp).toISOString()}>
-                    {new Date(event.timestamp).toLocaleString()}
-                  </time>
+                  <Timestamp value={event.timestamp} mode="datetime" className="ml-auto text-xs text-muted-foreground" />
                 </div>
                 <p className="text-sm leading-relaxed text-muted-foreground">{event.message || "No additional description."}</p>
                 {event.metadata && Object.entries(event.metadata).length > 0 && (

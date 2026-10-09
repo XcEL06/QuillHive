@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/store/auth';
 import { apiRequest } from '@/lib/api';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 import {
   Link2, ArrowLeft, Plus, CheckCircle2, Eye, Users,
   ExternalLink, Lock, BarChart3, Loader2, ChevronRight, Share2
@@ -84,7 +84,7 @@ function EntryCard({ entry, index }: { entry: ChainEntry; index: number }) {
                 {entry.authorName ?? entry.authorUsername}
               </span>
               <span className="text-xs text-muted-foreground ml-auto">
-                {formatDistanceToNow(new Date(entry.addedAt), { addSuffix: true })}
+                <Timestamp value={entry.addedAt} />
               </span>
             </div>
             {entry.postTitle && (
@@ -295,7 +295,7 @@ export default function ChainView() {
                 )}
                 <span className="flex items-center gap-1"><Eye className="w-3 h-3" /> {(chain.totalViews ?? 0).toLocaleString()}</span>
                 <span className="flex items-center gap-1"><Users className="w-3 h-3" /> {chain.entryCount} links</span>
-                <span>{formatDistanceToNow(new Date(chain.createdAt), { addSuffix: true })}</span>
+                <span><Timestamp value={chain.createdAt} /></span>
               </div>
             </div>
           </div>

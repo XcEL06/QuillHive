@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { Link2, Copy, Check, Users, Gift, Share2, ChevronRight } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { apiFetch, copyTextToClipboard, getApiErrorMessage } from "@/lib/api";
@@ -185,7 +186,7 @@ export default function InvitePage() {
                   <div>
                     <p className="text-white text-sm font-medium">Invited creator</p>
                     <p className="text-white/40 text-xs">
-                      Joined {code.usedAt ? new Date(code.usedAt).toLocaleDateString() : "-"}
+                      Joined {code.usedAt ? <Timestamp value={code.usedAt} mode="date" /> : "-"}
                     </p>
                   </div>
                 </div>

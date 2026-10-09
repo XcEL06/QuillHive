@@ -10,7 +10,7 @@ import {
   Eye, Users, Sparkles, Zap, ChevronRight, Target,
 } from 'lucide-react';
 import { Link as WouterLink } from 'wouter';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link } from 'wouter';
 import { getStoredToken } from '@/lib/api';
@@ -374,7 +374,7 @@ export default function Jobs() {
                       </p>
                     </div>
                     <span className="text-xs font-medium text-muted-foreground flex items-center gap-1 shrink-0 bg-muted px-2.5 py-1 rounded-md">
-                      <Clock className="w-3 h-3" /> {formatDistanceToNow(new Date(job.createdAt))} ago
+                      <Clock className="w-3 h-3" /> <Timestamp value={job.createdAt} />
                     </span>
                   </div>
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
 import { BookOpen } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getStoredToken } from '@/lib/api';
 
@@ -107,7 +107,7 @@ export function ContinueReadingShelf() {
               {post.title || post.excerpt || 'Untitled'}
             </p>
             <p className="text-xs text-muted-foreground mb-2">
-              by {post.author.displayName} · {formatDistanceToNow(new Date(progress.lastReadAt))} ago
+              by {post.author.displayName} · <Timestamp value={progress.lastReadAt} />
             </p>
             <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
               <div

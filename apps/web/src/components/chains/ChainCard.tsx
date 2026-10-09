@@ -2,7 +2,7 @@ import { Link } from 'wouter';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link2, Users, Eye, CheckCircle2, Clock } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 
 export interface ChainSummary {
   id: number;
@@ -109,7 +109,7 @@ export function ChainCard({ chain }: ChainCardProps) {
               </span>
               <span className="flex items-center gap-1 ml-auto">
                 <Clock className="w-3 h-3" />
-                {formatDistanceToNow(new Date(chain.createdAt), { addSuffix: true })}
+                <Timestamp value={chain.createdAt} />
               </span>
             </div>
           </div>

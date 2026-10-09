@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { ExternalLink, RefreshCw, Search, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,7 @@ export default function AdminOpportunities({ token, toast }: AdminProps) {
                     {opportunity.isFeatured && <Badge variant="outline" className="gap-1"><Star className="h-3 w-3" />Featured</Badge>}
                   </div>
                   <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{opportunity.description}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">#{opportunity.id} · Creator #{opportunity.authorId} · {new Date(opportunity.createdAt).toLocaleDateString()}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">#{opportunity.id} · Creator #{opportunity.authorId} · <Timestamp value={opportunity.createdAt} mode="date" /></p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Button asChild size="sm" variant="outline"><a href="/jobs" target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open board</a></Button>

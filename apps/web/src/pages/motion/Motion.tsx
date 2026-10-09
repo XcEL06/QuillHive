@@ -21,7 +21,7 @@ import {
 import { useAuthStore } from '@/store/auth';
 import { useToast } from '@/hooks/use-toast';
 import { useT } from '@/lib/i18n';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 
 type MotionFeed = 'fresh' | 'trending' | 'following';
 
@@ -234,7 +234,7 @@ function MotionShowcaseCard({
               {post.author.displayName}
             </Link>
             <span className="text-xs text-muted-foreground">
-              @{post.author.username} · {formatDistanceToNow(new Date(post.createdAt))} ago
+              @{post.author.username} · <Timestamp value={post.createdAt} />
             </span>
           </div>
           <Link href={`/portfolio/${post.author.username}`}>

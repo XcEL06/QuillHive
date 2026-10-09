@@ -9,7 +9,7 @@ import {
   Sparkles, Zap, ChevronRight, Target,
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { apiUrl, getStoredToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
@@ -278,7 +278,7 @@ export function JobsPanel() {
                 <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2 flex-wrap">
                   {j.compensation && <span className="text-foreground font-medium flex items-center gap-0.5"><DollarSign className="w-3 h-3" />{j.compensation}</span>}
                   <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{j.remote ? 'Remote' : j.location || 'Onsite'}</span>
-                  <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" />{formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}</span>
+                  <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" /><Timestamp value={job.createdAt} /></span>
                   {expiresAt && (
                     <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
                       <Calendar className="w-3 h-3" />Available until {expiresAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}

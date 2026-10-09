@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { formatDistanceToNow } from "date-fns";
+import { Timestamp } from "@/lib/postTimestamp";
 import { Eye, UserPlus, Users } from "lucide-react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { BackButton } from "@/components/ui/BackButton";
@@ -97,7 +97,7 @@ export default function ProfileViewers() {
                         {viewer.displayName}
                       </Link>
                       <p className="text-xs text-muted-foreground truncate">
-                        viewed your profile {formatDistanceToNow(new Date(viewer.viewedAt), { addSuffix: true })}
+                        viewed your profile <Timestamp value={viewer.viewedAt} />
                       </p>
                     </div>
                     <Button

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { Ban, Check, Shield, ShieldCheck, User as UserIcon, UserMinus, Volume2, VolumeX } from "lucide-react";
 import { Link } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -152,7 +153,7 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
     : <div className="divide-y divide-border">{list.map(member => <div key={member.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <Avatar className="h-10 w-10"><AvatarImage src={member.avatarUrl ?? undefined} /><AvatarFallback>{(member.displayName || member.username || "?").slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
-        <div className="min-w-0"><Link href={`/u/${member.username}`} className="block truncate text-sm font-semibold hover:underline">{member.displayName || member.username}</Link><p className="truncate text-xs text-muted-foreground">@{member.username} · joined {new Date(member.joinedAt).toLocaleDateString()}</p></div>
+        <div className="min-w-0"><Link href={`/u/${member.username}`} className="block truncate text-sm font-semibold hover:underline">{member.displayName || member.username}</Link><p className="truncate text-xs text-muted-foreground">@{member.username} · joined <Timestamp value={member.joinedAt} mode="date" /></p></div>
         <TrustBadge score={member.trustScore} />
         <Badge variant="secondary" className="capitalize">{member.role}</Badge>
       </div>
@@ -177,7 +178,7 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
       <TabsContent value="admins">{memberRows(members.filter(member => member.role !== "member"))}</TabsContent>
       <TabsContent value="pending" className="space-y-5">
         {canManage && requests.length > 0 && <div className="divide-y divide-border border-y">{requests.map(request => <article key={request.id} className="space-y-3 py-4">
-          <div className="flex flex-wrap items-center gap-3"><Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1)}</AvatarFallback></Avatar><div className="min-w-0 flex-1"><Link href={`/u/${request.username}`} className="text-sm font-semibold hover:underline">{request.displayName || request.username}</Link><p className="text-xs text-muted-foreground">@{request.username} · applied {new Date(request.createdAt).toLocaleDateString()} · joined platform {new Date(request.joinedAt).toLocaleDateString()}</p></div><TrustBadge score={request.trustScore} /></div>
+          <div className="flex flex-wrap items-center gap-3"><Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1)}</AvatarFallback></Avatar><div className="min-w-0 flex-1"><Link href={`/u/${request.username}`} className="text-sm font-semibold hover:underline">{request.displayName || request.username}</Link><p className="text-xs text-muted-foreground">@{request.username} · applied <Timestamp value={request.createdAt} mode="date" /> · joined platform <Timestamp value={request.joinedAt} mode="date" /></p></div><TrustBadge score={request.trustScore} /></div>
           {Object.entries(request.screeningAnswers ?? {}).map(([question, answer]) => <div key={question} className="pl-13 text-sm"><p className="text-xs font-medium text-muted-foreground">{question}</p><p>{answer}</p></div>)}
           <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void reviewRequest(request, "approve")}><Check className="mr-1.5 h-4 w-4" />Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewRequest(request, "reject")}>Decline</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => void reviewRequest(request, "block")}><Ban className="mr-1.5 h-4 w-4" />Block</Button></div>
         </article>)}</div>}

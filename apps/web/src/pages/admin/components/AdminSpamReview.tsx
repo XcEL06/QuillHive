@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { AlertTriangle, Check, RefreshCw, ShieldAlert, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,7 @@ export default function AdminSpamReview({ token, toast }: AdminProps) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
               <span className="rounded-lg bg-amber-500/10 p-2 text-amber-600"><ShieldAlert className="h-4 w-4" /></span>
-              <div className="min-w-0"><p className="font-semibold">{flag.displayName || `Account #${flag.userId}`} <span className="font-normal text-muted-foreground">@{flag.username}</span></p><p className="mt-1 text-sm">{flag.reason}</p><div className="mt-2 flex flex-wrap gap-2"><Badge variant="outline">{flag.ruleKey.replace(/_/g, " ")}</Badge>{flag.isBanned && <Badge variant="destructive">Already banned</Badge>}<span className="text-xs text-muted-foreground">Account created {new Date(flag.accountCreatedAt).toLocaleString()}</span></div></div>
+              <div className="min-w-0"><p className="font-semibold">{flag.displayName || `Account #${flag.userId}`} <span className="font-normal text-muted-foreground">@{flag.username}</span></p><p className="mt-1 text-sm">{flag.reason}</p><div className="mt-2 flex flex-wrap gap-2"><Badge variant="outline">{flag.ruleKey.replace(/_/g, " ")}</Badge>{flag.isBanned && <Badge variant="destructive">Already banned</Badge>}<span className="text-xs text-muted-foreground">Account created <Timestamp value={flag.accountCreatedAt} mode="datetime" /></span></div></div>
             </div>
             <a className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline" href={`/profile/${encodeURIComponent(flag.username)}`} target="_blank" rel="noreferrer"><UserRound className="h-3.5 w-3.5" />Open profile</a>
           </div>

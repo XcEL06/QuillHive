@@ -1,4 +1,5 @@
 import { format, formatDistanceToNowStrict, isValid } from 'date-fns';
+import type { HTMLAttributes } from 'react';
 
 const RELATIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -24,4 +25,28 @@ export function formatPostTimestamp(value: string | Date) {
     title: format(date, "MMMM d, yyyy 'at' h:mm:ss a"),
     dateTime: date.toISOString(),
   };
+}
+
+type TimestampProps = Omit<HTMLAttributes<HTMLTimeElement>, 'children'> & {
+  value: string | Date | null | undefined;
+  mode?: 'relative' | 'date' | 'datetime';
+};
+
+export function Timestamp({ value, mode = 'relative', ...props }: TimestampProps) {
+  if (value == null) return null;
+
+  const timestamp = formatPostTimestamp(value);
+  if (!timestamp) return null;
+
+  const label = mode === 'date'
+    ? format(new Date(value), 'MMM d, yyyy')
+    : mode === 'datetime'
+      ? format(new Date(value), 'MMM d, yyyy, h:mm a')
+      : timestamp.label;
+
+  return (
+    <time dateTime={timestamp.dateTime} title={timestamp.title} {...props}>
+      {label}
+    </time>
+  );
 }

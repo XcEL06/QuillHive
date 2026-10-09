@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { getStoredToken } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { TrendingUp, TrendingDown, Minus, Clock, Shield, Star, Award, MessageSquare, Heart, Share2, AlertCircle } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Timestamp } from "@/lib/postTimestamp";
 
 type ReputationEvent = {
   id: string;
@@ -97,7 +97,7 @@ export function ReputationTimeline({ userId }: { userId: string }) {
                 {t(`trust.${event.eventType}`, event.eventType.replace(/_/g, " "))}
               </p>
               <p className="text-xs text-muted-foreground">
-                {formatDistanceToNow(new Date(event.createdAt), { addSuffix: true })}
+                <Timestamp value={event.createdAt} />
               </p>
             </div>
             <span className={`text-sm font-bold font-mono shrink-0 ${

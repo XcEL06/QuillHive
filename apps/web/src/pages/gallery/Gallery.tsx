@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/hooks/use-toast';
 import { ImageUploadField } from '@/components/media/ImageUploadField';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 import {
   Upload, Heart, ExternalLink, Image as ImageIcon, X, Loader2, ImageOff, Filter
 } from 'lucide-react';
@@ -202,7 +202,7 @@ export default function Gallery() {
                     </Avatar>
                     <div>
                       <p className="font-semibold text-sm">{viewPost.author.displayName}</p>
-                      <p className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(viewPost.createdAt))} ago</p>
+                      <p className="text-xs text-muted-foreground"><Timestamp value={viewPost.createdAt} /></p>
                     </div>
                   </div>
                   <button onClick={() => setViewPost(null)} className="text-muted-foreground hover:text-foreground">

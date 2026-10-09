@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Timestamp } from '@/lib/postTimestamp';
 import { Button } from '@/components/ui/button';
 import { Loader2, LogOut, Monitor, MapPin } from 'lucide-react';
 
@@ -166,7 +167,7 @@ export function SessionsCard({
                 <div>
                   <p className="font-medium">{formatUA(s.userAgent)}</p>
                   <p className="text-xs text-muted-foreground">
-                    Started {new Date(s.createdAt).toLocaleString()}
+                    Started <Timestamp value={s.createdAt} mode="datetime" />
                     {s.ipHash ? ` · ${s.ipHash}` : ''}
                   </p>
                 </div>
@@ -215,7 +216,7 @@ export function SessionsCard({
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground">
-                    {new Date(e.createdAt).toLocaleString()}
+                    <Timestamp value={e.createdAt} mode="datetime" />
                   </p>
                   {e.integrityStatus !== 'normal' && (
                     <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600">

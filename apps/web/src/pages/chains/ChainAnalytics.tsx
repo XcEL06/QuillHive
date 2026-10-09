@@ -1,4 +1,5 @@
 import { useRoute, Link } from 'wouter';
+import { Timestamp } from '@/lib/postTimestamp';
 import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
@@ -177,7 +178,7 @@ export default function ChainAnalytics() {
             </div>
             <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
               <Calendar className="w-3 h-3" />
-              Started {format(new Date(data.chainCreatedAt), 'MMM d, yyyy')}
+              Started <Timestamp value={data.chainCreatedAt} mode="date" />
             </p>
           </div>
           <BarChart3 className="w-5 h-5 text-primary shrink-0 mt-1" />

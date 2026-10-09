@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { CheckCircle, XCircle, AlertCircle, RefreshCw } from "lucide-react";
 import { getStoredToken } from "@/lib/api";
 
@@ -113,7 +114,7 @@ export function InfraStatusWidget() {
 
       {lastChecked && (
         <p className="text-[11px] text-zinc-600 mt-3 text-right">
-          Checked {lastChecked.toLocaleTimeString()}
+          Checked <Timestamp value={lastChecked} mode="datetime" />
         </p>
       )}
     </div>

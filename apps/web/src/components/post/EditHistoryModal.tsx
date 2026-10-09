@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { formatDistanceToNow, format } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 import { History } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -96,12 +96,7 @@ export function EditHistoryModal({
                   <span className="font-medium text-foreground line-clamp-1">
                     {v.title || 'Untitled'}
                   </span>
-                  <span
-                    className="text-xs text-muted-foreground shrink-0"
-                    title={format(new Date(v.createdAt), 'PPpp')}
-                  >
-                    {formatDistanceToNow(new Date(v.createdAt))} ago
-                  </span>
+                  <Timestamp value={v.createdAt} className="text-xs text-muted-foreground shrink-0" />
                 </div>
                 {v.excerpt && (
                   <p className="text-xs text-muted-foreground line-clamp-2">{v.excerpt}</p>

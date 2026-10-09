@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Timestamp } from '@/lib/postTimestamp';
 import { Link, useRoute } from 'wouter';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { BackButton } from '@/components/ui/BackButton';
@@ -188,7 +189,7 @@ export default function Series() {
                     )}
                   </div>
                   {s.description && <p className="text-sm text-muted-foreground line-clamp-2">{s.description}</p>}
-                  <p className="text-xs text-muted-foreground mt-2">{new Date(s.createdAt).toLocaleDateString()}</p>
+                  <p className="text-xs text-muted-foreground mt-2"><Timestamp value={s.createdAt} mode="date" /></p>
                 </div>
                 <Button
                   variant="ghost"

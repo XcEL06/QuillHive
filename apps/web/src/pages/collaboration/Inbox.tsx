@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { Timestamp } from '@/lib/postTimestamp';
 import { Link, useSearch } from "wouter";
 import { apiFetch } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -160,7 +161,7 @@ function CommissionCard({
                 </span>
               )}
               <span className="text-xs text-muted-foreground ml-auto">
-                {new Date(commission.createdAt).toLocaleDateString(undefined, { dateStyle: "short" })}
+                <Timestamp value={commission.createdAt} mode="date" />
               </span>
             </div>
           </div>
@@ -194,7 +195,7 @@ function CommissionCard({
                 <MessageSquare className="w-3 h-3" />
                 Creator Response
                 {commission.respondedAt && (
-                  <span className="ml-1 font-normal">· {new Date(commission.respondedAt).toLocaleDateString(undefined, { dateStyle: "short" })}</span>
+                  <span className="ml-1 font-normal">· <Timestamp value={commission.respondedAt} mode="date" /></span>
                 )}
               </p>
               <div className={`rounded-xl p-3 text-sm whitespace-pre-wrap border ${COMMISSION_STATUS[commission.status]?.cls ?? "bg-muted/40 border-border"}`}>
@@ -472,7 +473,7 @@ export default function Inbox() {
                         className="w-full bg-transparent text-sm font-semibold outline-none border-b border-transparent focus:border-primary/40"
                         aria-label="Project room title"
                       />
-                      <p className="text-[11px] text-muted-foreground mt-1">Updated {new Date(room.updatedAt).toLocaleDateString()}</p>
+                      <p className="text-[11px] text-muted-foreground mt-1">Updated <Timestamp value={room.updatedAt} mode="date" /></p>
                     </div>
                     <Button size="sm" variant="outline" className="gap-1.5 text-xs shrink-0" onClick={() => saveRoom(room)} disabled={savingRoomId === room.id}>
                       {savingRoomId === room.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
@@ -515,7 +516,7 @@ export default function Inbox() {
                       </Link>{" "}
                       wants to collaborate
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{new Date(r.createdAt).toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5"><Timestamp value={r.createdAt} mode="datetime" /></div>
                   </div>
                   <CollabStatusPill status={r.status} />
                 </div>
@@ -563,7 +564,7 @@ export default function Inbox() {
                         {r.receiver?.displayName || r.receiver?.username || "Unknown"}
                       </Link>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{new Date(r.createdAt).toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5"><Timestamp value={r.createdAt} mode="datetime" /></div>
                   </div>
                   <CollabStatusPill status={r.status} />
                 </div>

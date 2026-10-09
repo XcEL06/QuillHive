@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Bell, Heart, MessageCircle, UserPlus, AtSign, Users, CheckCheck, Trash2, AlertCircle, Info, Zap, BadgeCheck } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp } from '@/lib/postTimestamp';
 import { Link } from 'wouter';
 import { useSocketEvent } from '@/hooks/useSocket';
 import { apiUrl, getStoredToken } from '@/lib/api';
@@ -188,7 +188,7 @@ export default function Notifications() {
                     <div className="flex items-center gap-2 mt-1.5">
                       {notif.type === 'official_notice' && <Badge className="bg-amber-600 px-2 py-0 text-[10px] text-white hover:bg-amber-600">Official notice</Badge>}
                       <p className="text-xs text-muted-foreground font-medium">
-                        {formatDistanceToNow(new Date(notif.createdAt))} ago
+                        <Timestamp value={notif.createdAt} />
                       </p>
                     </div>
                       {notif.type === 'official_notice' && (

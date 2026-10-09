@@ -18,7 +18,8 @@ import { getStoredToken } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { BackButton } from "@/components/ui/BackButton";
 import { getInitials } from "@/lib/utils";
-import { formatDistanceToNow, format } from "date-fns";
+import { format } from "date-fns";
+import { Timestamp } from "@/lib/postTimestamp";
 
 interface LibraryEntryFull {
   id: number;
@@ -260,11 +261,11 @@ export default function LibraryEntry() {
         <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mb-4">
           <span className="flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5" />
-            Published {format(new Date(entry.publishedAt), "MMM d, yyyy")}
+            Published <Timestamp value={entry.publishedAt} mode="date" />
           </span>
           <span className="flex items-center gap-1.5">
             <RefreshCw className="w-3.5 h-3.5" />
-            Updated {formatDistanceToNow(new Date(entry.updatedAt), { addSuffix: true })}
+            Updated <Timestamp value={entry.updatedAt} />
           </span>
           <span className="flex items-center gap-1.5">
             <Eye className="w-3.5 h-3.5" /> {entry.viewCount} views

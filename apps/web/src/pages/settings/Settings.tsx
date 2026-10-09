@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Timestamp } from '@/lib/postTimestamp';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuthStore } from '@/store/auth';
 import { useUpdateMyProfile } from '@workspace/api-client-react';
@@ -1002,7 +1003,7 @@ export default function Settings() {
                             <div>
                               <p className="font-medium">{p.deviceName || `Passkey #${p.id}`}</p>
                               <p className="text-[11px] text-muted-foreground">
-                                {t('settings.added')} {new Date(p.createdAt).toLocaleDateString()}{p.lastUsedAt ? ` · ${t('settings.lastUsed')} ${new Date(p.lastUsedAt).toLocaleDateString()}` : ''}
+                                {t('settings.added')} <Timestamp value={p.createdAt} mode="date" />{p.lastUsedAt && <> · {t('settings.lastUsed')} <Timestamp value={p.lastUsedAt} mode="date" /></>}
                               </p>
                             </div>
                             <Button size="sm" variant="ghost" onClick={() => removePasskey(p.id)} className="h-8 w-8 p-0 text-destructive hover:text-destructive" data-testid={`btn-remove-passkey-${p.id}`}>
@@ -1656,7 +1657,7 @@ function WarningsSection() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-medium">{sevLabel}</span>
-                    <span className="text-xs text-muted-foreground">{new Date(s.createdAt).toLocaleString()}</span>
+                    <span className="text-xs text-muted-foreground"><Timestamp value={s.createdAt} mode="datetime" /></span>
                     {s.acknowledgedAt && <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">{t('strikes.acknowledged')}</span>}
                   </div>
                   <p className="text-sm mt-1 break-words">{s.reason}</p>
@@ -1783,7 +1784,7 @@ function InvitesSection() {
               <div className="min-w-0">
                 <p className="font-mono text-sm tracking-wider">{c.code}</p>
                 <p className="text-xs text-muted-foreground">
-                  {c.usedBy ? `${t('settings.redeemed')} ${c.usedAt ? new Date(c.usedAt).toLocaleDateString() : ''}` :
+                  {c.usedBy ? <>{t('settings.redeemed')} {c.usedAt && <Timestamp value={c.usedAt} mode="date" />}</> :
                     c.expiresAt ? `${t('settings.expires')} ${new Date(c.expiresAt).toLocaleDateString()}` : t('settings.activeStatus')}
                 </p>
               </div>
@@ -1907,7 +1908,7 @@ function BillingSection() {
                       <p className="text-xs text-muted-foreground mt-0.5 truncate">"{b.postTitle}"</p>
                     )}
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {new Date(b.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      <Timestamp value={b.createdAt} mode="date" />
                       {b.boostEndsAt && b.status === 'active' && (
                         <> · ends {new Date(b.boostEndsAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
                       )}
@@ -2071,7 +2072,7 @@ function ApiKeysSection() {
                 <p className="font-medium truncate">{k.name}</p>
                 <p className="text-xs text-muted-foreground font-mono">
                   {k.keyPrefix}…
-                  {k.lastUsedAt ? ` · ${t('settings.lastUsedPrefix')} ${new Date(k.lastUsedAt).toLocaleDateString()}` : ` · ${t('settings.neverUsed')}`}
+                  {k.lastUsedAt ? <> · {t('settings.lastUsedPrefix')} <Timestamp value={k.lastUsedAt} mode="date" /></> : ` · ${t('settings.neverUsed')}`}
                 </p>
               </div>
               <Button size="sm" variant="ghost" onClick={() => revoke(k.id)} data-testid={`button-revoke-key-${k.id}`}>

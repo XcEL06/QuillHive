@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { Timestamp } from '@/lib/postTimestamp';
 import { useRoute, Link, useLocation, useSearch } from 'wouter';
 import { useQueryClient } from '@tanstack/react-query';
 import { useGetUserByUsername, useFollowUser } from '@workspace/api-client-react';
@@ -627,7 +628,7 @@ export default function Profile() {
                 <LinkIcon className="w-4 h-4" /> {user.website.replace(/^https?:\/\//, '')}
               </a>
             )}
-            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {t('profile.joined', 'Joined')} {format(new Date(user.createdAt), 'MMM yyyy')}</span>
+            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {t('profile.joined', 'Joined')} <Timestamp value={user.createdAt} mode="date" /></span>
           </div>
 
           {/* Social Links */}

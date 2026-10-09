@@ -12,7 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck, DollarSign, BadgeCheck } from 'lucide-react';
 import NewConversationModal from '@/components/messages/NewConversationModal';
 import { ReportDialog } from '@/components/report/ReportDialog';
-import { formatDistanceToNow } from 'date-fns';
+import { Timestamp, formatPostTimestamp } from '@/lib/postTimestamp';
 import { useSocketEvent, useJoinConversation } from '@/hooks/useSocket';
 import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
@@ -435,7 +435,7 @@ export default function Messages() {
                       )}
                       {conv.lastMessage && (
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
-                          {formatDistanceToNow(new Date(conv.lastMessage.createdAt), { addSuffix: true })}
+                          <Timestamp value={conv.lastMessage.createdAt} />
                         </span>
                       )}
                     </div>
@@ -547,9 +547,9 @@ export default function Messages() {
                           )}
                           <p className="whitespace-pre-wrap break-words">{renderMessageContent(msg.content)}</p>
                           <div className="mt-1 flex items-center justify-end gap-1.5 text-[10px] opacity-80">
-                            <span>{formatDistanceToNow(new Date(msg.createdAt))}</span>
+                            <Timestamp value={msg.createdAt} />
                             {isMine && (
-                              <div className="inline-flex items-center gap-0.5" title={msg.seenAt ? `Seen ${new Date(msg.seenAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : msg.deliveredAt ? 'Delivered' : 'Sent'}>
+                              <div className="inline-flex items-center gap-0.5" title={msg.seenAt ? `Seen ${formatPostTimestamp(msg.seenAt)?.title ?? ''}` : msg.deliveredAt ? 'Delivered' : 'Sent'}>
                                 {msg.seenAt ? (
                                   <>
                                     <CheckCheck className="h-3.5 w-3.5 fill-current text-primary-foreground/95" />
@@ -568,7 +568,7 @@ export default function Messages() {
                           </div>
                           {showSeenLabel && messageSeenAt && (
                             <div className="mt-1 text-[10px] text-primary-foreground/80 text-right">
-                              Seen {formatDistanceToNow(messageSeenAt, { addSuffix: true })}
+                              Seen <Timestamp value={messageSeenAt} />
                             </div>
                           )}
                           {!isMine && <ReportDialog targetType="message" targetId={msg.id} label="Report" className="mt-2 h-7 px-2 text-[10px]" />}
