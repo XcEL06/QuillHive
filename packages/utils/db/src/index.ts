@@ -4,18 +4,12 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
-  throw new Error(
-    "DATABASE_URL must be set. Did you forget to provision a database?",
-  );
-}
-
 const dbUrl = process.env.DATABASE_URL ?? "";
 const isNeon = dbUrl.includes("neon.tech");
 const isPgBouncer = dbUrl.includes("pgbouncer=true");
 
 export const pool = new Pool({
-  connectionString: dbUrl,
+  ...(dbUrl ? { connectionString: dbUrl } : {}),
   max: 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
