@@ -5,7 +5,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
-import { CheckCircle2, Circle, ExternalLink, Sparkles, Target } from "lucide-react";
+import { Briefcase, CheckCircle2, Circle, ExternalLink, Sparkles, Target } from "lucide-react";
 import { getStoredToken } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 
