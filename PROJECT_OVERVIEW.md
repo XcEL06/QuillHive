@@ -1,6 +1,6 @@
 # QuillHive project overview
 
-> Generated on 2026-10-08 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
+> Generated on 2026-10-09 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
 
 ## Project shape
 
@@ -605,7 +605,9 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 - `GET /api/admin/behavior-events` — Read or list admin behavior events. ([source](apps/api/src/routes/admin.ts)).
 - `GET /api/admin/blocked-emails` — Read or list admin blocked emails. ([source](apps/api/src/routes/admin.ts)).
+- `POST /api/admin/communications` — Create or submit admin communications. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/communications/broadcast` — Create or submit communications broadcast. ([source](apps/api/src/routes/admin.ts)).
+- `GET /api/admin/communications/broadcast/:jobId` — Read or list communications broadcast. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/communications/direct` — Create or submit communications direct. ([source](apps/api/src/routes/admin.ts)).
 - `GET /api/admin/country-stats` — Read or list admin country stats. ([source](apps/api/src/routes/admin.ts)).
 - `GET /api/admin/health` — Read or list admin health. ([source](apps/api/src/routes/admin.ts)).

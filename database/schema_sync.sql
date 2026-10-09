@@ -222,6 +222,7 @@ CREATE TABLE IF NOT EXISTS "posts" (
 	"series_order" integer,
 	"group_id" integer,
 	"share_click_count" integer DEFAULT 0 NOT NULL,
+	"edited_count" integer DEFAULT 0 NOT NULL,
 	"is_sponsored" boolean DEFAULT false NOT NULL,
 	"sponsor_name" text,
 	"sponsor_logo_url" text,
@@ -3870,6 +3871,21 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column share_click_count on posts: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "edited_count" integer DEFAULT 0 NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column edited_count: posts is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column edited_count on posts: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
