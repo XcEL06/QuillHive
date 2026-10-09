@@ -36,6 +36,7 @@ export const postsTable = pgTable("posts", {
   seriesOrder: integer("series_order"),
   groupId: integer("group_id"),
   shareClickCount: integer("share_click_count").notNull().default(0),
+  editedCount: integer("edited_count").notNull().default(0),
   isSponsored: boolean("is_sponsored").notNull().default(false),
   sponsorName: text("sponsor_name"),
   sponsorLogoUrl: text("sponsor_logo_url"),

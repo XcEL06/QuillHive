@@ -76,6 +76,7 @@ export const stablePostSelection = {
   seriesId: postsTable.seriesId,
   seriesOrder: postsTable.seriesOrder,
   groupId: postsTable.groupId,
+  editedCount: postsTable.editedCount,
   isDeleted: postsTable.isDeleted,
   deletedAt: postsTable.deletedAt,
   createdAt: postsTable.createdAt,
@@ -616,21 +617,6 @@ export async function updatePost(id: number, authorId: number, data: Record<stri
   if (post.authorId !== authorId) throw new Error("Forbidden");
   if (data.visibility !== undefined && post.type !== "spark") throw new Error("Visibility can only be changed for Sparks");
 
-  // Snapshot the previous version BEFORE applying changes (best-effort).
-  try {
-    const { postVersionsTable } = await import("@workspace/db/schema");
-    await db.insert(postVersionsTable).values({
-      postId: post.id,
-      editorId: authorId,
-      title: post.title,
-      content: post.content,
-      excerpt: post.excerpt,
-      changeReason: typeof data.changeReason === "string" ? data.changeReason : null,
-    });
-  } catch {
-    /* non-fatal: versioning shouldn't block edits */
-  }
-
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (data.title !== undefined) updates.title = data.title ? sanitizePlain(String(data.title)).slice(0, 180) : null;
   if (data.content !== undefined) updates.content = sanitizeRichText(String(data.content));
@@ -655,6 +641,31 @@ export async function updatePost(id: number, authorId: number, data: Record<stri
   }
   if (data.isPublished !== undefined) updates.isPublished = data.isPublished;
   if (data.visibility !== undefined) updates.visibility = data.visibility;
+
+  const contentFields = [
+    "title", "content", "excerpt", "imageUrl", "externalUrl", "attachments",
+    "tags", "contentWarning", "contentTags",
+  ] as const;
+  const hasContentChange = contentFields.some((field) =>
+    Object.hasOwn(updates, field) && !Object.is(updates[field], post[field]),
+  );
+  if (hasContentChange) {
+    updates.editedCount = sql`${postsTable.editedCount} + 1`;
+    // Keep the version snapshot tied to an actual content change.
+    try {
+      const { postVersionsTable } = await import("@workspace/db/schema");
+      await db.insert(postVersionsTable).values({
+        postId: post.id,
+        editorId: authorId,
+        title: post.title,
+        content: post.content,
+        excerpt: post.excerpt,
+        changeReason: typeof data.changeReason === "string" ? data.changeReason : null,
+      });
+    } catch {
+      /* non-fatal: versioning shouldn't block edits */
+    }
+  }
 
   const [updated] = await db.update(postsTable).set(updates).where(eq(postsTable.id, id)).returning();
   if (updates.tags) {

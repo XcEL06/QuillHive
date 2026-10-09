@@ -163,19 +163,6 @@ export async function enrichPost(post: any, viewerId: number | null) {
     }
   }
 
-  // Edit history count (best-effort)
-  let editedCount = 0;
-  try {
-    const { postVersionsTable } = await import("@workspace/db/schema");
-    const [vRow] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(postVersionsTable)
-      .where(eq(postVersionsTable.postId, post.id));
-    editedCount = vRow?.count ?? 0;
-  } catch {
-    /* non-fatal */
-  }
-
   // Trust score (best-effort)
   type TrustTier = "high" | "medium" | "low";
   let trustScore: { cis: number; retention: number; tier: TrustTier } | null = null;
@@ -283,7 +270,7 @@ export async function enrichPost(post: any, viewerId: number | null) {
       post.updatedAt instanceof Date && post.createdAt instanceof Date
         ? post.updatedAt.getTime() - post.createdAt.getTime() > 60_000
         : false,
-    editedCount,
+    editedCount: post.editedCount,
     trustScore,
     isBoosted,
     boostPlan,
