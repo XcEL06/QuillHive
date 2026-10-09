@@ -870,6 +870,9 @@ router.patch("/settings/features", requirePermission("manage_settings"), async (
   if (Object.keys(updates).some((key) => providerFlags.has(key)) && req.currentUser?.role !== "super_admin") {
     return res.status(403).json({ error: "Only super admins can change OAuth provider settings." });
   }
+  if (Object.hasOwn(updates, "ads_enabled") && req.currentUser?.role !== "super_admin") {
+    return res.status(403).json({ error: "Only super admins can change advertising settings." });
+  }
   const valid = FEATURE_FLAG_KEYS as readonly string[];
   for (const [key, value] of Object.entries(updates)) {
     if (!valid.includes(key)) continue;

@@ -3,11 +3,36 @@ import { useT } from "@/lib/i18n";
 import { Link } from "wouter";
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { BackButton } from "@/components/ui/BackButton";
+import { useEffect, useState } from "react";
+import {
+  COOKIE_CONSENT_CHANGE_EVENT,
+  readCookieConsent,
+  saveCookieConsent,
+  type CookieConsentValue,
+} from "@/lib/cookieConsent";
+import { Button } from "@/components/ui/button";
 
 export function Privacy() {
   const brand = brandName();
   const email = privacyEmail();
   const t = useT();
+  const [cookieConsent, setCookieConsent] = useState<CookieConsentValue | null>(null);
+
+  useEffect(() => {
+    const syncConsent = () => setCookieConsent(readCookieConsent());
+    syncConsent();
+    window.addEventListener(COOKIE_CONSENT_CHANGE_EVENT, syncConsent);
+    window.addEventListener("storage", syncConsent);
+    return () => {
+      window.removeEventListener(COOKIE_CONSENT_CHANGE_EVENT, syncConsent);
+      window.removeEventListener("storage", syncConsent);
+    };
+  }, []);
+
+  const updateCookieConsent = (value: CookieConsentValue) => {
+    saveCookieConsent(value);
+    setCookieConsent(readCookieConsent());
+  };
 
   return (
     <PublicLayout>
@@ -15,7 +40,7 @@ export function Privacy() {
         <BackButton />
         <div className="mb-10">
           <h1 className="text-4xl font-bold text-foreground mb-2">{t("legal.privacy.title", "Privacy Policy")}</h1>
-          <p className="text-muted-foreground text-sm">Last updated May 2026 · Platform: {brand}</p>
+          <p className="text-muted-foreground text-sm">Last updated October 2026 · Platform: {brand}</p>
         </div>
 
         <div className="space-y-10 text-foreground/90">
@@ -59,7 +84,7 @@ export function Privacy() {
             <h2 className="text-xl font-semibold mb-4 text-foreground">4. Data Sharing</h2>
             <p className="mb-3 leading-relaxed">We do not sell your personal data. We may share data with:</p>
             <ul className="list-disc pl-6 space-y-2 leading-relaxed">
-              <li><strong>Service providers:</strong> Flutterwave (payments), Cloudinary (media), Resend (email), Upstash (caching) - all bound by data processing agreements.</li>
+              <li><strong>Service providers:</strong> Flutterwave (payments), Cloudinary (media), Resend (email), Upstash (caching), and Google AdSense for consented native ads when advertising is enabled.</li>
               <li><strong>Legal authorities:</strong> where required by law, court order, or to protect platform safety.</li>
               <li><strong>Business transfers:</strong> in the event of a merger, acquisition, or platform transfer.</li>
             </ul>
@@ -68,8 +93,15 @@ export function Privacy() {
           <section>
             <h2 className="text-xl font-semibold mb-4 text-foreground">5. Cookies & Tracking</h2>
             <p className="leading-relaxed">
-              We use cookies and similar technologies for authentication, session management, preference storage, and analytics. You may manage cookie preferences through our cookie consent interface. Essential cookies cannot be disabled as they are required for the platform to function.
+              We use cookies and similar technologies for authentication, session management, preference storage, and analytics. If site advertising is enabled and you accept optional cookies, Google AdSense may process data and use cookies or similar technologies to serve native ads in the Explore feed. Choosing essential-only cookies disables AdSense requests. Essential cookies cannot be disabled as they are required for the platform to function.
             </p>
+            <p className="mt-3 leading-relaxed">
+              Current optional cookie preference: <strong>{cookieConsent === "accepted" ? "accepted" : cookieConsent === "essential" ? "essential only" : "not set"}</strong>.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button type="button" size="sm" onClick={() => updateCookieConsent("accepted")}>Accept optional cookies and ads</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => updateCookieConsent("essential")}>Essential only</Button>
+            </div>
           </section>
 
           <section>

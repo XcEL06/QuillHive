@@ -21,6 +21,7 @@ import { StreakChip } from '@/components/profile/StreakWidget';
 import { StoriesRow } from '@/components/sparks/StoriesRow';
 import { StoryViewer } from '@/components/sparks/StoryViewer';
 import { AdSlot, isAdSenseConfigured } from '@/components/ads/AdSlot';
+import { getFeedAdPlacementPostIds } from '@/components/ads/feedAdPlacements';
 import { useFeature } from '@/lib/features';
 
 interface ChecklistItem {
@@ -551,6 +552,9 @@ function AuthenticatedHome() {
   const apiPosts = normalizePostsResponse(data) ?? [];
   const displayPosts =
     feedSource === 'explore' ? (feedPosts ?? apiPosts) : apiPosts;
+  const adPlacementPostIds = showFeedAds
+    ? getFeedAdPlacementPostIds(displayPosts)
+    : new Set<number>();
   const isDisplayLoading =
     feedSource === 'explore' ? (feedLoading || (feedPosts === null && isLoading)) : isLoading;
   const feedLoadFailed = feedSource === 'explore' ? Boolean(feedError) : error;
@@ -685,11 +689,11 @@ function AuthenticatedHome() {
             </div>
           )}
 
-          {displayPosts.map((post, index) => (
+          {displayPosts.map((post) => (
             <Fragment key={post.id}>
               <PostCard post={post} />
-              {showFeedAds && (index + 1) % 9 === 0 && index + 1 < displayPosts.length && (
-                <AdSlot key={`network-ad-after-${post.id}`} placementId={`home-explore-${post.id}`} />
+              {adPlacementPostIds.has(post.id) && (
+                <AdSlot key={`home-explore-${post.id}`} placementId={`home-explore-${post.id}`} />
               )}
             </Fragment>
           ))}

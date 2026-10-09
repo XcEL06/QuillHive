@@ -3,36 +3,33 @@ import { Link } from "wouter";
 import { Cookie, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
-
-const STORAGE_KEY = "qh_cookie_consent_v1";
-
-type ConsentState = "accepted" | "essential" | null;
+import {
+  COOKIE_CONSENT_CHANGE_EVENT,
+  readCookieConsent,
+  saveCookieConsent,
+  type CookieConsentValue,
+} from "@/lib/cookieConsent";
 
 export function CookieConsent() {
-  const [state, setState] = useState<ConsentState>(null);
+  const [state, setState] = useState<CookieConsentValue | null>(null);
   const [mounted, setMounted] = useState(false);
   const t = useT();
 
   useEffect(() => {
     setMounted(true);
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === "accepted" || stored === "essential") {
-        setState(stored);
-      }
-    } catch {
-      /* localStorage may be blocked */
-    }
+    setState(readCookieConsent());
+    const syncConsent = () => setState(readCookieConsent());
+    window.addEventListener(COOKIE_CONSENT_CHANGE_EVENT, syncConsent);
+    window.addEventListener("storage", syncConsent);
+    return () => {
+      window.removeEventListener(COOKIE_CONSENT_CHANGE_EVENT, syncConsent);
+      window.removeEventListener("storage", syncConsent);
+    };
   }, []);
 
-  const persist = (value: Exclude<ConsentState, null>) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, value);
-      localStorage.setItem(`${STORAGE_KEY}_at`, new Date().toISOString());
-    } catch {
-      /* ignore storage failure */
-    }
-    setState(value);
+  const persist = (value: CookieConsentValue) => {
+    saveCookieConsent(value);
+    setState(readCookieConsent());
   };
 
   if (!mounted || state !== null) return null;
@@ -53,7 +50,7 @@ export function CookieConsent() {
           <p className="mt-1 text-muted-foreground">
             {t("cookie.body1", "We use essential cookies to keep you signed in and remember your preferences.")}
             {" "}
-            {t("cookie.body2", "We don't use cookies for advertising or sell your data.")}{" "}
+            {t("cookie.body2", "If enabled, Google AdSense may use cookies or similar technologies to provide ads in the Explore feed. Choose Accept all to allow optional advertising cookies, or Essential only to keep ads disabled. We do not sell your data.")}{" "}
             <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">
               {t("cookie.privacyPolicy", "Read our Privacy Policy")}
             </Link>
