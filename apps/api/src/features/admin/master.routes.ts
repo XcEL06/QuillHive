@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   boostRequestsTable,
@@ -52,7 +52,10 @@ masterAdminRouter.get("/users", async (req, res) => {
     isDeleted: usersTable.isDeleted,
     createdAt: usersTable.createdAt,
   }).from(usersTable)
-    .where(or(ilike(usersTable.username, pattern), ilike(usersTable.displayName, pattern), ilike(usersTable.email, pattern)))
+    .where(and(
+      eq(usersTable.isDeleted, false),
+      or(ilike(usersTable.username, pattern), ilike(usersTable.displayName, pattern), ilike(usersTable.email, pattern)),
+    ))
     .orderBy(desc(usersTable.createdAt)).limit(30);
   return res.json({ users });
 });

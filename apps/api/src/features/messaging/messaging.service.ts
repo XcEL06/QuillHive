@@ -9,6 +9,7 @@ import {
 import { eq, and, desc, ne, isNull } from "drizzle-orm";
 import { getUserWithCounts } from "../profiles/profile.service";
 import { emitToConversation, emitToUser } from "../../lib/socket";
+import { getOfficialSystemAccountId } from "../../lib/officialSystemAccount";
 
 export async function getConversations(viewerId: number) {
   const participations = await db
@@ -270,7 +271,7 @@ export async function sendMessage(
   return enrichedMessage;
 }
 
-export async function sendAdminMessage(adminId: number, targetUserId: number, content: string) {
+export async function sendAdminMessage(targetUserId: number, content: string) {
   const [target] = await db
     .select({ id: usersTable.id })
     .from(usersTable)
@@ -278,13 +279,12 @@ export async function sendAdminMessage(adminId: number, targetUserId: number, co
     .limit(1);
   if (!target) throw new Error("User not found");
 
-  const [newConversation] = await db.insert(conversationsTable).values({ isGroup: false }).returning();
-  await db.insert(conversationParticipantsTable).values([
-    { conversationId: newConversation.id, userId: adminId, unreadCount: 0 },
-    { conversationId: newConversation.id, userId: targetUserId, unreadCount: 1 },
-  ]);
+  const officialAccountId = await getOfficialSystemAccountId();
+  if (officialAccountId === targetUserId) throw new Error("Cannot message the official system account");
 
-  return sendMessage(adminId, { conversationId: newConversation.id, content });
+  const conversation = await startConversation(officialAccountId, targetUserId);
+  const message = await sendMessage(officialAccountId, { conversationId: conversation.conversationId, content });
+  return { conversationId: conversation.conversationId, message };
 }
 
 async function requireConversationParticipant(conversationId: number, userId: number) {

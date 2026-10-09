@@ -16,6 +16,8 @@ import { BOOST_PLANS, type PlanKey } from "../features/boost/boost.routes";
 import { deleteCachePattern } from "../lib/cache";
 import { memDeletePattern } from "../lib/memCache";
 import * as MessagingService from "../features/messaging/messaging.service";
+import { getOfficialSystemAccountId } from "../lib/officialSystemAccount";
+import { addJob, getQueue } from "../lib/queue/queue";
 
 const router = Router();
 router.use(requireAdmin);
@@ -177,7 +179,7 @@ router.get("/suspicious-clusters", requireAdmin, async (_req, res) => {
   return res.json({ clusters });
 });
 
-router.post("/users/:id/notice", async (req: any, res) => {
+router.post("/users/:id/notice", requireSuperAdmin, async (req: any, res) => {
   const id = parseInt(req.params.id);
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
   if (!message) return res.status(400).json({ error: "message is required" });
@@ -194,7 +196,7 @@ router.post("/users/:id/notice", async (req: any, res) => {
 
   await notifyOfficialNotice({
     userId: id,
-    actorId: req.currentUser.id,
+    actorId: await getOfficialSystemAccountId(),
     title: "A message from the QuillHive team",
     message,
     url: "/notifications",
@@ -229,12 +231,104 @@ router.post("/communications/direct", requireSuperAdmin, async (req: any, res) =
   if (!checkRateLimit(req.currentUser.id, "admin_direct_message")) return res.status(429).json({ error: "Too many messages. Try again in a minute." });
 
   try {
-    const message = await MessagingService.sendAdminMessage(req.currentUser.id, targetUserId, content);
-    await notify({ userId: targetUserId, actorId: req.currentUser.id, type: "admin_action", title: "Message from QuillHive", message: content.slice(0, 160), url: "/messages" });
+    const result = await MessagingService.sendAdminMessage(targetUserId, content);
     await auditLog(req.currentUser.id, "admin_direct_message_sent", "user", targetUserId, content);
-    return res.status(201).json({ success: true, message });
+    return res.status(201).json({ success: true, ...result });
   } catch (error: any) {
     if (error?.message === "User not found") return res.status(404).json({ error: error.message });
+    if (error?.message === "Cannot message the official system account") return res.status(400).json({ error: error.message });
+    throw error;
+  }
+});
+
+async function enqueueOfficialBroadcast(adminId: number, title: string, message: string) {
+  if (!/^rediss?:\/\//.test(process.env.BULLMQ_REDIS_URL ?? "")) {
+    const error = new Error("Broadcast queue is unavailable. Configure the background worker and try again.");
+    Object.assign(error, { status: 503 });
+    throw error;
+  }
+  if (!checkRateLimit(adminId, "admin_broadcast", 5)) {
+    const error = new Error("Too many broadcasts. Try again later.");
+    Object.assign(error, { status: 429 });
+    throw error;
+  }
+  const actorId = await getOfficialSystemAccountId();
+  const jobId = await addJob("admin_notification_broadcast", { actorId, title, message });
+  if (!jobId) {
+    const error = new Error("Broadcast queue is unavailable. Configure the background worker and try again.");
+    Object.assign(error, { status: 503 });
+    throw error;
+  }
+  await auditLog(adminId, "admin_notification_broadcast_queued", "users", undefined, `${title}: ${message}`);
+  return jobId;
+}
+
+router.post("/communications", requireSuperAdmin, async (req: any, res) => {
+  const mode = req.body?.mode;
+  const userId = Number(req.body?.userId);
+  const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+  if (!["message", "notification", "broadcast"].includes(mode)) {
+    return res.status(400).json({ error: "mode must be message, notification, or broadcast" });
+  }
+  if (!content || content.length > 5_000) {
+    return res.status(400).json({ error: "content is required and must be 5000 characters or fewer" });
+  }
+
+  if (mode === "message") {
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: "userId must be a positive integer" });
+    }
+    if (!checkRateLimit(req.currentUser.id, "admin_direct_message")) {
+      return res.status(429).json({ error: "Too many messages. Try again in a minute." });
+    }
+    try {
+      const result = await MessagingService.sendAdminMessage(userId, content);
+      await auditLog(req.currentUser.id, "admin_direct_message_sent", "user", userId, content);
+      return res.status(201).json({ success: true, ...result });
+    } catch (error: any) {
+      if (error?.message === "User not found") return res.status(404).json({ error: error.message });
+      if (error?.message === "Cannot message the official system account") return res.status(400).json({ error: error.message });
+      throw error;
+    }
+  }
+
+  if (mode === "notification") {
+    if (!Number.isInteger(userId) || userId <= 0) {
+      return res.status(400).json({ error: "userId must be a positive integer" });
+    }
+    if (!checkRateLimit(req.currentUser.id, "official_notice")) {
+      return res.status(429).json({ error: "Too many notices. Try again in a minute." });
+    }
+    const [target] = await db.select({ id: usersTable.id })
+      .from(usersTable)
+      .where(and(eq(usersTable.id, userId), eq(usersTable.isDeleted, false)))
+      .limit(1);
+    if (!target) return res.status(404).json({ error: "User not found" });
+    const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+    if (title.length > 180) return res.status(400).json({ error: "title must be 180 characters or fewer" });
+    const actorId = await getOfficialSystemAccountId();
+    await notifyOfficialNotice({
+      userId,
+      actorId,
+      title: title || "A message from the QuillHive team",
+      message: content,
+      url: "/notifications",
+    });
+    await auditLog(req.currentUser.id, "admin_official_notification_sent", "user", userId, content);
+    return res.status(201).json({ success: true, userId });
+  }
+
+  const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+  if (title.length > 180) return res.status(400).json({ error: "title must be 180 characters or fewer" });
+  try {
+    const jobId = await enqueueOfficialBroadcast(
+      req.currentUser.id,
+      title || "A message from the QuillHive team",
+      content,
+    );
+    return res.status(202).json({ success: true, jobId, status: "queued" });
+  } catch (error: any) {
+    if (error?.status) return res.status(error.status).json({ error: error.message });
     throw error;
   }
 });
@@ -242,14 +336,35 @@ router.post("/communications/direct", requireSuperAdmin, async (req: any, res) =
 router.post("/communications/broadcast", requireSuperAdmin, async (req: any, res) => {
   const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
   const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
-  if (!title || title.length > 180) return res.status(400).json({ error: "title is required and must be 180 characters or fewer" });
   if (!message || message.length > 5_000) return res.status(400).json({ error: "message is required and must be 5000 characters or fewer" });
-  if (!checkRateLimit(req.currentUser.id, "admin_broadcast", 5)) return res.status(429).json({ error: "Too many broadcasts. Try again later." });
+  if (title.length > 180) return res.status(400).json({ error: "title must be 180 characters or fewer" });
+  try {
+    const jobId = await enqueueOfficialBroadcast(
+      req.currentUser.id,
+      title || "A message from the QuillHive team",
+      message,
+    );
+    return res.status(202).json({ success: true, jobId, status: "queued" });
+  } catch (error: any) {
+    if (error?.status) return res.status(error.status).json({ error: error.message });
+    throw error;
+  }
+});
 
-  const recipients = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.isDeleted, false));
-  await Promise.all(recipients.map((recipient) => notify({ userId: recipient.id, actorId: req.currentUser.id, type: "admin_action", title, message, url: "/notifications" })));
-  await auditLog(req.currentUser.id, "admin_notification_broadcast", "users", undefined, `${title}: ${message}`);
-  return res.status(201).json({ success: true, recipientCount: recipients.length });
+router.get("/communications/broadcast/:jobId", requireSuperAdmin, async (req, res) => {
+  if (!/^rediss?:\/\//.test(process.env.BULLMQ_REDIS_URL ?? "")) {
+    return res.status(503).json({ error: "Broadcast queue is unavailable" });
+  }
+  const queue = getQueue();
+  if (!queue) return res.status(503).json({ error: "Broadcast queue is unavailable" });
+  const job = await queue.getJob(String(req.params.jobId));
+  if (!job) return res.status(404).json({ error: "Broadcast job not found" });
+  return res.json({
+    jobId: job.id,
+    status: await job.getState(),
+    progress: job.progress,
+    error: job.failedReason || undefined,
+  });
 });
 
 router.patch("/users/:id/role", requireSuperAdmin, async (req: any, res) => {

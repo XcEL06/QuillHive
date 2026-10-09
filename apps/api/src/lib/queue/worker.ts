@@ -307,6 +307,55 @@ async function processJob(job: Job): Promise<void> {
       break;
     }
 
+    case "admin_notification_broadcast": {
+      const { actorId, title, message } =
+        job.data as JobPayloads["admin_notification_broadcast"];
+      try {
+        const { db } = await import("@workspace/db");
+        const { usersTable } = await import("@workspace/db/schema");
+        const { gt, eq, and, asc } = await import("drizzle-orm");
+        const { notifyOfficialNotice } = await import(
+          "../../features/notifications/notification.service"
+        );
+        const progress = typeof job.progress === "object" && job.progress !== null
+          ? job.progress as { sent?: number; lastUserId?: number }
+          : {};
+        let lastUserId = Number(progress.lastUserId ?? 0);
+        let sent = Number(progress.sent ?? 0);
+        const batchSize = 100;
+
+        while (true) {
+          const recipients = await db
+            .select({ id: usersTable.id })
+            .from(usersTable)
+            .where(and(gt(usersTable.id, lastUserId), eq(usersTable.isDeleted, false)))
+            .orderBy(asc(usersTable.id))
+            .limit(batchSize);
+          if (!recipients.length) break;
+
+          for (const recipient of recipients) {
+            await notifyOfficialNotice({
+              userId: recipient.id,
+              actorId,
+              title,
+              message,
+              url: "/notifications",
+            });
+          }
+
+          sent += recipients.length;
+          lastUserId = recipients[recipients.length - 1].id;
+          await job.updateProgress({ sent, lastUserId });
+        }
+
+        logger.info({ jobId: job.id, sent }, "Official notification broadcast delivered");
+      } catch (err) {
+        logger.error({ err, jobId: job.id }, "Official notification broadcast failed");
+        throw err;
+      }
+      break;
+    }
+
     case "lock_ab_winner": {
       const { postId } = job.data as JobPayloads["lock_ab_winner"];
       try {

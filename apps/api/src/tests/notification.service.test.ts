@@ -79,7 +79,13 @@ describe("official notices", () => {
   it("creates official notices only through the dedicated helper", async () => {
     const { notifyOfficialNotice } = await import("../features/notifications/notification.service");
     const dbMod = await import("@workspace/db");
-    const mockDb = dbMod.db as unknown as { values: ReturnType<typeof vi.fn> };
+    const mockDb = dbMod.db as unknown as {
+      values: ReturnType<typeof vi.fn>;
+      returning: ReturnType<typeof vi.fn>;
+    };
+    mockDb.returning.mockResolvedValueOnce([
+      { id: 3, type: "official_notice", message: "verified staff message" },
+    ]);
 
     await notifyOfficialNotice({
       userId: 9,
@@ -87,5 +93,11 @@ describe("official notices", () => {
     });
 
     expect(mockDb.values).toHaveBeenCalledWith(expect.objectContaining({ type: "official_notice" }));
+    const { emitToUser } = await import("../lib/socket");
+    expect(emitToUser).toHaveBeenCalledWith(
+      9,
+      "notification:new",
+      expect.objectContaining({ type: "official_notice", message: "verified staff message" }),
+    );
   });
 });

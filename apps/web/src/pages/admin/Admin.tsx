@@ -73,6 +73,7 @@ export default function Admin({ initialTab }: { initialTab?: AdminTabKey }) {
     ...group,
     items: group.items.filter(([key]) => {
       if (key === "master") return role === "super_admin";
+      if (key === "communications") return role === "super_admin";
       if (key === "spamReview") return role === "admin" || role === "super_admin";
       return true;
     }),

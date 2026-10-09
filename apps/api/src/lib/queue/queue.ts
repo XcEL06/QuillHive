@@ -11,6 +11,7 @@ export type JobName =
   | "send_digest_email"
   | "lock_ab_winner"
   | "send_topic_notification"
+  | "admin_notification_broadcast"
   | "expire_boosts"
   | "streak_break_check";
 
@@ -51,6 +52,11 @@ export interface JobPayloads {
     topicId: number;
     postId: number;
     authorId: number;
+  };
+  admin_notification_broadcast: {
+    actorId: number;
+    title: string;
+    message: string;
   };
   expire_boosts: Record<string, never>;
   streak_break_check: Record<string, never>;

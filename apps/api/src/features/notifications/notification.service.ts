@@ -138,7 +138,10 @@ function shouldDedup(opts: {
   return false;
 }
 
-async function createNotification(opts: NotifyOpts & { type: NotificationType }): Promise<void> {
+async function createNotification(
+  opts: NotifyOpts & { type: NotificationType },
+  options: { forceInApp?: boolean; throwOnError?: boolean } = {},
+): Promise<void> {
   const actorId = opts.actorId ?? 0;
   // Skip self-notifications (only when a real actor triggers it)
   const allowSelfNotification = opts.type === "admin_action"
@@ -209,7 +212,7 @@ async function createNotification(opts: NotifyOpts & { type: NotificationType })
       .limit(1);
     const prefs = (recipient?.notificationPrefs ?? {}) as Record<string, { inApp: boolean; push: boolean; email: boolean }>;
     const typePref = prefs[opts.type];
-    const inAppEnabled = typePref?.inApp ?? true;
+    const inAppEnabled = options.forceInApp || (typePref?.inApp ?? true);
     const pushEnabled = typePref?.push ?? false;
 
     if (inAppEnabled) {
@@ -227,6 +230,7 @@ async function createNotification(opts: NotifyOpts & { type: NotificationType })
     }
   } catch (err) {
     logger.error({ err, opts }, "notify_failed");
+    if (options.throwOnError) throw err;
   }
 }
 
@@ -247,5 +251,5 @@ export async function notify(opts: NotifyOpts): Promise<void> {
  * has one call site: the admin users/:id/notice endpoint.
  */
 export async function notifyOfficialNotice(opts: Omit<NotifyOpts, "type">): Promise<void> {
-  return createNotification({ ...opts, type: "official_notice" });
+  return createNotification({ ...opts, type: "official_notice" }, { forceInApp: true, throwOnError: true });
 }

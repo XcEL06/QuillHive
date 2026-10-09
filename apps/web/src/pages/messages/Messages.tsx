@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck, DollarSign } from 'lucide-react';
+import { Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck, DollarSign, BadgeCheck } from 'lucide-react';
 import NewConversationModal from '@/components/messages/NewConversationModal';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { formatDistanceToNow } from 'date-fns';
@@ -48,6 +48,7 @@ interface LocalMessage {
     username?: string;
     displayName?: string;
     avatarUrl?: string;
+    isOfficialAccount?: boolean;
   };
 }
 
@@ -539,6 +540,11 @@ export default function Messages() {
                           )
                         )}
                         <div className={`px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMine ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted/60 text-foreground border border-border/50 rounded-tl-sm'}`}>
+                          {!isMine && sender?.isOfficialAccount && (
+                            <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
+                              <BadgeCheck className="h-3.5 w-3.5" /> Official QuillHive account · @{sender.username}
+                            </p>
+                          )}
                           <p className="whitespace-pre-wrap break-words">{renderMessageContent(msg.content)}</p>
                           <div className="mt-1 flex items-center justify-end gap-1.5 text-[10px] opacity-80">
                             <span>{formatDistanceToNow(new Date(msg.createdAt))}</span>
