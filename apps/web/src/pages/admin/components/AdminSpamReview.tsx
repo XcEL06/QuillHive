@@ -90,8 +90,8 @@ export default function AdminSpamReview({ token, toast }: AdminProps) {
             <a className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline" href={`/profile/${encodeURIComponent(flag.username)}`} target="_blank" rel="noreferrer"><UserRound className="h-3.5 w-3.5" />Open profile</a>
           </div>
           <details className="mt-4 rounded-lg bg-muted/30 p-3">
-            <summary className="cursor-pointer text-xs font-medium">Review evidence</summary>
-            <pre className="mt-3 whitespace-pre-wrap break-words text-xs text-muted-foreground">{JSON.stringify(flag.evidence, null, 2)}</pre>
+            <summary className="cursor-pointer text-xs font-medium">What triggered this flag?</summary>
+            <EvidenceSummary evidence={flag.evidence} />
           </details>
           <Textarea value={reasons[flag.id] ?? flag.reason} onChange={(event) => setReasons((current) => ({ ...current, [flag.id]: event.target.value }))} aria-label={`Decision reason for @${flag.username}`} className="mt-4 min-h-16" />
           <div className="mt-3 flex flex-wrap justify-end gap-2">{ACTIONS.map(([decision, label]) => <Button key={decision} size="sm" variant={decision === "ban" ? "destructive" : decision === "dismiss" ? "outline" : "default"} disabled={busyId === flag.id} onClick={() => void decide(flag, decision)}>{decision === "dismiss" && <Check className="mr-1.5 h-3.5 w-3.5" />}{busyId === flag.id ? "Working…" : label}</Button>)}</div>
@@ -99,4 +99,24 @@ export default function AdminSpamReview({ token, toast }: AdminProps) {
       ))}</div>
     )}
   </section>;
+}
+
+function EvidenceSummary({ evidence }: { evidence: Record<string, unknown> }) {
+  const postIds = Array.isArray(evidence.postIds)
+    ? evidence.postIds.filter((id): id is number => Number.isInteger(id))
+    : Number.isInteger(evidence.postId) ? [evidence.postId as number] : [];
+  const observations = [
+    typeof evidence.links === "number" ? `${evidence.links} external links detected` : null,
+    typeof evidence.followsInWindow === "number" ? `${evidence.followsInWindow} follows in a short time` : null,
+    typeof evidence.accountAgeHours === "number" ? `Account was ${evidence.accountAgeHours} hours old when flagged` : null,
+    typeof evidence.detectedAt === "string" ? `Signal recorded ${new Date(evidence.detectedAt).toLocaleString()}` : null,
+  ].filter((value): value is string => Boolean(value));
+
+  return <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+    {observations.length > 0 ? <ul className="list-disc space-y-1 pl-4">{observations.map((observation) => <li key={observation}>{observation}</li>)}</ul> : <p>The review signal is based on the pattern named above.</p>}
+    {postIds.length > 0 && <div className="flex flex-wrap gap-x-3 gap-y-1">
+      <span>Related posts:</span>
+      {postIds.map((postId) => <a key={postId} href={`/post/${postId}`} target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">Open post #{postId}</a>)}
+    </div>}
+  </div>;
 }

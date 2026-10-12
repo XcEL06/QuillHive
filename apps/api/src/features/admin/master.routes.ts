@@ -22,6 +22,7 @@ import {
   educationHistoryTable,
 } from "@workspace/db/schema";
 import { requireSuperAdmin } from "../../middleware/admin";
+import { getUserTrustScore } from "../trust/trust.service";
 
 export const masterAdminRouter = Router();
 masterAdminRouter.use(requireSuperAdmin);
@@ -98,7 +99,7 @@ masterAdminRouter.get("/users/:id", async (req, res) => {
   }).from(usersTable).where(eq(usersTable.id, id));
   if (!user) return res.status(404).json({ error: "User not found" });
 
-  const [posts, workHistory, education, creatorProfile, boosts, [followers], [following], [comments]] = await Promise.all([
+  const [posts, workHistory, education, creatorProfile, boosts, [followers], [following], [comments], trustScore] = await Promise.all([
     db.select({
       id: postsTable.id,
       title: postsTable.title,
@@ -119,6 +120,7 @@ masterAdminRouter.get("/users/:id", async (req, res) => {
     db.select({ count: count() }).from(followsTable).where(eq(followsTable.followingId, id)),
     db.select({ count: count() }).from(followsTable).where(eq(followsTable.followerId, id)),
     db.select({ count: count() }).from(commentsTable).where(eq(commentsTable.authorId, id)),
+    getUserTrustScore(id),
   ]);
   return res.json({
     user,
@@ -127,6 +129,10 @@ masterAdminRouter.get("/users/:id", async (req, res) => {
     education,
     creatorProfile,
     boosts,
+    trustScore: trustScore ?? {
+      userId: id, uti: 0, cvs: 0, bcs: 0, cts: 0, avgCis: 0,
+      tier: "restricted", creatorLevel: "new_voice", visibilityMultiplier: 0.3,
+    },
     activity: { followers: followers.count, following: following.count, comments: comments.count },
   });
 });

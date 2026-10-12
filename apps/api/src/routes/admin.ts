@@ -18,6 +18,7 @@ import { memDeletePattern } from "../lib/memCache";
 import * as MessagingService from "../features/messaging/messaging.service";
 import { getOfficialSystemAccountId } from "../lib/officialSystemAccount";
 import { addJob, getQueue } from "../lib/queue/queue";
+import { getUserTrustScore } from "../features/trust/trust.service";
 
 const router = Router();
 router.use(requireAdmin);
@@ -67,17 +68,45 @@ router.get("/stats", requirePermission("view_analytics"), async (req, res) => {
   });
 });
 
-router.get("/users", async (req, res) => {
+router.get("/users", requirePermission("view_users"), async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 50;
   const users = await db
-    .select({ id: usersTable.id, username: usersTable.username, email: usersTable.email, displayName: usersTable.displayName, role: usersTable.role, isBanned: usersTable.isBanned, bannedAt: usersTable.bannedAt, avatarUrl: usersTable.avatarUrl, createdAt: usersTable.createdAt })
+    .select({
+      id: usersTable.id,
+      username: usersTable.username,
+      email: usersTable.email,
+      displayName: usersTable.displayName,
+      role: usersTable.role,
+      isOfficialAccount: usersTable.isOfficialAccount,
+      isBanned: usersTable.isBanned,
+      bannedAt: usersTable.bannedAt,
+      avatarUrl: usersTable.avatarUrl,
+      createdAt: usersTable.createdAt,
+      uti: userTrustScoresTable.uti,
+      creatorLevel: userTrustScoresTable.creatorLevel,
+      tier: userTrustScoresTable.tier,
+    })
     .from(usersTable)
+    .leftJoin(userTrustScoresTable, eq(userTrustScoresTable.userId, usersTable.id))
     .where(eq(usersTable.isDeleted, false))
     .orderBy(desc(usersTable.createdAt))
     .limit(limit).offset((page - 1) * limit);
   const [total] = await db.select({ count: count() }).from(usersTable).where(eq(usersTable.isDeleted, false));
-  return res.json({ users, total: total?.count ?? 0, page, limit });
+  return res.json({
+    users: users.map((user) => {
+      const platformTrusted = user.role === "super_admin" || user.isOfficialAccount;
+      return {
+        ...user,
+        uti: platformTrusted ? 100 : user.uti ?? 0,
+        creatorLevel: platformTrusted ? "luminary" : user.creatorLevel ?? "new_voice",
+        tier: platformTrusted ? "trusted" : user.tier ?? "restricted",
+      };
+    }),
+    total: total?.count ?? 0,
+    page,
+    limit,
+  });
 });
 
 router.get("/referrals", async (_req, res) => {
@@ -390,6 +419,9 @@ router.post("/users/:id/ban", requirePermission("ban_user"), async (req: any, re
 
   const [target] = await db.select().from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.isDeleted, false)));
   if (!target) return res.status(404).json({ error: "User not found" });
+  if (target.role === "super_admin" || target.role === "admin" && req.currentUser.role !== "super_admin") {
+    return res.status(403).json({ error: "You cannot change this account's ban status" });
+  }
 
   const newBanned = !target.isBanned;
   const [updated] = await db.update(usersTable).set({ isBanned: newBanned, bannedAt: newBanned ? new Date() : null, updatedAt: new Date() }).where(eq(usersTable.id, id)).returning({ id: usersTable.id, username: usersTable.username, isBanned: usersTable.isBanned });
@@ -530,7 +562,7 @@ router.patch("/posts/:id/unpublish", requirePermission("unpublish_post"), async 
   return res.json(updated);
 });
 
-router.get("/reports", async (req, res) => {
+router.get("/reports", requirePermission("view_reports"), async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 50;
   const status = req.query.status as string | undefined;
@@ -586,7 +618,7 @@ router.post("/reports", async (req: any, res) => {
   return res.status(201).json(report);
 });
 
-router.patch("/reports/:id/resolve", async (req: any, res) => {
+router.patch("/reports/:id/resolve", requirePermission("resolve_reports"), async (req: any, res) => {
   const id = parseInt(req.params.id);
   const { strikeUserId, strikeReason, severity } = req.body ?? {};
   const [updated] = await db.update(reportsTable).set({ status: "resolved", resolvedBy: req.currentUser.id, resolvedAt: new Date() }).where(eq(reportsTable.id, id)).returning();
@@ -606,7 +638,7 @@ router.patch("/reports/:id/resolve", async (req: any, res) => {
   return res.json({ report: updated, strike });
 });
 
-router.patch("/reports/:id/dismiss", async (req: any, res) => {
+router.patch("/reports/:id/dismiss", requirePermission("dismiss_reports"), async (req: any, res) => {
   const id = parseInt(req.params.id);
   const [updated] = await db.update(reportsTable).set({ status: "dismissed", resolvedBy: req.currentUser.id, resolvedAt: new Date() }).where(eq(reportsTable.id, id)).returning();
   if (!updated) return res.status(404).json({ error: "Report not found" });
@@ -614,12 +646,13 @@ router.patch("/reports/:id/dismiss", async (req: any, res) => {
   return res.json(updated);
 });
 
-router.post("/users/:id/strikes", async (req: any, res) => {
+router.post("/users/:id/strikes", requirePermission("warn_user"), async (req: any, res) => {
   const id = parseInt(req.params.id);
   const { reason, severity, expiresAt } = req.body ?? {};
   if (!reason) return res.status(400).json({ error: "reason is required" });
-  const [target] = await db.select({ id: usersTable.id }).from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.isDeleted, false)));
+  const [target] = await db.select({ id: usersTable.id, role: usersTable.role }).from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.isDeleted, false)));
   if (!target) return res.status(404).json({ error: "User not found" });
+  if (target.role === "super_admin") return res.status(403).json({ error: "Moderation actions cannot be applied to a super admin account" });
   const [strike] = await db.insert(moderationStrikesTable).values({
     userId: id,
     reason: String(reason).slice(0, 1000),
@@ -631,7 +664,7 @@ router.post("/users/:id/strikes", async (req: any, res) => {
   return res.status(201).json(strike);
 });
 
-router.get("/users/:id/strikes", async (req, res) => {
+router.get("/users/:id/strikes", requirePermission("view_users"), async (req, res) => {
   const id = parseInt(req.params.id);
   const strikes = await db.select().from(moderationStrikesTable).where(eq(moderationStrikesTable.userId, id)).orderBy(desc(moderationStrikesTable.createdAt));
   return res.json({ strikes });
@@ -650,17 +683,26 @@ router.get("/logs", async (req, res) => {
   return res.json({ logs, total: total?.count ?? 0, page, limit });
 });
 
-router.get("/insights", async (req, res) => {
+router.get("/insights", requirePermission("view_reports"), async (req, res) => {
   const [{ suspiciousCount }] = await db
     .select({ suspiciousCount: count() })
     .from(userTrustScoresTable)
-    .where(lt(userTrustScoresTable.uti, 30));
+    .innerJoin(usersTable, eq(usersTable.id, userTrustScoresTable.userId))
+    .where(and(
+      lt(userTrustScoresTable.uti, 30),
+      ne(usersTable.role, "super_admin"),
+      eq(usersTable.isOfficialAccount, false),
+    ));
 
   const suspiciousUsers = await db
     .select({ id: usersTable.id, username: usersTable.username, displayName: usersTable.displayName, avatarUrl: usersTable.avatarUrl, uti: userTrustScoresTable.uti, tier: userTrustScoresTable.tier })
     .from(userTrustScoresTable)
-    .leftJoin(usersTable, eq(userTrustScoresTable.userId, usersTable.id))
-    .where(lt(userTrustScoresTable.uti, 30))
+    .innerJoin(usersTable, eq(userTrustScoresTable.userId, usersTable.id))
+    .where(and(
+      lt(userTrustScoresTable.uti, 30),
+      ne(usersTable.role, "super_admin"),
+      eq(usersTable.isOfficialAccount, false),
+    ))
     .orderBy(userTrustScoresTable.uti)
     .limit(10);
 
@@ -681,7 +723,12 @@ router.get("/insights", async (req, res) => {
   const [{ trustAnomalies }] = await db
     .select({ trustAnomalies: count() })
     .from(userTrustScoresTable)
-    .where(lt(userTrustScoresTable.uti, 20));
+    .innerJoin(usersTable, eq(usersTable.id, userTrustScoresTable.userId))
+    .where(and(
+      lt(userTrustScoresTable.uti, 20),
+      ne(usersTable.role, "super_admin"),
+      eq(usersTable.isOfficialAccount, false),
+    ));
 
   return res.json({
     suspiciousUsers,
@@ -745,7 +792,7 @@ router.patch("/settings", requireSuperAdmin, async (req: any, res) => {
 // EXTENDED ADMIN ROUTES - moderation queue, warnings, user details, post flag
 // ============================================================================
 
-router.get("/reports/grouped", async (_req, res) => {
+router.get("/reports/grouped", requirePermission("view_reports"), async (_req, res) => {
   const pending = await db
     .select({
       id: reportsTable.id,
@@ -815,11 +862,35 @@ router.post("/users/:id/warn", requirePermission("warn_user"), async (req: any, 
 
 router.get("/users/:id/detail", requirePermission("view_users"), async (req, res) => {
   const id = parseInt(req.params.id);
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  const [user] = await db.select({
+    id: usersTable.id,
+    username: usersTable.username,
+    email: usersTable.email,
+    displayName: usersTable.displayName,
+    bio: usersTable.bio,
+    headline: usersTable.headline,
+    avatarUrl: usersTable.avatarUrl,
+    coverUrl: usersTable.coverUrl,
+    website: usersTable.website,
+    location: usersTable.location,
+    country: usersTable.country,
+    profileVisibility: usersTable.profileVisibility,
+    role: usersTable.role,
+    emailVerified: usersTable.emailVerified,
+    isBanned: usersTable.isBanned,
+    bannedAt: usersTable.bannedAt,
+    isDeleted: usersTable.isDeleted,
+    isCreatorMode: usersTable.isCreatorMode,
+    isPremium: usersTable.isPremium,
+    isOfficialAccount: usersTable.isOfficialAccount,
+    createdAt: usersTable.createdAt,
+  }).from(usersTable).where(eq(usersTable.id, id));
   if (!user) return res.status(404).json({ error: "User not found" });
-  const { passwordHash, ...userSafe } = user as any;
 
-  const [trustScore] = await db.select().from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, id));
+  const trustScore = await getUserTrustScore(id) ?? {
+    userId: id, uti: 0, cvs: 0, bcs: 0, cts: 0, avgCis: 0,
+    tier: "restricted", creatorLevel: "new_voice", visibilityMultiplier: 0.3,
+  };
   const reports = await db.select().from(reportsTable)
     .where(or(eq(reportsTable.reporterId, id), and(eq(reportsTable.targetType, "user"), eq(reportsTable.targetId, id))))
     .orderBy(desc(reportsTable.createdAt))
@@ -835,7 +906,7 @@ router.get("/users/:id/detail", requirePermission("view_users"), async (req, res
     .limit(10);
 
   return res.json({
-    user: userSafe,
+    user,
     trustScore: trustScore ?? null,
     reports,
     strikes,
@@ -1045,7 +1116,7 @@ function parsePaging(req: { query: Record<string, unknown> }) {
   return { limit, offset };
 }
 
-router.get("/behavior-events", async (req, res) => {
+router.get("/behavior-events", requirePermission("view_reports"), async (req, res) => {
   const { limit, offset } = parsePaging(req);
   const [{ count: total } = { count: 0 }] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -1069,7 +1140,7 @@ router.get("/behavior-events", async (req, res) => {
   return res.json({ rows, total, limit, offset });
 });
 
-router.get("/reputation-events", async (req, res) => {
+router.get("/reputation-events", requirePermission("view_reports"), async (req, res) => {
   const { limit, offset } = parsePaging(req);
   const [{ count: total } = { count: 0 }] = await db
     .select({ count: sql<number>`count(*)::int` })

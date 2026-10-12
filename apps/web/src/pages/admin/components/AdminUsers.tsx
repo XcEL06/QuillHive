@@ -4,8 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, ChevronLeft, ChevronRight, Send, ShieldAlert, Ban, ChevronDown, ChevronUp } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Search, ChevronLeft, ChevronRight, Send, ShieldAlert, Ban, ChevronDown, ChevronUp, Eye } from "lucide-react";
 import type { AdminProps } from "./types";
 import { useAdminFetch } from "../hooks/useAdminFetch";
 import { Link } from "wouter";
@@ -21,6 +21,8 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
   const [noticeUser, setNoticeUser] = useState<any | null>(null);
   const [notice, setNotice] = useState("");
   const [sending, setSending] = useState(false);
+  const [userDetail, setUserDetail] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [clusters, setClusters] = useState<any[]>([]);
   const [clustersLoading, setClustersLoading] = useState(true);
   const [openCluster, setOpenCluster] = useState<string | null>(null);
@@ -56,6 +58,18 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
       setSending(false);
     }
   };
+  const openUserDetail = async (user: any) => {
+    setUserDetail({ user });
+    setDetailLoading(true);
+    try {
+      setUserDetail(await fetchAdmin(`/api/admin/users/${user.id}/detail`));
+    } catch (error) {
+      setUserDetail(null);
+      toast({ title: "Could not load user details", description: error instanceof Error ? error.message : "Request failed", variant: "destructive" });
+    } finally {
+      setDetailLoading(false);
+    }
+  };
   const filtered = users.filter((u) => `${u.displayName} ${u.username} ${u.email}`.toLowerCase().includes(search.toLowerCase()));
   const bannedVisible = users.filter((u) => u.isBanned).length;
   return <>
@@ -78,8 +92,8 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
         <p className="text-xs text-muted-foreground">{filtered.length} visible users</p>
       </div>
       <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
-        <div className="hidden grid-cols-[minmax(0,1fr)_100px_100px_120px] gap-4 border-b border-border/70 bg-muted/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid"><span>User</span><span>Role</span><span>Status</span><span>Action</span></div>
-        {loading ? <div className="space-y-3 p-5">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div> : filtered.length === 0 ? <div className="p-12 text-center"><p className="text-sm font-medium">No users found</p><p className="mt-1 text-xs text-muted-foreground">Try a different search.</p></div> : <div className="divide-y divide-border/60">{filtered.map((u) => <div key={u.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_100px_100px_120px] sm:items-center"><Link href={`/profile/${encodeURIComponent(u.username)}`} target="_blank" rel="noreferrer" aria-label={`Open ${u.displayName || u.username}'s profile in a new tab`} className="flex min-w-0 items-center gap-3 hover:underline"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{u.displayName?.[0] ?? u.username?.[0] ?? "?"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{u.displayName || "Unnamed user"}</p><p className="truncate text-xs text-muted-foreground">@{u.username} · {u.email}</p></div></Link><Badge variant="outline" className="w-fit text-[10px] capitalize">{u.role}</Badge><Badge variant={u.isBanned ? "destructive" : "secondary"} className="w-fit text-[10px]">{u.isBanned ? "Banned" : "Active"}</Badge>{currentUser.role === "super_admin" && <Button variant="outline" size="sm" className="w-fit" onClick={() => setNoticeUser(u)}><Send className="mr-1.5 h-3.5 w-3.5" />Send Notice</Button>}</div>)}</div>}
+        <div className="hidden grid-cols-[minmax(0,1fr)_130px_100px_100px_170px] gap-4 border-b border-border/70 bg-muted/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid"><span>User</span><span>Trust score</span><span>Role</span><span>Status</span><span>Actions</span></div>
+        {loading ? <div className="space-y-3 p-5">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div> : filtered.length === 0 ? <div className="p-12 text-center"><p className="text-sm font-medium">No users found</p><p className="mt-1 text-xs text-muted-foreground">Try a different search.</p></div> : <div className="divide-y divide-border/60">{filtered.map((u) => <div key={u.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_130px_100px_100px_170px] sm:items-center"><Link href={`/profile/${encodeURIComponent(u.username)}`} target="_blank" rel="noreferrer" aria-label={`Open ${u.displayName || u.username}'s profile in a new tab`} className="flex min-w-0 items-center gap-3 hover:underline"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{u.displayName?.[0] ?? u.username?.[0] ?? "?"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{u.displayName || "Unnamed user"}{u.isOfficialAccount && <Badge variant="secondary" className="ml-2 text-[9px]">Official</Badge>}</p><p className="truncate text-xs text-muted-foreground">@{u.username} · {u.email}</p></div></Link><div><p className="text-sm font-semibold tabular-nums">{Math.round(Number(u.uti) || 0)} / 100</p><p className="text-[10px] capitalize text-muted-foreground">{String(u.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div><Badge variant="outline" className="w-fit text-[10px] capitalize">{u.role}</Badge><Badge variant={u.isBanned ? "destructive" : "secondary"} className="w-fit text-[10px]">{u.isBanned ? "Banned" : "Active"}</Badge><div className="flex flex-wrap gap-1"><Button variant="outline" size="sm" className="h-8" onClick={() => void openUserDetail(u)}><Eye className="mr-1 h-3.5 w-3.5" />Details</Button>{currentUser.role === "super_admin" && <Button variant="outline" size="sm" className="h-8" onClick={() => setNoticeUser(u)}><Send className="mr-1 h-3.5 w-3.5" />Notice</Button>}</div></div>)}</div>}
       </div>
       <div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((current) => current - 1)}><ChevronLeft className="mr-1 h-4 w-4" />Previous</Button><span className="text-xs text-muted-foreground">Page {page}</span><Button variant="outline" size="sm" disabled={users.length < 25} onClick={() => setPage((current) => current + 1)}>Next<ChevronRight className="ml-1 h-4 w-4" /></Button></div>
     </section>
@@ -91,5 +105,25 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
         <DialogFooter><Button variant="outline" onClick={() => setNoticeUser(null)}>Cancel</Button><Button onClick={() => void sendNotice()} disabled={sending || !notice.trim()}><Send className="mr-2 h-4 w-4" />{sending ? "Sending..." : "Send"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>}
+    <Dialog open={!!userDetail} onOpenChange={(open) => { if (!open) setUserDetail(null); }}>
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{userDetail?.user?.displayName || userDetail?.user?.username || "User details"}</DialogTitle>
+          <DialogDescription>Trust and moderation record. Direct messages are not included.</DialogDescription>
+        </DialogHeader>
+        {detailLoading ? <p className="py-8 text-center text-sm text-muted-foreground">Loading account details…</p> : userDetail && <>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
+            <div><p className="text-xs text-muted-foreground">Trust score</p><p className="text-xl font-semibold tabular-nums">{Math.round(userDetail.trustScore?.uti ?? 0)} / 100</p><p className="text-xs capitalize text-muted-foreground">{String(userDetail.trustScore?.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div>
+            <a href={`/profile/${encodeURIComponent(userDetail.user.username)}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open profile</a>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <section><h3 className="mb-2 text-sm font-semibold">Reports ({userDetail.reports?.length ?? 0})</h3><div className="max-h-52 space-y-2 overflow-y-auto">{userDetail.reports?.map((report: any) => <article key={report.id} className="rounded-md bg-muted/30 p-3"><p className="text-sm">{report.reason}</p><p className="mt-1 text-xs capitalize text-muted-foreground">{report.targetType} · {report.status} · <Timestamp value={report.createdAt} mode="datetime" /></p>{report.targetType === "post" && <a href={`/post/${report.targetId}`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-primary hover:underline">Open reported post</a>}</article>)}</div></section>
+            <section><h3 className="mb-2 text-sm font-semibold">Strikes ({userDetail.strikes?.length ?? 0})</h3><div className="max-h-52 space-y-2 overflow-y-auto">{userDetail.strikes?.map((strike: any) => <article key={strike.id} className="rounded-md bg-muted/30 p-3"><p className="text-sm">{strike.reason}</p><p className="mt-1 text-xs text-muted-foreground">Severity {strike.severity}/10 · <Timestamp value={strike.createdAt} mode="datetime" /></p></article>)}</div></section>
+            <section className="sm:col-span-2"><h3 className="mb-2 text-sm font-semibold">Recent posts ({userDetail.recentPosts?.length ?? 0})</h3><div className="space-y-1">{userDetail.recentPosts?.map((post: any) => <a key={post.id} href={`/post/${post.id}`} target="_blank" rel="noreferrer" className="flex items-center justify-between gap-3 rounded-md p-2 text-sm hover:bg-muted/40"><span className="truncate">{post.title || `${post.type} #${post.id}`}</span><span className="shrink-0 text-xs text-primary">Open post</span></a>)}</div></section>
+          </div>
+        </>}
+        <DialogFooter><Button type="button" variant="outline" onClick={() => setUserDetail(null)}>Close</Button></DialogFooter>
+      </DialogContent>
+    </Dialog>
   </>;
 }

@@ -89,7 +89,36 @@ function Metric({ label, value, detail, icon }: { label: string; value?: number;
 
 function InspectionDetail({ kind, data }: { kind: "user" | "group"; data: Row }) {
   if (kind === "user") {
-    return <section className="space-y-4 rounded-xl border border-border/70 bg-background p-5 shadow-sm"><div><h3 className="text-lg font-semibold">Full profile: {data.user.displayName} <span className="font-normal text-muted-foreground">@{data.user.username}</span></h3><p className="text-xs text-muted-foreground">Includes private profile fields and restricted, unpublished, Spark, and group posts (up to 100 latest). Credentials and authentication secrets are excluded.</p></div><DataGrid value={data.user} /><div className="grid gap-4 sm:grid-cols-3"><Metric label="Followers" value={data.activity.followers} /><Metric label="Following" value={data.activity.following} /><Metric label="Comments" value={data.activity.comments} /></div>{data.creatorProfile && <Listing title="Creator profile" rows={[data.creatorProfile]} />}<Listing title={`Posts and Sparks (${data.posts.length})`} rows={data.posts} bodyKey="content" /><Listing title={`Boost history (${data.boosts.length})`} rows={data.boosts} bodyKey="adminNote" /><Listing title={`Work history (${data.workHistory.length})`} rows={data.workHistory} /><Listing title={`Education (${data.education.length})`} rows={data.education} /></section>;
+    const trustScore = data.trustScore ?? {};
+    const isPlatformTrusted = data.user.role === "super_admin" || data.user.isOfficialAccount;
+    const level = isPlatformTrusted ? "Luminary" : String(trustScore.creatorLevel || "new_voice").replace(/_/g, " ");
+    return <section className="space-y-4 rounded-xl border border-border/70 bg-background p-5 shadow-sm">
+      <div>
+        <h3 className="text-lg font-semibold">Full profile: {data.user.displayName} <span className="font-normal text-muted-foreground">@{data.user.username}</span></h3>
+        <p className="text-xs text-muted-foreground">Includes private profile fields and restricted, unpublished, Spark, and group posts (up to 100 latest). Credentials and authentication secrets are excluded.</p>
+        <a href={`/profile/${encodeURIComponent(data.user.username)}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs font-medium text-primary hover:underline">Open public profile</a>
+      </div>
+      <DataGrid value={data.user} />
+      <div className="grid gap-4 sm:grid-cols-4">
+        <Metric label="Trust score" value={Math.round(isPlatformTrusted ? 100 : Number(trustScore.uti) || 0)} detail={`/ 100 · ${level}`} />
+        <Metric label="Followers" value={data.activity.followers} />
+        <Metric label="Following" value={data.activity.following} />
+        <Metric label="Comments" value={data.activity.comments} />
+      </div>
+      {data.creatorProfile && <Listing title="Creator profile" rows={[data.creatorProfile]} />}
+      <section className="rounded-lg border border-border/70 p-3">
+        <h4 className="text-sm font-semibold">Posts and Sparks ({data.posts.length})</h4>
+        {data.posts.length === 0 ? <p className="py-4 text-xs text-muted-foreground">No posts or Sparks found.</p> : <div className="mt-2 divide-y divide-border/60">
+          {data.posts.map((post: Row) => <div key={post.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <span className="min-w-0"><span className="block truncate text-sm font-medium">{post.title || `${post.type || "Post"} #${post.id}`}</span><span className="text-xs text-muted-foreground">{post.isPublished ? "Published" : "Draft"} · {post.type} · <Timestamp value={post.createdAt} mode="datetime" /></span></span>
+            <a href={`/post/${post.id}`} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-medium text-primary hover:underline">Open post</a>
+          </div>)}
+        </div>}
+      </section>
+      <Listing title={`Boost history (${data.boosts.length})`} rows={data.boosts} bodyKey="adminNote" />
+      <Listing title={`Work history (${data.workHistory.length})`} rows={data.workHistory} />
+      <Listing title={`Education (${data.education.length})`} rows={data.education} />
+    </section>;
   }
   return <section className="space-y-4 rounded-xl border border-border/70 bg-background p-5 shadow-sm"><div><h3 className="text-lg font-semibold">Full group: {data.group.name}</h3><p className="text-xs text-muted-foreground">Private settings, posts (up to 100 latest), and member roster (up to 300 latest) are included, along with moderation and join-request metadata.</p></div><DataGrid value={data.group} /><Metric label="Members" value={data.memberCount} /><Listing title={`Group posts (${data.posts.length})`} rows={data.posts} bodyKey="content" /><Listing title={`Post details (${data.postDetails.length})`} rows={data.postDetails} /><Listing title={`Members (${data.members.length})`} rows={data.members} /><Listing title={`Join requests (${data.joinRequests.length})`} rows={data.joinRequests} /><Listing title={`Group bans (${data.bans.length})`} rows={data.bans} /><Listing title={`Invite metadata (${data.invites.length})`} rows={data.invites} /><Listing title={`Recent activity (${data.activity.length})`} rows={data.activity} /></section>;
 }
