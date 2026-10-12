@@ -549,6 +549,15 @@ function AuthenticatedHome() {
     if (feedSource === 'explore') fetchAlgorithmicFeed('algorithmic');
   }, [feedSource, token]);
 
+  useEffect(() => {
+    const removeDeletedPost = (event: Event) => {
+      const { postId } = (event as CustomEvent<{ postId: number }>).detail;
+      setFeedPosts(current => current?.filter(post => post.id !== postId) ?? current);
+    };
+    window.addEventListener('quillhive:post-deleted', removeDeletedPost);
+    return () => window.removeEventListener('quillhive:post-deleted', removeDeletedPost);
+  }, []);
+
   const apiPosts = normalizePostsResponse(data) ?? [];
   const displayPosts =
     feedSource === 'explore' ? (feedPosts ?? apiPosts) : apiPosts;

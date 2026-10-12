@@ -78,6 +78,7 @@ export type PostOptionAction =
   | 'closed'
   | 'unavailable'
   | 'reopen'
+  | 'delete'
   | 'delete-permanently'
   | 'save'
   | 'add-to-library'
@@ -106,7 +107,7 @@ export type PostOptionsMenuProps = {
   hideAnalytics?: boolean;
   hideBoost?: boolean;
   onAction?: (action: PostOptionAction, post: PostOptionPost) => void | Promise<void>;
-  onDeletePermanently?: () => void | Promise<void>;
+  onDeletePermanently: () => void | Promise<void>;
   className?: string;
 };
 
@@ -154,8 +155,12 @@ export function PostOptionsMenu({
     setOpen(false);
     try {
       await onAction?.(action, post);
-    } catch {
-      toast({ title: 'Action could not be completed', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Action could not be completed',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     }
   }, [onAction, post, toast]);
 
@@ -164,15 +169,18 @@ export function PostOptionsMenu({
     setIsWorking(true);
     try {
       if (confirmation === 'delete') {
-        await onDeletePermanently?.();
-        await onAction?.('delete-permanently', post);
+        await onDeletePermanently();
       } else {
         await onAction?.('archive', post);
       }
       setConfirmation(null);
       setOpen(false);
-    } catch {
-      toast({ title: 'Action could not be completed', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Action could not be completed',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsWorking(false);
     }
@@ -203,6 +211,7 @@ export function PostOptionsMenu({
       items: [
         { label: commentsEnabled ? 'Turn Off Comments' : 'Turn On Comments', action: 'toggle-comments', icon: MessageCircleOff },
         { label: 'Archive Post', action: 'archive' as const, icon: Archive },
+        { label: 'Delete Post', action: 'delete' as const, icon: Trash2, destructive: true },
         ...(post.type === 'job' ? [
           ...(post.status === 'active' ? [
             { label: 'Mark as Filled', action: 'filled' as const, icon: CheckCircle2 },
@@ -266,6 +275,11 @@ export function PostOptionsMenu({
           setConfirmation('archive');
           return;
         }
+        if (item.action === 'delete') {
+          setOpen(false);
+          setConfirmation('delete');
+          return;
+        }
         if (closeAfter) setOpen(false);
         void runAction(item.action);
       }}
@@ -301,7 +315,7 @@ export function PostOptionsMenu({
       <React.Fragment key={section.label}>
         {index > 0 && (mobile ? <div className="my-3 h-px bg-border" /> : <DropdownMenuSeparator />)}
         {mobile ? <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{section.label}</p> : <DropdownMenuLabel className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-muted-foreground">{section.label}</DropdownMenuLabel>}
-        {section.items.map((item) => mobile ? renderItem(item) : <DropdownMenuItem key={`${item.action}-${item.label}`} onSelect={() => { setOpen(false); if (item.action === 'archive') setConfirmation('archive'); else void runAction(item.action); }} className={`${itemClass(item.destructive)} cursor-pointer`}>{React.createElement(item.icon, { className: 'h-4 w-4 shrink-0', 'aria-hidden': true })}<span>{item.label}</span></DropdownMenuItem>)}
+        {section.items.map((item) => mobile ? renderItem(item) : <DropdownMenuItem key={`${item.action}-${item.label}`} onSelect={() => { setOpen(false); if (item.action === 'archive') setConfirmation('archive'); else if (item.action === 'delete') setConfirmation('delete'); else void runAction(item.action); }} className={`${itemClass(item.destructive)} cursor-pointer`}>{React.createElement(item.icon, { className: 'h-4 w-4 shrink-0', 'aria-hidden': true })}<span>{item.label}</span></DropdownMenuItem>)}
         {!isOwner && section.label === 'Support' && !mobile && renderReportSubmenu()}
         {!isOwner && section.label === 'Support' && mobile && renderReportSubmenu(true)}
       </React.Fragment>
@@ -334,17 +348,17 @@ export function PostOptionsMenu({
       <Dialog open={confirmation !== null} onOpenChange={(value) => !value && setConfirmation(null)}>
         <DialogContent className="rounded-2xl sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{confirmation === 'archive' ? 'Archive Post' : 'Delete Permanently'}</DialogTitle>
+            <DialogTitle>{confirmation === 'archive' ? 'Archive Post' : 'Delete Post'}</DialogTitle>
             <DialogDescription>
               {confirmation === 'archive'
                 ? 'This will hide the post from public views. You can restore it later.'
-                : 'This will permanently delete the post and its associated content. This action cannot be undone.'}
+                : 'This will permanently delete the post and remove it from your feed. This action cannot be undone.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
             {confirmation === 'archive' && <Button variant="ghost" className="mr-auto rounded-xl text-destructive" onClick={() => setConfirmation('delete')} disabled={isWorking}><Trash2 className="mr-2 h-4 w-4" /> Delete Permanently</Button>}
             <Button variant="outline" className="rounded-xl" onClick={() => setConfirmation(null)} disabled={isWorking}>Cancel</Button>
-            <Button variant={confirmation === 'delete' ? 'destructive' : 'default'} className="rounded-xl" onClick={() => void confirmAction()} disabled={isWorking}>{isWorking ? 'Working...' : confirmation === 'archive' ? 'Archive Post' : 'Delete Permanently'}</Button>
+            <Button variant={confirmation === 'delete' ? 'destructive' : 'default'} className="rounded-xl" onClick={() => void confirmAction()} disabled={isWorking}>{isWorking ? 'Working...' : confirmation === 'archive' ? 'Archive Post' : 'Delete Post'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

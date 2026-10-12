@@ -25,7 +25,6 @@ import { useI18n, useT } from '@/lib/i18n';
 import { CreatorLevelBadge } from '@/components/trust/CreatorLevelBadge';
 import { PollBlock } from '@/components/post/PollBlock';
 import { PostOptionsMenu, type PostOptionAction, type PostOptionPost } from './PostOptionsMenu';
-import { ToastAction } from '@/components/ui/toast';
 import { ImageLightbox } from './ImageLightbox';
 import { formatPostTimestamp } from '@/lib/postTimestamp';
 import { useFeature } from '@/lib/features';
@@ -469,35 +468,21 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
     }
   });
 
-  const { mutate: deletePost } = useDeletePost({
+  const { mutateAsync: deletePost } = useDeletePost({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
         toast({ title: 'Post deleted' });
-      },
-      onError: () => {
-        setIsHidden(false);
-        toast({ title: 'Failed to delete post', variant: 'destructive' });
       }
     }
   });
 
-  const handleDeleteWithUndo = () => {
+  const handleDeletePermanently = async () => {
+    await deletePost({ id: post.id });
     setIsHidden(true);
-    const timeoutId = window.setTimeout(() => {
-      deletePost({ id: post.id });
-    }, 5_000);
-    toast({
-      title: 'Post deleted',
-      action: (
-        <ToastAction altText="Undo post deletion" onClick={() => {
-          window.clearTimeout(timeoutId);
-          setIsHidden(false);
-        }}>
-          Undo
-        </ToastAction>
-      ),
-    });
+    window.dispatchEvent(new CustomEvent('quillhive:post-deleted', {
+      detail: { postId: post.id },
+    }));
   };
 
   const handleCopyLink = async () => {
@@ -528,12 +513,21 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      const data = await res.json();
-      setPost(p => ({ ...p, isReposted: data.isReposted, repostsCount: data.repostsCount }));
+      const data = await res.json() as { isReposted?: boolean; repostsCount?: number; error?: string };
+      if (!res.ok) throw new Error(data.error || `Could not repost (HTTP ${res.status})`);
+      setPost(p => ({
+        ...p,
+        isReposted: Boolean(data.isReposted),
+        repostsCount: Number(data.repostsCount ?? 0),
+      }));
       toast({ title: data.isReposted ? 'Reposted!' : 'Repost removed' });
       queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
-    } catch {
-      toast({ title: 'Failed to repost', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Failed to repost',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsReposting(false);
     }
@@ -552,16 +546,25 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
           Authorization: `Bearer ${token}`,
         },
       });
+      const data = await res.json().catch(() => null) as { error?: string } | null;
       if (res.ok || (method === 'POST' && res.status === 409)) {
         const newSaved = method === 'POST';
         setPost(p => ({ ...p, isSaved: newSaved }));
         window.dispatchEvent(new CustomEvent('quillhive:saved-changed'));
         toast({ title: res.status === 409 ? 'Already saved' : newSaved ? 'Saved' : 'Removed from saved' });
       } else {
-        toast({ title: 'Failed to save', variant: 'destructive' });
+        toast({
+          title: 'Failed to update saved posts',
+          description: data?.error || `Request failed (HTTP ${res.status}).`,
+          variant: 'destructive',
+        });
       }
-    } catch {
-      toast({ title: 'Failed to save', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Failed to update saved posts',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -836,7 +839,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
               hideAnalytics={hideAnalytics}
               hideBoost={hideBoost}
               onAction={handlePostOptionAction}
-              onDeletePermanently={handleDeleteWithUndo}
+              onDeletePermanently={handleDeletePermanently}
             />
           </div>
         </div>
@@ -1041,6 +1044,15 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
                 setOptimisticLiked(!wasLiked);
                 setOptimisticLikes(Math.max(0, previousCount + (wasLiked ? -1 : 1)));
                 toggleLike({ id: post.id }, {
+                  onSuccess: (result) => {
+                    setOptimisticLiked(result.liked);
+                    setOptimisticLikes(result.likesCount);
+                    setPost(current => ({
+                      ...current,
+                      isLiked: result.liked,
+                      likesCount: result.likesCount,
+                    }));
+                  },
                   onError: (error) => {
                     setOptimisticLiked(wasLiked);
                     setOptimisticLikes(previousCount);
@@ -1053,7 +1065,8 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
                 });
               }}
               disabled={isLiking}
-              title={optimisticLiked ? 'Remove curation' : 'Curate this work'}
+              title={optimisticLiked ? 'Unlike post' : 'Like post'}
+              aria-pressed={optimisticLiked}
               className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-all ${
                 optimisticLiked
                   ? 'text-rose-500 bg-rose-500/10'
@@ -1063,6 +1076,23 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
             >
               <Heart className={`h-4 w-4 ${optimisticLiked ? 'fill-current' : ''}`} />
               {optimisticLikes > 0 && <span>{optimisticLikes}</span>}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleRepost()}
+              disabled={isReposting}
+              title={post.isReposted ? 'Undo repost' : 'Repost'}
+              aria-pressed={Boolean(post.isReposted)}
+              className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-all ${
+                post.isReposted
+                  ? 'text-primary bg-primary/10'
+                  : 'hover:text-primary hover:bg-primary/10'
+              }`}
+              data-testid={`button-repost-${post.id}`}
+            >
+              <Repeat2 className={`h-4 w-4 ${post.isReposted ? 'stroke-[2.5]' : ''}`} />
+              {(post.repostsCount ?? 0) > 0 && <span>{post.repostsCount}</span>}
             </button>
 
             <button

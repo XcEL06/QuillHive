@@ -404,6 +404,9 @@ export const deletePost = async (req: Request, res: Response) => {
   try {
     const ok = await PostService.deletePost(id, viewerId);
     if (!ok) return res.status(404).json({ error: "Post not found" });
+    void deleteCachePattern("feed:*");
+    void deleteCachePattern("trending:*");
+    memDeletePattern("trending:");
     return res.json({ success: true });
   } catch (e: any) {
     if (e.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
