@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { useAuthStore } from "@/store/auth";
 import { QuillHiveLogo } from "@/components/QuillHiveLogo";
+import { Footer } from "@/components/Footer";
 
 export function PublicLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
@@ -34,6 +35,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
       <main className="flex-1">
         {children}
       </main>
+      <Footer />
     </div>
   );
 }

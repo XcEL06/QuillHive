@@ -11,7 +11,6 @@ import Auth from "@/pages/auth/Auth";
 import VerifyEmailPage from "@/pages/auth/VerifyEmailPage";
 import ForgotPasswordPage from "@/pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "@/pages/auth/ResetPasswordPage";
-import { Footer } from './components/Footer';
 import { CookieConsent } from './components/CookieConsent';
 import { PwaInstallBanner } from './components/PwaInstallBanner';
 import { NotificationToast } from './components/NotificationToast';
@@ -474,9 +473,7 @@ export default function App() {
 }
 
 function AppShell() {
-  const [location] = useLocation();
   const { user } = useAuthStore();
-  const showFooter = isPublicRoute(location) || location === "/explore" || (location === "/" && !user);
   const maintenanceMode = useFeature("maintenance_mode");
   const isAdminUser = user?.role === "admin" || user?.role === "super_admin";
   const blockedByMaintenance = maintenanceMode && !isAdminUser;
@@ -490,7 +487,6 @@ function AppShell() {
           </Suspense>
         </ErrorBoundary>
       )}
-      {showFooter && <Footer />}
     </>
   );
 }
