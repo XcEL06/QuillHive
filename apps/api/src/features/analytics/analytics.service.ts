@@ -37,20 +37,27 @@ export async function recordPostView(postId: number, viewerId: number | null, re
   const viewerFilter = viewerId === null
     ? eq(postViewsTable.ipHash, ipHash)
     : eq(postViewsTable.viewerId, viewerId);
-  const [existingView] = await db
-    .select({ id: postViewsTable.id })
-    .from(postViewsTable)
-    .where(and(eq(postViewsTable.postId, postId), viewerFilter))
-    .limit(1);
-  if (existingView) return;
+  const identity = viewerId === null ? `anonymous:${ipHash}` : `viewer:${viewerId}`;
+  const inserted = await db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${identity}), ${postId})`);
+    const [existingView] = await tx
+      .select({ id: postViewsTable.id })
+      .from(postViewsTable)
+      .where(and(eq(postViewsTable.postId, postId), viewerFilter))
+      .limit(1);
+    if (existingView) return false;
 
-  await db.insert(postViewsTable).values({
-    postId,
-    viewerId,
-    ipHash,
-    userAgent: req.headers["user-agent"]?.slice(0, 500) ?? null,
-    country: country ?? null,
+    await tx.insert(postViewsTable).values({
+      postId,
+      viewerId,
+      ipHash,
+      userAgent: req.headers["user-agent"]?.slice(0, 500) ?? null,
+      country: country ?? null,
+    });
+    return true;
   });
+  if (!inserted) return;
+
   try {
     const [row] = await db
       .select({ total: sql<number>`COUNT(*)::int` })

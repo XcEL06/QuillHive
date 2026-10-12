@@ -57,22 +57,29 @@ function MatchBadge({ score }: { score: number }) {
 function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: number; reasons: string[] }> }) {
   const [matches, setMatches] = useState<MatchedJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const token = getStoredToken();
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
+    setLoading(true);
+    setError(null);
     fetch('/api/jobs/my-matches', { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
+      .then(async response => {
+        if (!response.ok) throw new Error('Could not load your best matches.');
+        return response.json();
+      })
       .then(data => {
         const jobs: MatchedJob[] = Array.isArray(data?.matches) ? data.matches : [];
         jobs.forEach(j => matchMap.set(j.id, { score: j.matchScore, reasons: j.matchReasons }));
         setMatches(jobs.slice(0, 4));
       })
-      .catch(() => {})
+      .catch(error => setError(error instanceof Error ? error.message : 'Could not load your best matches.'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [attempt]);
 
-  if (!token || (!loading && matches.length === 0)) return null;
+  if (!token || (!loading && matches.length === 0 && !error)) return null;
 
   if (loading) return (
     <div className="mb-6">
@@ -80,6 +87,15 @@ function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: numbe
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {[0,1].map(i => <Skeleton key={i} className="h-28 rounded-2xl" />)}
       </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-center" role="alert">
+      <p className="text-sm text-destructive">{error}</p>
+      <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => setAttempt(value => value + 1)}>
+        Retry
+      </Button>
     </div>
   );
 

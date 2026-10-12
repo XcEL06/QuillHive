@@ -298,8 +298,8 @@ function GroupDetail({ id }: { id: number }) {
   const t = useT();
   const [location, setLocation] = useLocation();
 
-  const { data: group, isLoading: groupLoading, refetch } = useGetGroup(id);
-  const { data: postsData, isLoading: postsLoading } = useGetGroupPosts(id, {});
+  const { data: group, isLoading: groupLoading, isError: groupError, refetch } = useGetGroup(id);
+  const { data: postsData, isLoading: postsLoading, isError: postsError, refetch: refetchPosts } = useGetGroupPosts(id, {});
   const { token } = useAuthStore();
   const [myRole, setMyRole] = useState<GroupView['memberRole']>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -667,11 +667,12 @@ function GroupDetail({ id }: { id: number }) {
     </AppLayout>
   );
 
+  if (groupError) return <AppLayout><div className="mx-auto max-w-xl py-20 text-center"><p className="text-sm text-destructive" role="alert">Could not load this group.</p><Button type="button" variant="outline" className="mt-4" onClick={() => void refetch()}>Retry</Button></div></AppLayout>;
   if (!group) return <AppLayout><div className="py-20 text-center text-muted-foreground">{t('groups.notFound', 'Group not found')}</div></AppLayout>;
 
   const groupView = group as GroupView;
   const inviteCode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('invite') : null;
-  const allGroupPosts = (postsData?.posts ?? []) as any[];
+  const allGroupPosts = Array.isArray(postsData?.posts) ? postsData.posts as any[] : [];
   const questions = allGroupPosts.filter(post => post.groupDetails?.type === 'question');
   const featuredAnnouncements = allGroupPosts.filter(post => post.groupDetails?.type === 'announcement').slice(0, 3);
   const pendingGroupPosts = pendingPosts;
@@ -878,7 +879,7 @@ function GroupDetail({ id }: { id: number }) {
                   <div className="min-w-0"><p className="text-sm font-semibold">{report.postTitle || `Post #${report.targetId}`}</p><p className="mt-1 text-xs text-muted-foreground">{report.reason.replace(/_/g, ' ')} · reported by {report.reporterName || `@${report.reporterUsername}`} · <Timestamp value={report.createdAt} mode="date" /></p></div>
                   <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void reviewGroupReport(report.id, 'dismiss')}>Dismiss</Button><Button size="sm" variant="destructive" onClick={() => void reviewGroupReport(report.id, 'remove_post')}>Remove post</Button><Button size="sm" variant="ghost" onClick={() => void reviewGroupReport(report.id, 'escalate')}>Escalate</Button></div>
                 </article>)}
-              </div> : (postsLoading || (activeTab === 'pending' && pendingLoading)) ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}</div> : visiblePosts.length === 0 ? <div className="flex min-h-64 flex-col items-center justify-center border-y border-dashed border-border px-6 text-center">
+              </div> : (postsLoading || (activeTab === 'pending' && pendingLoading)) ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}</div> : postsError ? <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-center" role="alert"><p className="text-sm text-destructive">Could not load group posts.</p><Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => void refetchPosts()}>Retry</Button></div> : visiblePosts.length === 0 ? <div className="flex min-h-64 flex-col items-center justify-center border-y border-dashed border-border px-6 text-center">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary"><EmptyIcon className="h-7 w-7" /></div>
                 <h3 className="font-semibold">{emptyStates[activeTab]?.title}</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">{emptyStates[activeTab]?.body}</p>
               </div> : activeTab === 'announcements' ? <div className="space-y-5 border-l border-amber-500/40 pl-4">{visiblePosts.map(renderGroupPost)}</div> : <div className="space-y-5">{visiblePosts.map(renderGroupPost)}</div>}
@@ -983,7 +984,8 @@ function GroupsList() {
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [isUploadingIcon, setIsUploadingIcon] = useState(false);
 
-  const { data, isLoading } = useGetGroups({ search: search || undefined });
+  const { data, isLoading, isError, refetch } = useGetGroups({ search: search || undefined });
+  const groups = Array.isArray(data?.groups) ? data.groups : [];
 
   const { mutate: createGroup, isPending: isCreating } = useCreateGroup({
     mutation: {
@@ -1057,7 +1059,12 @@ function GroupsList() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52 rounded-2xl" />)}
           </div>
-        ) : data?.groups.length === 0 ? (
+        ) : isError ? (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center" role="alert">
+            <p className="text-sm text-destructive">Could not load groups.</p>
+            <Button type="button" variant="outline" className="mt-4" onClick={() => void refetch()}>Retry</Button>
+          </div>
+        ) : groups.length === 0 ? (
           <div className="text-center py-20 bg-muted/20 rounded-3xl border border-dashed border-border text-muted-foreground">
             <Users className="w-16 h-16 mx-auto mb-4 opacity-30" />
             <h3 className="text-xl font-serif font-medium mb-2">{t('groups.noGroupsYet', 'No groups yet')}</h3>
@@ -1068,7 +1075,7 @@ function GroupsList() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {data?.groups.map(group => (
+            {groups.map(group => (
               <div key={group.id} className="bg-card border border-border/60 rounded-2xl overflow-hidden hover:border-primary/30 hover:shadow-lg transition-all group flex flex-col">
                 <div className="h-28 bg-gradient-to-br from-primary/20 to-accent/20 relative">
                   {group.coverUrl ? (
@@ -1205,38 +1212,52 @@ function GroupsList() {
 
 function GroupSlugRoute({ slug }: { slug: string }) {
   const [groupId, setGroupId] = useState<number | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError(null);
+    setGroupId(null);
     void apiFetch(`/api/groups/${encodeURIComponent(slug)}`)
       .then(async response => {
-        if (!response.ok) throw new Error('Group not found');
+        if (!response.ok) throw new Error(response.status === 404 ? 'Group not found.' : 'Could not load this group.');
         const group = await response.json() as GroupView;
         if (active) setGroupId(group.id);
       })
-      .catch(() => { if (active) setNotFound(true); });
+      .catch(error => { if (active) setError(error instanceof Error ? error.message : 'Could not load this group.'); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [slug]);
+  }, [slug, attempt]);
 
   if (groupId) return <GroupDetail id={groupId} />;
-  if (notFound) return <AppLayout><p className="py-20 text-center text-muted-foreground">Group not found</p></AppLayout>;
-  return <AppLayout><div className="mx-auto max-w-4xl space-y-4 p-4"><Skeleton className="aspect-[16/5] w-full" /><Skeleton className="h-10 w-64" /></div></AppLayout>;
+  if (loading) return <AppLayout><div className="mx-auto max-w-4xl space-y-4 p-4"><Skeleton className="aspect-[16/5] w-full" /><Skeleton className="h-10 w-64" /></div></AppLayout>;
+  return <AppLayout><div className="py-20 text-center"><p className="text-sm text-muted-foreground" role={error === 'Group not found.' ? undefined : 'alert'}>{error}</p>{error !== 'Group not found.' && <Button type="button" variant="outline" className="mt-4" onClick={() => setAttempt(value => value + 1)}>Retry</Button>}</div></AppLayout>;
 }
 
 function GroupMembersRoute({ slug }: { slug: string }) {
   const [group, setGroup] = useState<GroupView | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
+    setLoading(true);
+    setError(null);
     void apiFetch(`/api/groups/${encodeURIComponent(slug)}`)
-      .then(async response => response.ok ? response.json() as Promise<GroupView> : null)
+      .then(async response => {
+        if (!response.ok) throw new Error(response.status === 404 ? 'Group not found.' : 'Could not load group members.');
+        return await response.json() as GroupView;
+      })
       .then(value => { if (active) setGroup(value); })
+      .catch(error => { if (active) setError(error instanceof Error ? error.message : 'Could not load group members.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [slug]);
+  }, [slug, attempt]);
   if (loading) return <AppLayout><div className="mx-auto max-w-5xl p-6 text-sm text-muted-foreground">Loading members...</div></AppLayout>;
-  if (!group) return <AppLayout><p className="py-20 text-center text-muted-foreground">Group not found</p></AppLayout>;
+  if (error || !group) return <AppLayout><div className="py-20 text-center"><p className={`text-sm ${error === 'Group not found.' || !error ? 'text-muted-foreground' : 'text-destructive'}`} role={error && error !== 'Group not found.' ? 'alert' : undefined}>{error || 'Group not found.'}</p>{error && error !== 'Group not found.' && <Button type="button" variant="outline" className="mt-4" onClick={() => setAttempt(value => value + 1)}>Retry</Button>}</div></AppLayout>;
   return <AppLayout><main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
     <Link href={`/g/${slug}`} className="text-sm text-muted-foreground hover:text-foreground">← Back to {group.name}</Link>
     <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4"><div><p className="text-xs font-semibold uppercase text-muted-foreground">{group.name}</p><h1 className="mt-1 text-2xl font-semibold">Member management</h1></div><span className="text-sm text-muted-foreground">{group.memberCount ?? group.membersCount} members</span></header>
