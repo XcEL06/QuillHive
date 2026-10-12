@@ -343,6 +343,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
   const queryClient = useQueryClient();
 
   const [post, setPost] = useState<EnrichedPost>(initialPost);
+  const [isPostBodyExpanded, setIsPostBodyExpanded] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -751,6 +752,12 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
   };
 
   const isSpark = (post.type as string) === 'spark';
+  const postBodyTextLength = (post.content || post.excerpt || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .length;
+  const canExpandPostBody = !isSpark && postBodyTextLength > 220;
   const isFirst24h = (Date.now() - new Date(post.createdAt).getTime()) < 24 * 60 * 60 * 1000;
   const postTimestamp = formatPostTimestamp(post.createdAt);
   const feelingTag = (post.tags || []).find((t: string) => typeof t === 'string' && t.startsWith('feeling:'));
@@ -865,7 +872,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="line-clamp-3"
+                    className={isPostBodyExpanded ? 'whitespace-pre-wrap' : 'line-clamp-3'}
                   >
                     {renderHashtags(translatedContent)}
                   </motion.p>
@@ -875,9 +882,9 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="line-clamp-3"
+                    className={isPostBodyExpanded ? 'whitespace-pre-wrap' : 'line-clamp-3'}
                   >
-                    {post.excerpt
+                    {post.excerpt && !isPostBodyExpanded
                       ? renderHashtags(post.excerpt)
                       : <span dangerouslySetInnerHTML={{ __html: linkifyHashtags(safeHtml(post.content ?? '')) }} />}
                   </motion.div>
@@ -932,6 +939,22 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
             </Link>
           )}
         </Link>
+
+        {canExpandPostBody && (
+          <button
+            type="button"
+            aria-expanded={isPostBodyExpanded}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setIsPostBodyExpanded(expanded => !expanded);
+            }}
+            className="-mt-2 mb-3 text-sm font-semibold text-primary hover:text-primary/80 hover:underline"
+            data-testid={`button-post-body-${isPostBodyExpanded ? 'collapse' : 'expand'}-${post.id}`}
+          >
+            {isPostBodyExpanded ? 'See less' : 'See more'}
+          </button>
+        )}
 
         {post.hasPoll && (
           <div className="mt-3" onClick={e => e.stopPropagation()}>
