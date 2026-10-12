@@ -9,6 +9,7 @@ import {
   postSharesTable,
   repostsTable,
   savedPostsTable,
+  pollsTable,
 } from "@workspace/db/schema";
 import { eq, and, lte, isNull, or, sql } from "drizzle-orm";
 import { getCache, setCache, deleteCache } from "../../lib/cache";
@@ -99,6 +100,11 @@ async function _getUserWithCounts(userId: number, viewerId: number | null) {
 }
 
 export async function enrichPost(post: any, viewerId: number | null) {
+  const [poll] = await db
+    .select({ id: pollsTable.id })
+    .from(pollsTable)
+    .where(eq(pollsTable.postId, post.id))
+    .limit(1);
   const [likesResult] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(likesTable)
@@ -263,6 +269,7 @@ export async function enrichPost(post: any, viewerId: number | null) {
     commentsCount: commentsResult?.count ?? 0,
     sharesCount: sharesResult?.count ?? 0,
     repostsCount: repostsResult?.count ?? 0,
+    hasPoll: !!poll,
     isLiked,
     isReposted,
     isSaved,
