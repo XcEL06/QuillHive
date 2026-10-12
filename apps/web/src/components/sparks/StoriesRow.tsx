@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Plus } from "lucide-react";
 import { apiUrl, getStoredToken } from "@/lib/api";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface StoryGroup {
   authorId: number;
@@ -69,15 +70,10 @@ export function StoriesRow({ onOpenViewer }: { onOpenViewer: (group: StoryGroup)
                 : "bg-muted"
             }`}
           >
-            <img
-              src={group.authorAvatarUrl || "/images/default-avatar.png"}
-              alt={group.authorDisplayName}
-              onError={(event) => {
-                event.currentTarget.onerror = null;
-                event.currentTarget.src = "/images/logo-icon.png";
-              }}
-              className="h-full w-full rounded-full border-2 border-background object-cover"
-            />
+            <Avatar className="h-full w-full rounded-full border-2 border-background">
+              <AvatarImage src={group.authorAvatarUrl || undefined} alt={group.authorDisplayName} />
+              <AvatarFallback>{group.authorDisplayName.slice(0, 2).toUpperCase()}</AvatarFallback>
+            </Avatar>
           </div>
           <span className="max-w-[56px] truncate text-[11px] text-foreground">
             {group.authorDisplayName}

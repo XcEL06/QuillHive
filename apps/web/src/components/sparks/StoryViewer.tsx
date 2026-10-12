@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
-import { apiUrl, getStoredToken, mediaUrl } from "@/lib/api";
+import { ChevronLeft, ChevronRight, Eye, Heart, MessageCircle, Send, X } from "lucide-react";
+import { apiRequest, apiUrl, getStoredToken, mediaUrl } from "@/lib/api";
 import { formatPostTimestamp } from "@/lib/postTimestamp";
 import { useAuthStore } from "@/store/auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 
 interface StorySpark {
   id: number;
@@ -10,6 +13,15 @@ interface StorySpark {
   mediaUrl?: string | null;
   createdAt?: string | Date | null;
   viewCount?: number;
+  likesCount?: number;
+  isLiked?: boolean;
+}
+
+interface SparkComment {
+  id: number;
+  content: string;
+  createdAt: string;
+  author?: { id: number; username: string; displayName: string; avatarUrl?: string | null };
 }
 
 interface StoryGroup {
@@ -29,19 +41,33 @@ export function StoryViewer({
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [viewCount, setViewCount] = useState(0);
+  const [likesCount, setLikesCount] = useState(0);
+  const [isLiked, setIsLiked] = useState(false);
+  const [threadOpen, setThreadOpen] = useState(false);
+  const [comments, setComments] = useState<SparkComment[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [commentsError, setCommentsError] = useState(false);
+  const [submittingComment, setSubmittingComment] = useState(false);
+  const [liking, setLiking] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { user } = useAuthStore();
+  const { toast } = useToast();
   const current = group.sparks[index];
   const currentTimestamp = current?.createdAt ? formatPostTimestamp(current.createdAt) : null;
   const isOwner = user?.id === group.authorId;
 
   useEffect(() => {
-    if (!current) {
-      onClose();
-      return;
-    }
+    setLikesCount(current?.likesCount ?? 0);
+    setIsLiked(Boolean(current?.isLiked));
+    setThreadOpen(false);
+    setComments([]);
+    setCommentText("");
+    setCommentsError(false);
+  }, [current?.id]);
 
-    setProgress(0);
+  useEffect(() => {
+    if (!current) return;
     setViewCount(current.viewCount ?? 0);
     let active = true;
     const refreshViewCount = async () => {
@@ -61,6 +87,20 @@ export function StoryViewer({
       ? window.setInterval(() => void refreshViewCount(), 15_000)
       : null;
 
+    return () => {
+      active = false;
+      if (viewCountInterval) window.clearInterval(viewCountInterval);
+    };
+  }, [current, isOwner]);
+
+  useEffect(() => {
+    if (!current) {
+      onClose();
+      return;
+    }
+    setProgress(0);
+    if (threadOpen) return;
+
     const duration = 5000;
     const stepMs = 50;
     let elapsed = 0;
@@ -78,14 +118,13 @@ export function StoryViewer({
     }, stepMs);
 
     return () => {
-      active = false;
-      if (viewCountInterval) window.clearInterval(viewCountInterval);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [current, group.sparks.length, index, isOwner, onClose]);
+  }, [current, group.sparks.length, index, onClose, threadOpen]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement) return;
       if (event.key === "Escape") onClose();
       if (event.key === "ArrowLeft" && index > 0) setIndex((currentIndex) => currentIndex - 1);
       if (event.key === "ArrowRight") {
@@ -99,6 +138,81 @@ export function StoryViewer({
   }, [group.sparks.length, index, onClose]);
 
   if (!current) return null;
+
+  const toggleLike = async () => {
+    if (!user) {
+      toast({ title: "Sign in to like Sparks", variant: "destructive" });
+      return;
+    }
+    if (liking) return;
+    setLiking(true);
+    try {
+      const response = await apiRequest("POST", `/api/posts/${current.id}/like`);
+      const result = await response.json() as { liked: boolean; likesCount: number };
+      setIsLiked(result.liked);
+      setLikesCount(result.likesCount);
+    } catch (error) {
+      toast({
+        title: "Could not like Spark",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLiking(false);
+    }
+  };
+
+  const loadComments = async () => {
+    setLoadingComments(true);
+    setCommentsError(false);
+    try {
+      const response = await apiRequest("GET", `/api/posts/${current.id}/comments`);
+      setComments(await response.json() as SparkComment[]);
+    } catch (error) {
+      setCommentsError(true);
+      toast({
+        title: "Could not load Spark comments",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const toggleThread = () => {
+    if (threadOpen) {
+      setThreadOpen(false);
+      return;
+    }
+    setThreadOpen(true);
+    void loadComments();
+  };
+
+  const submitComment = async () => {
+    if (!user) {
+      toast({ title: "Sign in to comment on Sparks", variant: "destructive" });
+      return;
+    }
+    if (!commentText.trim() || submittingComment) return;
+    setSubmittingComment(true);
+    try {
+      await apiRequest("POST", `/api/posts/${current.id}/comments`, {
+        content: commentText.trim(),
+      });
+      setCommentText("");
+      await loadComments();
+      toast({ title: "Comment posted" });
+    } catch (error) {
+      toast({
+        title: "Could not post comment",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
 
   return (
     <div
@@ -130,15 +244,10 @@ export function StoryViewer({
       </button>
 
       <div className="absolute left-4 top-8 z-10 flex items-center gap-2 text-white">
-        <img
-          src={group.authorAvatarUrl || "/images/default-avatar.png"}
-          alt=""
-          className="h-8 w-8 rounded-full object-cover"
-          onError={(event) => {
-            event.currentTarget.onerror = null;
-            event.currentTarget.src = "/images/logo-icon.png";
-          }}
-        />
+        <Avatar className="h-8 w-8">
+          <AvatarImage src={group.authorAvatarUrl || undefined} alt={group.authorDisplayName} />
+          <AvatarFallback>{group.authorDisplayName.slice(0, 2).toUpperCase()}</AvatarFallback>
+        </Avatar>
         <div>
           <span className="block text-sm font-medium">{group.authorDisplayName}</span>
           {currentTimestamp && (
@@ -182,6 +291,87 @@ export function StoryViewer({
           <p className="text-xl font-medium leading-relaxed text-white">{current.content}</p>
         )}
       </div>
+
+      <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => void toggleLike()}
+          disabled={liking}
+          aria-pressed={isLiked}
+          className="gap-2 rounded-full bg-white/15 text-white hover:bg-white/25"
+          data-testid={`spark-like-${current.id}`}
+        >
+          <Heart className={`h-4 w-4 ${isLiked ? "fill-current text-rose-400" : ""}`} />
+          {likesCount}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={toggleThread}
+          aria-expanded={threadOpen}
+          className="gap-2 rounded-full bg-white/15 text-white hover:bg-white/25"
+          data-testid={`spark-comments-${current.id}`}
+        >
+          <MessageCircle className="h-4 w-4" />
+          Comments
+        </Button>
+      </div>
+
+      {threadOpen && (
+        <section
+          className="absolute inset-x-0 bottom-0 z-30 mx-auto flex max-h-[58vh] w-full max-w-md flex-col rounded-t-2xl border border-white/15 bg-background text-foreground shadow-2xl"
+          aria-label="Spark comments"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <header className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="font-semibold">Comments on this Spark</h2>
+            <button type="button" onClick={() => setThreadOpen(false)} aria-label="Close comments">
+              <X className="h-5 w-5" />
+            </button>
+          </header>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
+            {loadingComments ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">Loading comments…</p>
+            ) : commentsError ? (
+              <div className="py-4 text-center">
+                <p className="text-sm text-destructive">Could not load comments.</p>
+                <Button type="button" variant="ghost" size="sm" onClick={() => void loadComments()}>Try again</Button>
+              </div>
+            ) : comments.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">Be the first to comment.</p>
+            ) : comments.map((comment) => (
+              <article key={comment.id} className="flex gap-2.5">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={comment.author?.avatarUrl || undefined} alt="" />
+                  <AvatarFallback>{(comment.author?.displayName || comment.author?.username || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1 rounded-xl bg-muted/60 px-3 py-2">
+                  <p className="text-xs font-semibold">{comment.author?.displayName || comment.author?.username || "Member"}</p>
+                  <p className="whitespace-pre-wrap break-words text-sm">{comment.content}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+          <form
+            className="flex items-end gap-2 border-t border-border p-3"
+            onSubmit={(event) => { event.preventDefault(); void submitComment(); }}
+          >
+            <textarea
+              value={commentText}
+              onChange={(event) => setCommentText(event.target.value)}
+              placeholder={user ? "Write a comment…" : "Sign in to comment"}
+              maxLength={2000}
+              rows={2}
+              className="min-h-10 flex-1 resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm"
+              aria-label="Write a comment on this Spark"
+            />
+            <Button type="submit" size="icon" disabled={!commentText.trim() || submittingComment} aria-label="Post comment">
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        </section>
+      )}
     </div>
   );
 }

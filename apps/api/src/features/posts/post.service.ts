@@ -198,6 +198,7 @@ export async function listPosts(
     conds.push(inArray(postsTable.authorId, followingFiltered));
   }
   if (type) conds.push(eq(postsTable.type, type));
+  else conds.push(ne(postsTable.type, "spark"));
   if (hiddenAuthorIds.length > 0) conds.push(notInArray(postsTable.authorId, hiddenAuthorIds));
 
   // Pull a wider candidate set for multi-signal re-ranking.
@@ -713,7 +714,7 @@ export async function toggleLike(postId: number, userId: number) {
           type: "like",
           actorId: userId,
           postId,
-          message: `${liker?.displayName} liked your post`,
+          message: `${liker?.displayName} liked your ${post.type === "spark" ? "spark" : "post"}`,
           isRead: false,
         })
         .returning();
@@ -817,7 +818,7 @@ export async function createComment(postId: number, authorId: number, content: s
         type: "comment",
         actorId: authorId,
         postId,
-        message: `${author?.displayName} commented on your post`,
+        message: `${author?.displayName} commented on your ${post.type === "spark" ? "spark" : "post"}`,
         isRead: false,
       })
       .returning();

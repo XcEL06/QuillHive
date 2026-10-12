@@ -10,7 +10,7 @@ import {
   commentLikesTable, userTrustScoresTable, usersTable, boostRequestsTable,
   groupPostDetailsTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, inArray, notInArray, sql, isNull, gte, lte, gt, or } from "drizzle-orm";
+import { eq, and, desc, inArray, notInArray, sql, isNull, gte, lte, gt, or, ne } from "drizzle-orm";
 import { enrichPost } from "../profiles/profile.service";
 import { recordPostView } from "../analytics/analytics.service";
 import { updateUserTrustScoreSafe } from "../trust/trust.service";
@@ -242,13 +242,24 @@ export const listRecentSparks = async (req: Request, res: Response) => {
       postVisibilityCondition(viewerId),
     ))
     .orderBy(desc(postsTable.createdAt));
+  const sparkIds = rows.map(row => row.id);
+  const [likeCounts, viewerLikes] = sparkIds.length > 0
+    ? await Promise.all([
+        db.select({ postId: likesTable.postId, count: sql<number>`count(*)::int` })
+          .from(likesTable).where(inArray(likesTable.postId, sparkIds)).groupBy(likesTable.postId),
+        db.select({ postId: likesTable.postId })
+          .from(likesTable).where(and(inArray(likesTable.postId, sparkIds), eq(likesTable.userId, viewerId))),
+      ])
+    : [[], []];
+  const likesBySpark = new Map(likeCounts.map(row => [row.postId, Number(row.count)]));
+  const likedSparkIds = new Set(viewerLikes.map(row => row.postId));
 
   const stories = new Map<number, {
     authorId: number;
     authorUsername: string;
     authorDisplayName: string;
     authorAvatarUrl: string | null;
-    sparks: Array<{ id: number; content: string; mediaUrl: string | null; createdAt: Date; expiresAt: Date | null; viewed: boolean; viewCount?: number }>;
+    sparks: Array<{ id: number; content: string; mediaUrl: string | null; createdAt: Date; expiresAt: Date | null; viewed: boolean; viewCount?: number; likesCount: number; isLiked: boolean }>;
     hasUnviewed: boolean;
   }>();
 
@@ -272,6 +283,8 @@ export const listRecentSparks = async (req: Request, res: Response) => {
       expiresAt: row.expiresAt,
       viewed,
       viewCount: row.authorId === viewerId ? viewCount : undefined,
+      likesCount: likesBySpark.get(row.id) ?? 0,
+      isLiked: likedSparkIds.has(row.id),
     });
     story.hasUnviewed ||= !viewed;
     stories.set(row.authorId, story);
@@ -514,6 +527,7 @@ export const getFeed = async (req: Request, res: Response) => {
     .select(PostService.stablePostSelection)
     .from(postsTable)
     .where(and(
+      ne(postsTable.type, "spark"),
       eq(postsTable.isPublished, true),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
@@ -904,16 +918,13 @@ export const likeComment = async (req: Request, res: Response) => {
 };
 
 export const getTopLevelComments = async (req: Request, res: Response) => {
+  const viewerId = getViewerId(req);
   const postId = parseInt(req.params.id);
   if (isNaN(postId)) return res.status(400).json({ error: "Invalid post id" });
 
-  const comments = await db
-    .select()
-    .from(commentsTable)
-    .where(and(eq(commentsTable.postId, postId), isNull(commentsTable.parentCommentId)))
-    .orderBy(desc(commentsTable.createdAt))
-    .limit(50);
-
+  const comments = (await PostService.getComments(postId, viewerId))
+    .filter(comment => !comment.parentCommentId)
+    .slice(0, 50);
   return res.json(comments);
 };
 

@@ -560,7 +560,8 @@ function AuthenticatedHome() {
 
   const apiPosts = normalizePostsResponse(data) ?? [];
   const displayPosts =
-    feedSource === 'explore' ? (feedPosts ?? apiPosts) : apiPosts;
+    (feedSource === 'explore' ? (feedPosts ?? apiPosts) : apiPosts)
+      .filter(post => post.type !== 'spark');
   const adPlacementPostIds = showFeedAds
     ? getFeedAdPlacementPostIds(displayPosts)
     : new Set<number>();
