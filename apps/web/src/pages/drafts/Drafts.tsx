@@ -46,21 +46,52 @@ export default function Drafts() {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [requiresAuth, setRequiresAuth] = useState(false);
   const [deleting, setDeleting] = useState<Set<number>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
 
   const fetchDrafts = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setRequiresAuth(false);
     try {
-      const res = await fetch(apiUrl("/api/posts/my-drafts"), {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error("Failed to load drafts");
-      const data = await res.json();
-      setDrafts(Array.isArray(data?.drafts) ? data.drafts : []);
-    } catch {
-      setError("Could not load your drafts. Please try again.");
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const res = await fetch(apiUrl("/api/posts/my-drafts"), {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+
+          if (res.status === 401) {
+            setRequiresAuth(true);
+            setError("Your session has expired. Please sign in again to view your drafts.");
+            return;
+          }
+          if (!res.ok) {
+            if (res.status >= 500 && attempt === 0) {
+              await new Promise((resolve) => window.setTimeout(resolve, 250));
+              continue;
+            }
+            setError("Drafts are temporarily unavailable. Please try again.");
+            return;
+          }
+
+          const data = await res.json();
+          const result = Array.isArray(data) ? data : data?.drafts;
+          if (!Array.isArray(result)) {
+            setError("Drafts could not be read. Please try again.");
+            return;
+          }
+
+          setDrafts(result);
+          return;
+        } catch {
+          if (attempt === 1) {
+            setError("Could not connect to load drafts. Please try again.");
+          } else {
+            await new Promise((resolve) => window.setTimeout(resolve, 250));
+          }
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -139,7 +170,11 @@ export default function Drafts() {
           <div className="flex items-center gap-3 p-4 rounded-xl border border-destructive/30 bg-destructive/5 text-sm text-destructive">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
-            <Button size="sm" variant="ghost" className="ml-auto" onClick={fetchDrafts}>Retry</Button>
+            {requiresAuth ? (
+              <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setLocation("/login")}>Sign in</Button>
+            ) : (
+              <Button size="sm" variant="ghost" className="ml-auto" onClick={fetchDrafts}>Retry</Button>
+            )}
           </div>
         )}
 

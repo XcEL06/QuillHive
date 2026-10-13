@@ -127,7 +127,7 @@ export const listMyDrafts = async (req: Request, res: Response) => {
     .orderBy(desc(postsTable.updatedAt))
     .limit(50);
 
-  return res.json({ drafts });
+  return res.status(200).json({ drafts: drafts ?? [] });
 };
 
 export const deleteDraft = async (req: Request, res: Response) => {
