@@ -54,6 +54,7 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
   const queryClient = useQueryClient();
   const [liveMessageCount, setLiveMessageCount] = useState(0);
   const [baseMessageCount, setBaseMessageCount] = useState(0);
+  const wasInMessagesRef = useRef(location.startsWith("/messages"));
   const [trustTier, setTrustTier] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const t = useT();
@@ -88,6 +89,22 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
   useEffect(() => {
     if (location.startsWith("/messages")) { setLiveMessageCount(0); setBaseMessageCount(0); }
   }, [location]);
+
+  useEffect(() => {
+    const isInMessages = location.startsWith("/messages");
+    const justLeftMessages = wasInMessagesRef.current && !isInMessages;
+    wasInMessagesRef.current = isInMessages;
+    if (!justLeftMessages || !user) return;
+
+    let active = true;
+    void apiFetch("/api/messages/unread-count")
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (active && typeof data?.count === "number") setBaseMessageCount(data.count);
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [location, user?.id]);
 
   useSocketConnection();
   usePushNotifications();

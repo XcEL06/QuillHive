@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Briefcase, Users2, Handshake, X } from "lucide-react";
@@ -21,6 +21,7 @@ function hasDismissedSafetyNotice() {
 
 export default function Workspace() {
   const search = useSearch();
+  const [, setLocation] = useLocation();
   const creatorIncomeEnabled = useFeature("creator_income_enabled");
   const params = new URLSearchParams(search);
   const [tab, setTab] = useState(params.get("tab") ?? "work");
@@ -32,8 +33,18 @@ export default function Workspace() {
 
   useEffect(() => {
     const requestedTab = new URLSearchParams(search).get("tab") ?? "work";
-    setTab(!creatorIncomeEnabled && requestedTab === "talent" ? "work" : requestedTab);
+    const validTab = requestedTab === "work" || requestedTab === "talent" || requestedTab === "collaborate";
+    setTab(!validTab || (!creatorIncomeEnabled && requestedTab === "talent") ? "work" : requestedTab);
   }, [creatorIncomeEnabled, search]);
+
+  const handleTabChange = (nextTab: string) => {
+    const safeTab = !creatorIncomeEnabled && nextTab === "talent" ? "work" : nextTab;
+    setTab(safeTab);
+    const params = new URLSearchParams(search);
+    if (safeTab === "work") params.delete("tab");
+    else params.set("tab", safeTab);
+    setLocation(params.toString() ? `/workspace?${params.toString()}` : "/workspace");
+  };
 
   const dismissSafetyNotice = () => {
     try {
@@ -76,7 +87,7 @@ export default function Workspace() {
           </div>
         )}
 
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={tab} onValueChange={handleTabChange}>
           <TabsList className={`w-full grid ${creatorIncomeEnabled ? "grid-cols-3" : "grid-cols-2"} mb-6`}>
             <TabsTrigger value="work" className="gap-1.5">
               <Briefcase className="w-4 h-4" />

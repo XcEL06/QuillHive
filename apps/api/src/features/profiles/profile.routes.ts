@@ -144,5 +144,5 @@ usersRouter.get("/:username", ProfileController.getUserByUsername);
 usersRouter.get("/:username/creator", requireCreatorIncomeEnabled, ProfileController.getCreatorProfileByUsername);
 usersRouter.get("/:username/posts", ProfileController.getUserPosts);
 usersRouter.post("/:username/follow", ProfileController.followUser);
-usersRouter.get("/:username/followers", ProfileController.getFollowers);
-usersRouter.get("/:username/following", ProfileController.getFollowing);
+usersRouter.get("/:username/followers", requireAuth, ProfileController.getFollowers);
+usersRouter.get("/:username/following", requireAuth, ProfileController.getFollowing);

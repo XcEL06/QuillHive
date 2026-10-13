@@ -48,18 +48,32 @@ export default function Admin({ initialTab }: { initialTab?: AdminTabKey }) {
   const [, setLocation] = useLocation();
   const search = useSearch();
   const { toast } = useToast();
+  const role = (user as { role?: string } | null)?.role;
+  const canViewSection = (section: AdminTabKey) => {
+    if (section === "master" || section === "communications") return role === "super_admin";
+    if (section === "spamReview") return role === "admin" || role === "super_admin";
+    return true;
+  };
   const requestedTab = new URLSearchParams(search).get("section");
   const initialSection = initialTab ?? (requestedTab && VALID_ADMIN_TABS.has(requestedTab as AdminTabKey) ? requestedTab as AdminTabKey : "dashboard");
   const [activeTab, setActiveTab] = useState<AdminTabKey>(initialSection);
+  const visibleTab = canViewSection(activeTab) ? activeTab : "dashboard";
   useEffect(() => {
+    if (!user) return;
     if (initialTab) {
-      setActiveTab(initialTab);
+      const nextTab = canViewSection(initialTab) ? initialTab : "dashboard";
+      setActiveTab(nextTab);
+      if (nextTab !== initialTab) setLocation("/admin");
       return;
     }
     const section = new URLSearchParams(search).get("section");
-    if (section && VALID_ADMIN_TABS.has(section as AdminTabKey)) setActiveTab(section as AdminTabKey);
-  }, [initialTab, search]);
-  const role = (user as { role?: string } | null)?.role;
+    if (section && VALID_ADMIN_TABS.has(section as AdminTabKey)) {
+      const requestedSection = section as AdminTabKey;
+      const nextTab = canViewSection(requestedSection) ? requestedSection : "dashboard";
+      setActiveTab(nextTab);
+      if (nextTab !== requestedSection) setLocation("/admin");
+    }
+  }, [initialTab, role, search, setLocation, user]);
   if (!user || !["moderator", "admin", "super_admin"].includes(role ?? "")) {
     return <Redirect to="/" />;
   }
@@ -109,12 +123,12 @@ export default function Admin({ initialTab }: { initialTab?: AdminTabKey }) {
   return (
     <AdminConsoleShell
       groups={navGroups}
-      activeTab={activeTab}
+      activeTab={visibleTab}
       onSelectTab={selectSection}
       currentUser={currentUser}
       onLogout={signOut}
     >
-      {panels[activeTab]}
+      {panels[visibleTab]}
     </AdminConsoleShell>
   );
 }

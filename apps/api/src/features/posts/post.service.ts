@@ -493,7 +493,7 @@ export async function createPost(
   // Throws a typed error caught by the controller and surfaced as 409.
   if (!data.isOfficialPost && (data.isPublished ?? true) && !isSpark && cleanContent.length >= 200) {
     const { findSimilarPosts } = await import("../safety/originality.service");
-    const matches = await findSimilarPosts(cleanContent, null, 0.85, 5);
+    const matches = await findSimilarPosts(cleanContent, null, 0.85, 5, authorId);
     if (matches.length > 0) {
       const err = new Error(
         "This post is very similar to existing content. Try rewriting for originality."

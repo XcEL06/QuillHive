@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Search, Loader2 } from 'lucide-react';
-import { getStoredToken } from '@/lib/api';
+import { getApiErrorMessage, getStoredToken } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 interface SearchUser {
   id: number;
@@ -25,6 +26,7 @@ export default function NewConversationModal({ open, onClose, onConversationStar
   const [isSearching, setIsSearching] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [noResults, setNoResults] = useState(false);
+  const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -85,12 +87,21 @@ export default function NewConversationModal({ open, onClose, onConversationStar
         },
         body: JSON.stringify({ userId }),
       });
-      const data = await res.json();
-      if (data.conversationId) {
-        onConversationStart(data.conversationId);
-        onClose();
+      if (!res.ok) {
+        throw new Error(await getApiErrorMessage(res, 'Could not start this conversation. Please try again.'));
       }
-    } catch {
+      const data = await res.json() as { conversationId?: number };
+      if (typeof data.conversationId !== 'number' || !Number.isInteger(data.conversationId)) {
+        throw new Error('The conversation could not be started. Please try again.');
+      }
+      onConversationStart(data.conversationId);
+      onClose();
+    } catch (error) {
+      toast({
+        title: 'Could not start conversation',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     } finally {
       setIsStarting(false);
     }

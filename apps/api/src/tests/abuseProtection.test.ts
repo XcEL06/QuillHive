@@ -3,10 +3,10 @@ import { createSession } from "../lib/auth";
 import { preventSpam } from "../middleware/abuseProtection";
 
 describe("preventSpam", () => {
-  it("blocks an exact repost only during the short cooldown", async () => {
+  it("allows one immediate duplicate but blocks repeated copies during the short cooldown", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-13T00:00:00Z"));
-    const handler = preventSpam("posts", { max: 10, windowMs: 60_000, duplicateWindowMs: 30_000, duplicateThreshold: 1 });
+    const handler = preventSpam("posts", { max: 10, windowMs: 60_000, duplicateWindowMs: 30_000, duplicateThreshold: 2 });
     const next = vi.fn() as any;
     const res = {
       status: vi.fn().mockReturnThis(),
@@ -22,12 +22,14 @@ describe("preventSpam", () => {
     try {
       await handler(baseReq, res, next);
       await handler({ ...baseReq, body: { content: "same content from a legit user" } }, res, next);
+      expect(next).toHaveBeenCalledTimes(2);
+      await handler({ ...baseReq, body: { content: "same content from a legit user" } }, res, next);
       expect(res.status).toHaveBeenCalledWith(429);
       expect(res.json).toHaveBeenCalledWith({ error: "You already posted this recently. You can repost after 30 seconds." });
 
       await vi.advanceTimersByTimeAsync(30_001);
       await handler({ ...baseReq, body: { content: "same content from a legit user" } }, res, next);
-      expect(next).toHaveBeenCalledTimes(2);
+      expect(next).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
     }

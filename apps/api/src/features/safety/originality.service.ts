@@ -48,13 +48,15 @@ export async function indexPostFingerprint(postId: number, content: string): Pro
 
 /**
  * Find similar posts. Returns up to `limit` posts whose Jaccard-ish overlap
- * exceeds `threshold` (0..1). Excludes `excludePostId`.
+ * exceeds `threshold` (0..1). Excludes the requested post, deleted/unpublished
+ * posts, and optionally all posts from one author.
  */
 export async function findSimilarPosts(
   content: string,
   excludePostId: number | null = null,
   threshold = 0.85,
   limit = 5,
+  excludeAuthorId: number | null = null,
 ): Promise<Array<{ postId: number; similarity: number }>> {
   const hashes = shingleHashes(content);
   if (hashes.length === 0) return [];
@@ -62,11 +64,14 @@ export async function findSimilarPosts(
   const rows = await db
     .select({ postId: postFingerprintsTable.postId, count: sql<number>`count(*)::int` })
     .from(postFingerprintsTable)
-    .where(
-      excludePostId
-        ? and(inArray(postFingerprintsTable.shingle, hashes), ne(postFingerprintsTable.postId, excludePostId))
-        : inArray(postFingerprintsTable.shingle, hashes),
-    )
+    .innerJoin(postsTable, eq(postsTable.id, postFingerprintsTable.postId))
+    .where(and(
+      inArray(postFingerprintsTable.shingle, hashes),
+      excludePostId ? ne(postFingerprintsTable.postId, excludePostId) : undefined,
+      excludeAuthorId ? ne(postsTable.authorId, excludeAuthorId) : undefined,
+      eq(postsTable.isDeleted, false),
+      eq(postsTable.isPublished, true),
+    ))
     .groupBy(postFingerprintsTable.postId)
     .orderBy(sql`count(*) desc`)
     .limit(limit * 4);

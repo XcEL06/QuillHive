@@ -115,7 +115,7 @@ postsRouter.post("/", preventSpam("posts", {
   max: 8,
   windowMs: 60_000,
   duplicateWindowMs: 30_000,
-  duplicateThreshold: 1,
+  duplicateThreshold: 2,
   ipMax: 60,
   resolvePolicy: resolvePostSpamPolicy,
 }), validateBody(postBodySchema), PostController.createPost);
