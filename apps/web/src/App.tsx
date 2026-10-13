@@ -151,8 +151,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isInitializing } = useAuthStore();
   const [location, setLocation] = useLocation();
 
-  if (isInitializing) return null;
-
   useEffect(() => {
     if (!isAuthenticated) {
       if (location !== "/" && location !== "/login" && location !== "/explore" && !isPublicRoute(location)) {
@@ -180,6 +178,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isAuthenticated, location, setLocation]);
 
+  if (isInitializing) return null;
   return <>{children}</>;
 }
 

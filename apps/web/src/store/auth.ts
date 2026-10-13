@@ -31,27 +31,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setAuth: (user, token) => {
     if (!user) {
       clearStoredToken();
-      set({ user: null, token: null, isAuthenticated: false });
+      set({ user: null, token: null, isAuthenticated: false, isInitializing: false });
       return;
     }
-    set({ user, token, isAuthenticated: true });
+    setStoredToken(token);
+    set({ user, token, isAuthenticated: true, isInitializing: false });
   },
 
   setUser: (user) => {
-    set({ user, isAuthenticated: !!user });
+    const nextToken = user ? getStoredToken() : null;
+    set({ user, isAuthenticated: !!user, token: nextToken, isInitializing: false });
   },
 
   setInitializing: (v) => set({ isInitializing: v }),
 
   logout: () => {
     clearStoredToken();
-    set({ user: null, token: null, isAuthenticated: false });
+    set({ user: null, token: null, isAuthenticated: false, isInitializing: false });
   },
 
   refreshUser: async () => {
     const token = get().token ?? getStoredToken();
+    set({ isInitializing: true });
     if (!token) {
-      set({ user: null, isAuthenticated: false });
+      set({ user: null, isAuthenticated: false, token: null, isInitializing: false });
       return;
     }
     try {
@@ -85,28 +88,28 @@ export const useAuthStore = create<AuthState>((set, get) => ({
               const user: AuthUser = await retry.json();
               if (!user) {
                 clearStoredToken();
-                set({ user: null, token: null, isAuthenticated: false });
+                set({ user: null, token: null, isAuthenticated: false, isInitializing: false });
                 return;
               }
-              set({ user, isAuthenticated: true, token: refreshed.token });
+              set({ user, isAuthenticated: true, token: refreshed.token, isInitializing: false });
               return;
             }
           }
         }
         clearStoredToken();
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, token: null, isAuthenticated: false, isInitializing: false });
         return;
       }
       const user: AuthUser = await res.json();
       if (!user) {
         clearStoredToken();
-        set({ user: null, token: null, isAuthenticated: false });
+        set({ user: null, token: null, isAuthenticated: false, isInitializing: false });
         return;
       }
-      set({ user, isAuthenticated: true, token });
+      set({ user, isAuthenticated: true, token, isInitializing: false });
     } catch (error) {
       console.warn("[auth] Session check unavailable; keeping stored credentials for retry", error);
-      set({ user: null, token: getStoredToken(), isAuthenticated: false });
+      set({ user: null, token: getStoredToken(), isAuthenticated: false, isInitializing: false });
     }
   },
 }));
