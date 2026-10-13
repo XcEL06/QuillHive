@@ -34,18 +34,29 @@ interface PollData {
 }
 
 export function samePollText(left: string, right: string): boolean {
+  const decodeCodePoint = (value: string, radix: number) => {
+    const codePoint = Number.parseInt(value, radix);
+    return codePoint <= 0x10ffff && !(codePoint >= 0xd800 && codePoint <= 0xdfff)
+      ? String.fromCodePoint(codePoint)
+      : '';
+  };
   const normalize = (value: string) => value
     .replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;|&ldquo;|&rdquo;/gi, '"')
+    .replace(/&#39;|&apos;|&lsquo;|&rsquo;/gi, "'")
+    .replace(/&#(\d+);/g, (_, code: string) => decodeCodePoint(code, 10))
+    .replace(/&#x([\da-f]+);/gi, (_, code: string) => decodeCodePoint(code, 16))
     .replace(/\s+/g, ' ')
     .trim()
     .toLocaleLowerCase();
-  return normalize(left) === normalize(right);
+  const normalizedLeft = normalize(left);
+  const normalizedRight = normalize(right);
+  return normalizedLeft === normalizedRight ||
+    (normalizedLeft.length === 180 && normalizedRight.startsWith(normalizedLeft));
 }
 
 export function PollBlock({ postId, postTitle = '', postContent = '' }: { postId: number; postTitle?: string | null; postContent?: string | null }) {

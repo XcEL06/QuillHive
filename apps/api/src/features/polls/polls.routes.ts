@@ -205,6 +205,12 @@ pollsRouter.patch("/:id", async (req, res) => {
       question: parsed.data.question,
       allowMultiple: parsed.data.allowMultiple,
     }).where(eq(pollsTable.id, pollId));
+    await tx.update(postsTable).set({
+      title: parsed.data.question.slice(0, 180),
+      content: parsed.data.question,
+      excerpt: parsed.data.question,
+      updatedAt: new Date(),
+    }).where(eq(postsTable.id, poll.postId));
     if (optionsChanged) {
       await tx.delete(pollOptionsTable).where(eq(pollOptionsTable.pollId, pollId));
       await tx.insert(pollOptionsTable).values(options.map((label, position) => ({
