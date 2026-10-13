@@ -1,11 +1,12 @@
 import { db } from "@workspace/db";
 import { postsTable, usersTable, boostRequestsTable } from "@workspace/db/schema";
-import { and, eq, lte, isNotNull, lt } from "drizzle-orm";
+import { and, eq, lte, isNotNull, lt, isNull, or } from "drizzle-orm";
 import { logger } from "../../lib/logger";
 import { runScheduledJob } from "./scheduledJobRunner";
 import { addJob } from "../../lib/queue/queue";
 import { expireHighlights } from "../highlights/highlights.routes";
 import { SPARK_LIFETIME_MS } from "../posts/postExpiry";
+import { getWeeklyDigestIntervalMs } from "../email/emailSendGuard";
 
 export async function publishDuePosts(): Promise<void> {
   try {
@@ -112,10 +113,17 @@ export async function expireOldSparks(): Promise<void> {
 
 export async function sendWeeklyDigests(): Promise<void> {
   try {
+    const cooldownMs = (await import("../email/emailSendGuard")).getWeeklyDigestIntervalMs();
+    const cutoff = new Date(Date.now() - cooldownMs);
     const users = await db
       .select({ id: usersTable.id })
       .from(usersTable)
-      .where(and(eq(usersTable.emailDigestEnabled, true), eq(usersTable.isDeleted, false), eq(usersTable.isBanned, false)));
+      .where(and(
+        eq(usersTable.emailDigestEnabled, true),
+        eq(usersTable.isDeleted, false),
+        eq(usersTable.isBanned, false),
+        or(isNull(usersTable.lastWeeklyDigestAt), lt(usersTable.lastWeeklyDigestAt, cutoff)),
+      ));
 
     for (const user of users) {
       await addJob("send_digest_email", { userId: user.id });
@@ -348,6 +356,8 @@ async function sendWeeklyCreatorDigests(): Promise<void> {
   const { usersTable } = await import("@workspace/db/schema");
   const { eq, and } = await import("drizzle-orm");
   const { getPublicAppUrl, getEmailUnsubscribeUrl, sendEmail } = await import("../email/email.service");
+  const { weeklyCreatorDigestEmailHtml } = await import("../email/email.templates");
+  const { getWeeklyDigestIntervalMs, sendEmailOncePerPeriod } = await import("../email/emailSendGuard");
   const { getWeeklyReport } = await import("../analytics/topicAnalytics.service");
 
   const creators = await _db
@@ -369,53 +379,71 @@ async function sendWeeklyCreatorDigests(): Promise<void> {
     .limit(500);
 
   const appUrl = getPublicAppUrl();
+  const cooldownMs = getWeeklyDigestIntervalMs();
+  const cutoff = new Date(Date.now() - cooldownMs);
   let sent = 0;
 
   for (const creator of creators) {
     try {
+      if (!creator.emailDigestEnabled) continue;
+      const [eligible] = await _db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(and(
+          eq(usersTable.id, creator.id),
+          or(isNull(usersTable.lastWeeklyDigestAt), lt(usersTable.lastWeeklyDigestAt, cutoff)),
+        ));
+      if (!eligible) continue;
+
       const report = await getWeeklyReport(creator.id);
       if (report.totalViews === 0 && report.newFollowers === 0) continue;
 
-      const subject = report.newFollowers > 0
-        ? `${creator.displayName}, you gained ${report.newFollowers} new follower${report.newFollowers !== 1 ? "s" : ""} this week!`
-        : `Your weekly QuillHive community recap`;
-
-      const topPostLine = report.topPost
-        ? `Your best-performing post: "${report.topPost.title || "Untitled"}" with ${report.topPost.views || 0} views.`
-        : "";
-
+      const unsubscribeUrl = getEmailUnsubscribeUrl(creator.id);
       const text = [
         `Hi ${creator.displayName},`,
-        ``,
-        `Here's your weekly summary on QuillHive:`,
-        ``,
-        `📊 This week's highlights:`,
-        `• ${report.totalViews} post views`,
-        `• ${report.newFollowers} new followers`,
-        `• ${report.postsPublished} posts published`,
-        ``,
-        topPostLine,
-        ``,
-        `Keep sharing - your hive is growing.`,
-        ``,
-        `View your full dashboard: ${appUrl}/dashboard`,
-        ``,
-        `- The QuillHive Team`,
-        ``,
-        `To unsubscribe from weekly digests, visit ${appUrl}/settings`,
-        `Unsubscribe now: ${getEmailUnsubscribeUrl(creator.id)}`,
-      ].filter(line => line !== undefined).join("\n");
+        "",
+        "Here is your QuillHive creator recap for the week:",
+        "",
+        "THIS WEEK'S HIGHLIGHTS",
+        `Post views: ${report.totalViews.toLocaleString()}`,
+        `New followers: ${report.newFollowers.toLocaleString()}`,
+        `Posts published: ${report.postsPublished.toLocaleString()}`,
+        ...(report.topPost ? [
+          "",
+          "YOUR STANDOUT POST",
+          `"${report.topPost.title || "Untitled"}" — ${report.topPost.views || 0} views`,
+        ] : []),
+        "",
+        `View your creator dashboard: ${appUrl}/dashboard`,
+        `Manage email settings: ${appUrl}/settings`,
+        `Unsubscribe: ${unsubscribeUrl}`,
+        "",
+        "Keep sharing your voice; your hive is growing.",
+        "The QuillHive team",
+      ].join("\n");
 
+      const didSend = await sendEmailOncePerPeriod(creator.id, "weeklyDigest", cooldownMs, async () => {
         const result = await sendEmail({
           to: creator.email,
-          subject,
+          subject: "Your weekly QuillHive creator recap",
           text,
+          html: weeklyCreatorDigestEmailHtml({
+            displayName: creator.displayName,
+            totalViews: report.totalViews,
+            newFollowers: report.newFollowers,
+            postsPublished: report.postsPublished,
+            topPost: report.topPost,
+            appUrl,
+            unsubscribeUrl,
+          }),
           headers: {
-            "List-Unsubscribe": `<${getEmailUnsubscribeUrl(creator.id)}>`,
+            "List-Unsubscribe": `<${unsubscribeUrl}>`,
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
           },
         });
-      if (result.ok) sent += 1;
+        if (!result.ok) throw new Error(result.error || "Weekly creator digest delivery failed.");
+      });
+      if (didSend) sent += 1;
       await new Promise(resolve => setTimeout(resolve, 100));
     } catch (err) {
       logger.error({ err, userId: creator.id, name: "sendWeeklyCreatorDigests" }, "Weekly creator digest failed for user");
@@ -432,6 +460,7 @@ async function sendNurtureEmails(): Promise<void> {
   const { sendEmail } = await import("../email/email.service");
   const { day3NurtureHtml, day7NurtureHtml } = await import("../email/email.templates");
   const { getEmailUnsubscribeUrl } = await import("../email/email.service");
+  const { sendEmailOncePerPeriod } = await import("../email/emailSendGuard");
 
   const appUrl = (process.env.PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:5173").replace(/\/$/, "");
   let sent = 0;
@@ -443,19 +472,24 @@ async function sendNurtureEmails(): Promise<void> {
     WHERE email_verified = true
       AND email_digest_enabled = true
       AND is_deleted = false
+      AND day3_nurture_sent_at IS NULL
       AND created_at BETWEEN NOW() - INTERVAL '3 days 30 minutes' AND NOW() - INTERVAL '2 days 23 hours 30 minutes'
     LIMIT 200
   `);
 
   for (const u of day3Users.rows as Array<{ id: number; email: string; displayName: string; username: string }>) {
     try {
-      const result = await sendEmail({
-        to: u.email,
-        subject: `${u.displayName}, day 3 check-in from QuillHive 👋`,
-        html: day3NurtureHtml({ displayName: u.displayName, username: u.username, appUrl, unsubscribeUrl: getEmailUnsubscribeUrl(u.id) }),
-        text: `Hi ${u.displayName},\n\nIt's been 3 days! Members who share in their first week are 3× more likely to build lasting connections.\n\nShare something today: ${appUrl}/write\n\nUnsubscribe: ${getEmailUnsubscribeUrl(u.id)}\n\n- QuillHive`,
+      const unsubscribeUrl = getEmailUnsubscribeUrl(u.id);
+      const didSend = await sendEmailOncePerPeriod(u.id, "day3Nurture", null, async () => {
+        const result = await sendEmail({
+          to: u.email,
+          subject: "Your first week on QuillHive: a day 3 check-in",
+          html: day3NurtureHtml({ displayName: u.displayName, username: u.username, appUrl, unsubscribeUrl }),
+          text: `Hi ${u.displayName},\n\nIt's been 3 days since you joined QuillHive. Sharing your first post is a great way to start building connections.\n\nWrite a post: ${appUrl}/write\nManage email settings: ${appUrl}/settings\nUnsubscribe: ${unsubscribeUrl}\n\nKeep sharing your voice,\nThe QuillHive team`,
+        });
+        if (!result.ok) throw new Error(result.error || "Day 3 nurture email delivery failed.");
       });
-      if (result.ok) sent += 1;
+      if (didSend) sent += 1;
       await new Promise((r) => setTimeout(r, 80));
     } catch (err) {
       logger.error({ err, userId: u.id, name: "sendNurtureEmails" }, "Day 3 nurture email failed for user");
@@ -471,25 +505,30 @@ async function sendNurtureEmails(): Promise<void> {
     WHERE u.email_verified = true
       AND u.email_digest_enabled = true
       AND u.is_deleted = false
+      AND u.day7_nurture_sent_at IS NULL
       AND u.created_at BETWEEN NOW() - INTERVAL '7 days 30 minutes' AND NOW() - INTERVAL '6 days 23 hours 30 minutes'
     LIMIT 200
   `);
 
   for (const u of day7Users.rows as Array<{ id: number; email: string; displayName: string; username: string; post_count: string; follower_count: string }>) {
     try {
-      const result = await sendEmail({
-        to: u.email,
-        subject: `One week on QuillHive - your progress, ${u.displayName}`,
-        html: day7NurtureHtml({
-          displayName: u.displayName,
-          postCount: parseInt(u.post_count, 10) || 0,
-          followerCount: parseInt(u.follower_count, 10) || 0,
-          appUrl,
-          unsubscribeUrl: getEmailUnsubscribeUrl(u.id),
-        }),
-        text: `One week in! You've published ${u.post_count} posts and earned ${u.follower_count} followers. Keep going: ${appUrl}/dashboard\n\nUnsubscribe: ${getEmailUnsubscribeUrl(u.id)}\n\n- QuillHive`,
+      const unsubscribeUrl = getEmailUnsubscribeUrl(u.id);
+      const didSend = await sendEmailOncePerPeriod(u.id, "day7Nurture", null, async () => {
+        const result = await sendEmail({
+          to: u.email,
+          subject: "Your first week on QuillHive: your progress",
+          html: day7NurtureHtml({
+            displayName: u.displayName,
+            postCount: parseInt(u.post_count, 10) || 0,
+            followerCount: parseInt(u.follower_count, 10) || 0,
+            appUrl,
+            unsubscribeUrl,
+          }),
+          text: `Your first week on QuillHive\n\nYou've published ${u.post_count} posts and earned ${u.follower_count} followers. Keep building your momentum: ${appUrl}/dashboard\n\nManage email settings: ${appUrl}/settings\nUnsubscribe: ${unsubscribeUrl}\n\nKeep sharing your voice,\nThe QuillHive team`,
+        });
+        if (!result.ok) throw new Error(result.error || "Day 7 nurture email delivery failed.");
       });
-      if (result.ok) sent += 1;
+      if (didSend) sent += 1;
       await new Promise((r) => setTimeout(r, 80));
     } catch (err) {
       logger.error({ err, userId: u.id, name: "sendNurtureEmails" }, "Day 7 nurture email failed for user");
@@ -753,6 +792,7 @@ function scheduleJob(jobName: string, job: () => Promise<unknown>): void {
 
 export function startScheduling(): void {
   if (schedulingTimer) return;
+  const weeklyDigestIntervalMs = getWeeklyDigestIntervalMs();
   if (process.env.NODE_ENV === "production" && process.env.API_URL) {
     setInterval(() => {
       fetch(`${process.env.API_URL}/api/healthz`).catch(() => {});
@@ -777,7 +817,7 @@ export function startScheduling(): void {
       lastAffinityUpdate = now;
       scheduleJob("updateUserTopicAffinity", updateUserTopicAffinity);
     }
-    if (now - lastWeeklyDigest > 7 * 24 * 60 * 60 * 1000) {
+    if (now - lastWeeklyDigest > weeklyDigestIntervalMs) {
       lastWeeklyDigest = now;
       scheduleJob("sendWeeklyCreatorDigests", sendWeeklyCreatorDigests);
     }
@@ -801,7 +841,7 @@ export function startScheduling(): void {
   }, 60_000);
   scheduleJob("publishDuePosts", publishDuePosts);
 
-  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const WEEK_MS = weeklyDigestIntervalMs;
   digestTimer = setInterval(() => { scheduleJob("sendWeeklyDigests", sendWeeklyDigests); }, WEEK_MS);
 
   // Highlight cleanup every 5 minutes

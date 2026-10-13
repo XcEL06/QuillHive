@@ -128,6 +128,41 @@ export function weeklyDigestEmailHtml(opts: {
   return baseLayout(`Your ${brand} weekly digest`, `Top posts from creators you follow on ${brand}`, body, opts.unsubscribeUrl);
 }
 
+export function weeklyCreatorDigestEmailHtml(opts: {
+  displayName: string;
+  totalViews: number;
+  newFollowers: number;
+  postsPublished: number;
+  topPost?: { title: string | null; views: number } | null;
+  appUrl: string;
+  unsubscribeUrl: string;
+}): string {
+  const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character] ?? character);
+  const name = escapeHtml(opts.displayName);
+  const topPostTitle = opts.topPost ? escapeHtml(opts.topPost.title || "Untitled") : "";
+  const body = `
+    <h1 style="margin:0 0 12px;font-size:26px;font-weight:800;color:#fafafa;">Your weekly creator recap</h1>
+    <p style="margin:0 0 24px;color:#a1a1aa;font-size:15px;line-height:1.7;">Hi ${name}, here's what happened around your voice on ${brand} this week.</p>
+    <h2 style="margin:0 0 12px;font-size:15px;font-weight:700;color:#fafafa;">This week's highlights</h2>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-bottom:24px;">
+      <tr><td style="padding:10px 0;border-bottom:1px solid #27272a;color:#a1a1aa;">Post views</td><td align="right" style="padding:10px 0;border-bottom:1px solid #27272a;color:#fafafa;font-weight:700;">${opts.totalViews.toLocaleString()}</td></tr>
+      <tr><td style="padding:10px 0;border-bottom:1px solid #27272a;color:#a1a1aa;">New followers</td><td align="right" style="padding:10px 0;border-bottom:1px solid #27272a;color:#fafafa;font-weight:700;">${opts.newFollowers.toLocaleString()}</td></tr>
+      <tr><td style="padding:10px 0;color:#a1a1aa;">Posts published</td><td align="right" style="padding:10px 0;color:#fafafa;font-weight:700;">${opts.postsPublished.toLocaleString()}</td></tr>
+    </table>
+    ${opts.topPost ? `<h2 style="margin:0 0 8px;font-size:15px;font-weight:700;color:#fafafa;">Your standout post</h2><p style="margin:0 0 20px;color:#a1a1aa;font-size:14px;line-height:1.6;"><strong style="color:#fafafa;">${topPostTitle}</strong><br />${opts.topPost.views.toLocaleString()} views this week</p>` : ""}
+    <div style="text-align:center;">${primaryButton(`${opts.appUrl}/dashboard`, "View your creator dashboard")}</div>
+    <p style="margin:24px 0 0;color:#a1a1aa;font-size:14px;line-height:1.7;">Keep sharing your voice; your hive is growing.<br /><strong style="color:#fafafa;">The ${brand} team</strong></p>
+    <p style="margin:20px 0 0;color:#71717a;font-size:12px;text-align:center;"><a href="${opts.appUrl}/settings" style="color:#a1a1aa;">Manage email settings</a> · <a href="${opts.unsubscribeUrl}" style="color:#a1a1aa;">Unsubscribe</a></p>
+  `;
+  return baseLayout("Your weekly creator recap", "A clear look at your QuillHive growth this week.", body, opts.unsubscribeUrl);
+}
+
 export function welcomeEmailHtml(opts: { displayName: string; username: string; appUrl?: string; verificationUrl?: string }): string {
   const url = opts.appUrl || appUrl;
   const body = `
@@ -190,6 +225,7 @@ export function day3NurtureHtml(opts: { displayName: string; username: string; a
       <li>A question you've been thinking about</li>
     </ul>
     <div style="text-align:center;">${primaryButton(`${url}/write`, "Write something today")}</div>
+    <p style="margin:20px 0 0;color:#71717a;font-size:12px;text-align:center;"><a href="${url}/settings" style="color:#a1a1aa;">Manage email settings</a></p>
   `;
   return baseLayout(`Day 3: ${opts.displayName}, don't miss this window`, `Creators who post in week 1 grow 3× faster.`, body, opts.unsubscribeUrl);
 }
@@ -212,6 +248,7 @@ export function day7NurtureHtml(opts: { displayName: string; postCount: number; 
     </p>
     `}
     <div style="text-align:center;">${primaryButton(`${url}/dashboard`, "View your Growth Score")}</div>
+    <p style="margin:20px 0 0;color:#71717a;font-size:12px;text-align:center;"><a href="${url}/settings" style="color:#a1a1aa;">Manage email settings</a></p>
   `;
   return baseLayout(`Week 1 wrap-up - how are you doing?`, `Your first week on ${brand} - let's see your progress.`, body, opts.unsubscribeUrl);
 }

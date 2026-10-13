@@ -130,6 +130,9 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"is_official_account" boolean DEFAULT false NOT NULL,
 	"hire_me_enabled" boolean DEFAULT false NOT NULL,
 	"email_digest_enabled" boolean DEFAULT true NOT NULL,
+	"last_weekly_digest_at" timestamp,
+	"day3_nurture_sent_at" timestamp,
+	"day7_nurture_sent_at" timestamp,
 	"topic_notification_enabled" boolean DEFAULT true NOT NULL,
 	"notification_prefs" jsonb,
 	"two_factor_enabled" boolean DEFAULT false NOT NULL,
@@ -1338,6 +1341,9 @@ EXCEPTION
     RAISE NOTICE 'Skipped column id on blocked_email_attempts: %', SQLERRM;
 END
 $schema_sync$;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "last_weekly_digest_at" timestamp;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "day3_nurture_sent_at" timestamp;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "day7_nurture_sent_at" timestamp;
 DO $schema_sync$
 BEGIN
   IF EXISTS (

@@ -89,7 +89,7 @@ async function processJob(job: Job): Promise<void> {
           userTrustScoresTable, writingStreaksTable, notificationsTable,
         } = await import("@workspace/db/schema");
         const { eq, and, gte, gt, sql, desc, count } = await import("drizzle-orm");
-        const { getEmailUnsubscribeUrl } = await import("../../features/email/email.service");
+        const { getEmailUnsubscribeUrl, getPublicAppUrl } = await import("../../features/email/email.service");
 
         const [user] = await db
           .select({
@@ -199,7 +199,7 @@ async function processJob(job: Job): Promise<void> {
           cta = `Your post "${(topPost.title ?? "").slice(0, 40)}" is resonating. Build on that momentum.`;
         }
 
-        const appUrl = process.env.APP_URL ?? "https://quillhive.app";
+        const appUrl = getPublicAppUrl();
         const name = user.displayName ?? user.username;
         const unsubscribeUrl = getEmailUnsubscribeUrl(user.id);
 
@@ -279,6 +279,7 @@ async function processJob(job: Job): Promise<void> {
       <p class="cta-text">${cta}</p>
       <a href="${appUrl}" class="cta-btn">Open QuillHive →</a>
     </div>
+    <p style="color:#525252;font-size:13px;line-height:1.6;text-align:center">Keep sharing your voice; your hive is growing.<br /><strong>The QuillHive team</strong></p>
   </div>
   <div class="footer">
     <p>You're receiving this because you have weekly reports enabled.<br />
@@ -289,17 +290,25 @@ async function processJob(job: Job): Promise<void> {
 </html>`;
 
         const { sendEmail } = await import("../../features/email/email.service");
-        await sendEmail({
-          to: user.email,
-          subject: `Your QuillHive recap: ${weekViews} views${newFollowers > 0 ? `, ${newFollowers} new followers` : ""}`,
-          html,
-          headers: {
-            "List-Unsubscribe": `<${unsubscribeUrl}>`,
-            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-          },
+        const { getWeeklyDigestIntervalMs, sendEmailOncePerPeriod } = await import("../../features/email/emailSendGuard");
+        const didSend = await sendEmailOncePerPeriod(userId, "weeklyDigest", getWeeklyDigestIntervalMs(), async () => {
+          const result = await sendEmail({
+            to: user.email,
+            subject: `Your QuillHive weekly recap: ${weekViews} views${newFollowers > 0 ? `, ${newFollowers} new followers` : ""}`,
+            html,
+            text: `Your QuillHive weekly recap\n\nThis week's highlights:\n- ${weekViews} post views\n- ${newFollowers} new followers\n- ${unreadCount} new notifications\n${topPost ? `\nStandout post: ${topPost.title ?? "Untitled"}\n` : ""}\nOpen your dashboard: ${appUrl}/dashboard\nManage email settings: ${appUrl}/settings\nUnsubscribe: ${unsubscribeUrl}\n\nKeep sharing your voice; your hive is growing.\nThe QuillHive team`,
+            headers: {
+              "List-Unsubscribe": `<${unsubscribeUrl}>`,
+              "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+            },
+          });
+          if (!result.ok) throw new Error(result.error || "Weekly digest delivery failed.");
         });
 
-        logger.info({ userId, weekViews, newFollowers }, "Weekly report sent");
+        logger.info(
+          { userId, weekViews, newFollowers },
+          didSend ? "Weekly report sent" : "Weekly report skipped because a recent digest was already sent",
+        );
       } catch (err) {
         logger.error({ err, userId }, "Failed to send weekly report");
         throw err;
