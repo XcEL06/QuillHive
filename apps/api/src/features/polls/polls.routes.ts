@@ -20,6 +20,12 @@ const voteSchema = z.object({
   optionIds: z.array(z.number().int().positive()).min(1).max(8),
 });
 
+const updatePollSchema = z.object({
+  question: z.string().trim().min(3).max(280),
+  options: z.array(z.string().trim().min(1).max(120)).min(2).max(8),
+  allowMultiple: z.boolean(),
+});
+
 async function loadPollWithResults(pollId: number, viewerId: number | null) {
   const [poll] = await db.select().from(pollsTable).where(eq(pollsTable.id, pollId));
   if (!poll) return null;
@@ -154,6 +160,62 @@ pollsRouter.post("/", async (req, res) => {
 
   const result = await loadPollWithResults(poll.id, userId);
   return res.status(201).json(result);
+});
+
+pollsRouter.patch("/:id", async (req, res) => {
+  const userId = getViewerId(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+  const pollId = Number(req.params.id);
+  if (!Number.isInteger(pollId) || pollId <= 0) {
+    return res.status(400).json({ error: "Invalid poll id" });
+  }
+
+  const parsed = updatePollSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid poll", issues: parsed.error.issues });
+  }
+  const options = parsed.data.options.map((label) => label.trim());
+  if (new Set(options.map((label) => label.toLocaleLowerCase())).size !== options.length) {
+    return res.status(400).json({ error: "Poll options must be unique" });
+  }
+
+  const [poll] = await db.select().from(pollsTable).where(eq(pollsTable.id, pollId));
+  if (!poll) return res.status(404).json({ error: "Poll not found" });
+  if (poll.authorId !== userId) return res.status(403).json({ error: "Forbidden" });
+
+  const currentOptions = await db
+    .select({ label: pollOptionsTable.label })
+    .from(pollOptionsTable)
+    .where(eq(pollOptionsTable.pollId, pollId))
+    .orderBy(pollOptionsTable.position);
+  const [{ voteCount }] = await db
+    .select({ voteCount: sql<number>`count(*)::int` })
+    .from(pollVotesTable)
+    .where(eq(pollVotesTable.pollId, pollId));
+  const optionsChanged = currentOptions.length !== options.length ||
+    currentOptions.some((option, index) => option.label !== options[index]);
+
+  if (voteCount > 0 && (optionsChanged || parsed.data.allowMultiple !== poll.allowMultiple)) {
+    return res.status(409).json({ error: "Poll options and voting rules cannot be changed after voting begins." });
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.update(pollsTable).set({
+      question: parsed.data.question,
+      allowMultiple: parsed.data.allowMultiple,
+    }).where(eq(pollsTable.id, pollId));
+    if (optionsChanged) {
+      await tx.delete(pollOptionsTable).where(eq(pollOptionsTable.pollId, pollId));
+      await tx.insert(pollOptionsTable).values(options.map((label, position) => ({
+        pollId,
+        label,
+        position,
+      })));
+    }
+  });
+
+  return res.json(await loadPollWithResults(pollId, userId));
 });
 
 pollsRouter.get("/post/:postId", async (req, res) => {

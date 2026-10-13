@@ -22,7 +22,7 @@ import { safeHtml } from '@/lib/sanitize';
 import { linkifyHashtags } from '@/lib/hashtags';
 import { getStoredToken } from '@/lib/api';
 import { useI18n, useT } from '@/lib/i18n';
-import { PollBlock } from '@/components/post/PollBlock';
+import { PollBlock, samePollText } from '@/components/post/PollBlock';
 import { PostOptionsMenu, type PostOptionAction, type PostOptionPost } from './PostOptionsMenu';
 import { ImageLightbox } from './ImageLightbox';
 import { formatPostTimestamp } from '@/lib/postTimestamp';
@@ -751,6 +751,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
   };
 
   const isSpark = (post.type as string) === 'spark';
+  const duplicatePollCopy = Boolean(post.hasPoll && samePollText(post.title || '', post.content || ''));
   const postBodyTextLength = (post.content || post.excerpt || '')
     .replace(/<[^>]*>/g, ' ')
     .replace(/\s+/g, ' ')
@@ -851,7 +852,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
             </h2>
           )}
 
-          {isSpark ? (
+          {duplicatePollCopy ? null : isSpark ? (
             <p className="mb-3 text-sm leading-6 text-foreground whitespace-pre-wrap">
               {renderHashtags(showTranslated && translatedContent ? translatedContent : post.content || '')}
             </p>
@@ -950,7 +951,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
 
         {post.hasPoll && (
           <div className="mt-3" onClick={e => e.stopPropagation()}>
-            <PollBlock postId={post.id} />
+            <PollBlock postId={post.id} postTitle={post.title} postContent={post.content} />
           </div>
         )}
 

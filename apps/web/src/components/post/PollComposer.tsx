@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,10 +14,15 @@ export interface DraftPoll {
 interface Props {
   value: DraftPoll | null;
   onChange: (next: DraftPoll | null) => void;
+  showToggle?: boolean;
+  optionsLocked?: boolean;
+  heading?: string;
 }
 
-export function PollComposer({ value, onChange }: Props) {
+export function PollComposer({ value, onChange, showToggle = true, optionsLocked = false, heading = 'Add a poll' }: Props) {
   const [enabled, setEnabled] = useState(!!value);
+
+  useEffect(() => setEnabled(!!value), [value]);
 
   function ensureEnabled() {
     if (!enabled) {
@@ -35,16 +40,18 @@ export function PollComposer({ value, onChange }: Props) {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-primary" />
-          <span className="font-medium text-sm">Add a poll</span>
+          <span className="font-medium text-sm">{heading}</span>
         </div>
-        <Switch
-          checked={enabled}
-          onCheckedChange={(checked) => {
-            setEnabled(checked);
-            if (checked) ensureEnabled();
-            else onChange(null);
-          }}
-        />
+        {showToggle && (
+          <Switch
+            checked={enabled}
+            onCheckedChange={(checked) => {
+              setEnabled(checked);
+              if (checked) ensureEnabled();
+              else onChange(null);
+            }}
+          />
+        )}
       </div>
 
       {enabled && value && (
@@ -65,6 +72,7 @@ export function PollComposer({ value, onChange }: Props) {
               <div key={idx} className="flex items-center gap-2">
                 <Input
                   value={opt}
+                  disabled={optionsLocked}
                   onChange={(e) => {
                     const next = [...value.options];
                     next[idx] = e.target.value;
@@ -73,7 +81,7 @@ export function PollComposer({ value, onChange }: Props) {
                   placeholder={`Option ${idx + 1}`}
                   maxLength={120}
                 />
-                {value.options.length > 2 && (
+                {value.options.length > 2 && !optionsLocked && (
                   <Button
                     size="icon"
                     variant="ghost"
@@ -84,7 +92,7 @@ export function PollComposer({ value, onChange }: Props) {
                 )}
               </div>
             ))}
-            {value.options.length < 8 && (
+            {value.options.length < 8 && !optionsLocked && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -96,10 +104,12 @@ export function PollComposer({ value, onChange }: Props) {
             )}
           </div>
 
+          {optionsLocked && <p className="text-xs text-muted-foreground">Options and voting rules are locked after the first vote. You can still edit the question.</p>}
           <label className="flex items-center justify-between text-sm">
             <span className="text-muted-foreground">Allow multiple selections</span>
             <Switch
               checked={value.allowMultiple}
+              disabled={optionsLocked}
               onCheckedChange={(checked) => update({ allowMultiple: checked })}
             />
           </label>

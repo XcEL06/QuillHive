@@ -32,6 +32,7 @@ import { BackButton } from '@/components/ui/BackButton';
 import { apiUrl } from '@/lib/api';
 import { reportCaughtError } from '@/lib/reportCaughtError';
 import { useFeature } from '@/lib/features';
+import { PollComposer, type DraftPoll } from '@/components/post/PollComposer';
 
 type AiPanel = 'assist' | 'caption' | 'improve' | 'ideas' | 'titles' | 'hashtags' | null;
 
@@ -157,6 +158,9 @@ export default function Write() {
   const [enableAB, setEnableAB] = useState(false);
   const [titleA, setTitleA] = useState('');
   const [titleB, setTitleB] = useState('');
+  const [editingPollId, setEditingPollId] = useState<number | null>(null);
+  const [pollOptionsLocked, setPollOptionsLocked] = useState(false);
+  const [pollDraft, setPollDraft] = useState<DraftPoll | null>(null);
 
   useEffect(() => {
     if (!quoteId || !token) return;
@@ -294,7 +298,7 @@ export default function Write() {
         }
         return response.json() as Promise<Record<string, any>>;
       })
-      .then((post) => {
+      .then(async (post) => {
         if (!active) return;
         const authorId = Number(post.author?.id ?? post.authorId);
         if (authorId !== Number(user.id)) throw new Error('You can only edit your own posts.');
@@ -315,6 +319,29 @@ export default function Write() {
         }
         setPostAttachments(Array.isArray(attachments) ? attachments : []);
         setDraftRestored(true);
+
+        const pollResponse = await fetch(apiUrl(`/api/polls/post/${editPostId}`), {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (pollResponse.ok) {
+          const poll = await pollResponse.json() as {
+            id: number;
+            question: string;
+            allowMultiple: boolean;
+            totalVotes: number;
+            options: Array<{ label: string }>;
+          };
+          if (!active) return;
+          setEditingPollId(poll.id);
+          setPollOptionsLocked(poll.totalVotes > 0);
+          setPollDraft({
+            question: poll.question,
+            options: poll.options.map((option) => option.label),
+            allowMultiple: poll.allowMultiple,
+          });
+        } else if (pollResponse.status !== 404) {
+          throw new Error('Could not load poll options for editing.');
+        }
       })
       .catch((error: unknown) => {
         if (!active) return;
@@ -610,6 +637,47 @@ export default function Write() {
       if (saved) toast({ title: t('write.savedAsDraft'), description: t('write.savedAsDraftDesc') });
       return;
     }
+    if (editingPollId) {
+      if (!pollDraft || pollDraft.question.trim().length < 3) {
+        toast({ title: 'Add a poll question', variant: 'destructive' });
+        return;
+      }
+      const options = pollDraft.options.map((option) => option.trim()).filter(Boolean);
+      if (options.length < 2) {
+        toast({ title: 'Add at least 2 options', variant: 'destructive' });
+        return;
+      }
+      setIsSavingEdit(true);
+      try {
+        const response = await fetch(apiUrl(`/api/polls/${editingPollId}`), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            question: pollDraft.question.trim(),
+            options,
+            allowMultiple: pollDraft.allowMultiple,
+          }),
+        });
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => null) as { error?: string } | null;
+          throw new Error(errorBody?.error || 'Could not save poll changes.');
+        }
+        await queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
+        await queryClient.invalidateQueries({ queryKey: [`/api/posts/${editPostId}`] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/polls/post', editPostId] });
+        toast({ title: 'Poll updated', description: 'Your poll question and options have been saved.' });
+        setLocation(`/post/${editPostId}`);
+      } catch (error) {
+        toast({
+          title: 'Could not save poll',
+          description: error instanceof Error ? error.message : 'Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSavingEdit(false);
+      }
+      return;
+    }
     if (isPublished) {
       const { ok, warning } = await checkOriginality(content);
       if (!ok) {
@@ -861,7 +929,7 @@ export default function Write() {
         )}
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <h1 className="text-3xl font-serif font-bold">{editPostId ? 'Edit post' : t('write.newPiece')}</h1>
+          <h1 className="text-3xl font-serif font-bold">{editingPollId ? 'Edit poll' : editPostId ? 'Edit post' : t('write.newPiece')}</h1>
           <div className="flex items-center gap-3">
             {showSaved && <span className="text-xs text-emerald-600 dark:text-emerald-400 animate-in fade-in duration-300">Saved</span>}
             {!editPostId && (
@@ -882,15 +950,16 @@ export default function Write() {
               {isCreating || isSavingEdit || isLoadingEdit
                 ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 : enableSchedule ? <Calendar className="w-4 h-4 mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-              {isLoadingEdit ? 'Loading post...' : isSavingEdit ? 'Saving changes...' : editPostId ? 'Save changes' : enableSchedule ? t('write.schedule') : t('write.publish')}
+              {isLoadingEdit ? 'Loading post...' : isSavingEdit ? 'Saving changes...' : editingPollId ? 'Save poll changes' : editPostId ? 'Save changes' : enableSchedule ? t('write.schedule') : t('write.publish')}
             </Button>
           </div>
         </div>
 
         <div className="bg-card border border-border/60 rounded-3xl shadow-sm overflow-hidden mb-8">
+          {isLoadingEdit && <div className="p-6 text-sm text-muted-foreground">Loading post editor...</div>}
 
           {/* Metadata */}
-          <div className="p-6 bg-muted/30 border-b border-border/60 grid grid-cols-1 md:grid-cols-2 gap-6">
+          {!editingPollId && !isLoadingEdit && <div className="p-6 bg-muted/30 border-b border-border/60 grid grid-cols-1 md:grid-cols-2 gap-6">
 
             {/* Type */}
             <div className="space-y-2 col-span-1 md:col-span-2">
@@ -1051,8 +1120,20 @@ export default function Write() {
                 </div>
               )}
             </div>}
-          </div>
+          </div>}
+          {editingPollId && (
+            <div className="p-6">
+              <PollComposer
+                value={pollDraft}
+                onChange={setPollDraft}
+                showToggle={false}
+                optionsLocked={pollOptionsLocked}
+                heading="Edit poll"
+              />
+            </div>
+          )}
 
+          {!editingPollId && !isLoadingEdit && <>
           {/* Toolbar */}
           <div className="border-b border-border/60 bg-card p-2 flex flex-wrap items-center gap-1 sticky top-16 z-30 shadow-sm">
             <Button size="icon" variant="ghost" onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive('bold') ? 'bg-muted' : ''}>
@@ -1124,6 +1205,7 @@ export default function Write() {
               </div>
             )}
           </div>
+          </>}
         </div>
       </div>
 

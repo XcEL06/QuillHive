@@ -31,7 +31,7 @@ import { ShareSheet } from '@/components/post/ShareSheet';
 import { EditHistoryModal } from '@/components/post/EditHistoryModal';
 import { useT } from '@/lib/i18n';
 import { SeriesNavigation } from '@/components/post/SeriesNavigation';
-import { PollBlock } from '@/components/post/PollBlock';
+import { PollBlock, samePollText } from '@/components/post/PollBlock';
 import { MoreLikeThis } from '@/components/post/MoreLikeThis';
 import { ImageLightbox } from '@/components/post/ImageLightbox';
 import { BackButton } from '@/components/ui/BackButton';
@@ -401,6 +401,8 @@ export default function PostDetail() {
   if (!post) return <AppLayout><div className="text-center py-20 text-muted-foreground">Post not found</div></AppLayout>;
 
   const isOwner = user?.id === post.author.id;
+  const isPollPost = Boolean((post as typeof post & { hasPoll?: boolean }).hasPoll);
+  const duplicatePollCopy = isPollPost && samePollText(post.title ?? '', post.content ?? '');
   const sourceText = post.content?.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() ?? '';
   const { html: contentHtml, headings } = buildToc(post.content || '');
   const displayHtml = linkifyHashtags(
@@ -505,15 +507,21 @@ export default function PostDetail() {
               {aiToolsAvailable && <TranslateButton postId={post.id} sourceText={sourceText} onTranslated={setTranslated} />}
               {isOwner && (
                 <>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setShowPollDialog(true)}
-                    className="text-muted-foreground"
-                    title="Add a poll"
-                  >
-                    <BarChart3 className="w-4 h-4" />
-                  </Button>
+                  {isPollPost ? (
+                    <Link href={`/write?edit=${post.id}`} className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+                      <BarChart3 className="w-4 h-4" /> Edit poll
+                    </Link>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setShowPollDialog(true)}
+                      className="text-muted-foreground"
+                      title="Add a poll"
+                    >
+                      <BarChart3 className="w-4 h-4" />
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -579,7 +587,7 @@ export default function PostDetail() {
               </div>
             )}
 
-            {(post as any).contentWarning && !cwAcknowledged ? (
+            {duplicatePollCopy ? null : (post as any).contentWarning && !cwAcknowledged ? (
               <div className="mb-8 rounded-2xl border border-amber-500/40 bg-amber-500/5 p-6 text-center">
                 <div className="text-amber-600 dark:text-amber-400 font-semibold mb-2">Content warning</div>
                 <p className="text-sm text-foreground/80 mb-4">{(post as any).contentWarning}</p>
@@ -604,7 +612,7 @@ export default function PostDetail() {
               </p>
             )}
 
-            <PollBlock postId={post.id} />
+            <PollBlock postId={post.id} postTitle={post.title} postContent={post.content} />
             <SeriesNavigation postId={post.id} />
             <MoreLikeThis postId={post.id} />
           </div>

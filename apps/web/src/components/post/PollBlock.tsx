@@ -33,7 +33,22 @@ interface PollData {
   options: PollOption[];
 }
 
-export function PollBlock({ postId }: { postId: number }) {
+export function samePollText(left: string, right: string): boolean {
+  const normalize = (value: string) => value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;|&#160;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLocaleLowerCase();
+  return normalize(left) === normalize(right);
+}
+
+export function PollBlock({ postId, postTitle = '', postContent = '' }: { postId: number; postTitle?: string | null; postContent?: string | null }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data, isLoading, error } = useQuery<PollData | null>({
@@ -99,10 +114,12 @@ export function PollBlock({ postId }: { postId: number }) {
 
   return (
     <div className="my-8 border border-border rounded-2xl p-5 bg-card/40">
-      <div className="flex items-center gap-2 mb-3">
-        <BarChart3 className="w-4 h-4 text-primary" />
-        <h4 className="font-semibold text-foreground">{data.question}</h4>
-      </div>
+      {!samePollText(data.question, postTitle ?? '') && !samePollText(data.question, postContent ?? '') && (
+        <div className="flex items-center gap-2 mb-3">
+          <BarChart3 className="w-4 h-4 text-primary" />
+          <h4 className="font-semibold text-foreground">{data.question}</h4>
+        </div>
+      )}
 
       <div className="space-y-2">
         {data.options.map((o) => {
