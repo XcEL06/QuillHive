@@ -8,9 +8,10 @@ import { rateLimit } from "../../middleware/rateLimit";
 import { requireAuth } from "../../middleware/admin";
 import { requireCreatorIncomeEnabled } from "../../middleware/creatorIncome";
 
-// Production: 30 login attempts / 15 min, 30 registrations / hr.
-// Development/preview: 6× headroom (applied inside rateLimit middleware).
+// Production: 60 login requests / 15 min, 30 registrations / hr.
+// Development/preview: 10× headroom (applied inside rateLimit middleware).
 const authStrictLimit = rateLimit({ windowMs: 15 * 60_000, max: 30 });
+const loginAttemptLimit = rateLimit({ windowMs: 15 * 60_000, max: 60 });
 const registerStrictLimit = rateLimit({ windowMs: 60 * 60_000, max: 30 });
 
 export const registerSchema = z.object({
@@ -64,8 +65,8 @@ const creatorSchema = z.object({
 
 export const authRouter = Router();
 authRouter.post("/register", registerStrictLimit, preventSpam("register", { max: 5, windowMs: 10 * 60_000, contentField: "email" }), validateBody(registerSchema), ProfileController.register);
-authRouter.post("/signup", registerStrictLimit, preventSpam("signup", { max: 5, windowMs: 10 * 60_000, contentField: "email" }), validateBody(registerSchema), ProfileController.register);
-authRouter.post("/login", authStrictLimit, validateBody(loginSchema), ProfileController.login);
+authRouter.post("/signup", registerStrictLimit, preventSpam("register", { max: 5, windowMs: 10 * 60_000, contentField: "email" }), validateBody(registerSchema), ProfileController.register);
+authRouter.post("/login", loginAttemptLimit, validateBody(loginSchema), ProfileController.login);
 authRouter.post("/login/verify-email-code", authStrictLimit, preventSpam("login-email-code", { max: 5, windowMs: 15 * 60_000, contentField: "challengeId" }), validateBody(z.object({
   challengeId: z.coerce.number().int().positive(),
   code: z.string().regex(/^\d{6}$/),

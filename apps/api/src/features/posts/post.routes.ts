@@ -7,7 +7,8 @@ import { preventSpam } from "../../middleware/abuseProtection";
 import { validateBody, validateParams, validateQuery } from "../../middleware/validate";
 import { optionalAuth, requireAuth } from "../../middleware/admin";
 import { db } from "@workspace/db";
-import { postsTable } from "@workspace/db/schema";
+import { postsTable, usersTable, userTrustScoresTable } from "@workspace/db/schema";
+import { getSessionUserId } from "../../lib/auth";
 
 const idParamsSchema = z.object({ id: z.coerce.number().int().positive() });
 const resolvePostPublicId = async (req: Request, res: Response, next: NextFunction, id: string) => {
@@ -20,6 +21,36 @@ const resolvePostPublicId = async (req: Request, res: Response, next: NextFuncti
   } catch (error) {
     return next(error);
   }
+};
+
+const resolvePostSpamPolicy = async (req: Request) => {
+  const authorization = req.headers.authorization;
+  const userId = authorization?.startsWith("Bearer ") ? getSessionUserId(authorization.slice(7)) : null;
+  if (!userId) return { max: 8 };
+
+  const [account] = await db.select({
+    role: usersTable.role,
+    emailVerified: usersTable.emailVerified,
+    isOfficialAccount: usersTable.isOfficialAccount,
+    createdAt: usersTable.createdAt,
+    tier: userTrustScoresTable.tier,
+    creatorLevel: userTrustScoresTable.creatorLevel,
+  })
+    .from(usersTable)
+    .leftJoin(userTrustScoresTable, eq(userTrustScoresTable.userId, usersTable.id))
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+
+  if (!account) return { max: 8 };
+  if (account.role === "super_admin") return { max: 100, bypassDuplicateCheck: true };
+
+  const highTrust = account.isOfficialAccount || account.tier === "trusted" ||
+    ["established", "featured", "luminary"].includes(account.creatorLevel ?? "");
+  if (highTrust) return { max: 40, bypassDuplicateCheck: true };
+
+  const accountAgeMs = Date.now() - account.createdAt.getTime();
+  if (account.emailVerified && accountAgeMs >= 7 * 24 * 60 * 60_000) return { max: 24 };
+  return { max: 8 };
 };
 const listPostsQuerySchema = z.object({
   type: z.string().min(1).max(50).optional(),
@@ -80,7 +111,14 @@ postsRouter.post("/draft", validateBody(draftBodySchema), PostController.saveDra
 postsRouter.get("/draft/:id", validateParams(idParamsSchema), PostController.getDraft);
 postsRouter.delete("/draft/:id", validateParams(idParamsSchema), PostController.deleteDraft);
 postsRouter.get("/", optionalAuth, validateQuery(listPostsQuerySchema), PostController.listPosts);
-postsRouter.post("/", preventSpam("posts", { max: 6, windowMs: 60_000 }), validateBody(postBodySchema), PostController.createPost);
+postsRouter.post("/", preventSpam("posts", {
+  max: 8,
+  windowMs: 60_000,
+  duplicateWindowMs: 30_000,
+  duplicateThreshold: 1,
+  ipMax: 60,
+  resolvePolicy: resolvePostSpamPolicy,
+}), validateBody(postBodySchema), PostController.createPost);
 postsRouter.get("/:id", validateParams(idParamsSchema), PostController.getPost);
 postsRouter.patch("/:id", validateParams(idParamsSchema), validateBody(updatePostBodySchema), PostController.updatePost);
 postsRouter.delete("/:id", validateParams(idParamsSchema), PostController.deletePost);

@@ -226,6 +226,7 @@ export const register = async (req: Request, res: Response) => {
 // In-memory tracker for repeated failed logins by email + IP (prevents one network from blocking others)
 const loginFailures = new Map<string, { count: number; resetAt: number }>();
 const loginFailureLockoutMessage = 'Too many failed login attempts for this account. Please wait a few minutes and try again, or use "Forgot password" to reset it.';
+const LOGIN_FAILURE_LIMIT = 12;
 
 function trackLoginFailure(ip: string, email: string): number {
   const normalizedEmail = (email || "unknown").trim().toLowerCase();
@@ -250,7 +251,7 @@ export const login = async (req: Request, res: Response) => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
   if (!user) {
     const fails = trackLoginFailure(rawIp, email);
-    if (fails >= 8) {
+    if (fails >= LOGIN_FAILURE_LIMIT) {
       emitEvent({
         type: "SECURITY_ALERT",
         severity: "high",
@@ -263,7 +264,7 @@ export const login = async (req: Request, res: Response) => {
   }
   if (!verifyPassword(password, user.passwordHash)) {
     const fails = trackLoginFailure(rawIp, email);
-    if (fails >= 8) {
+    if (fails >= LOGIN_FAILURE_LIMIT) {
       emitEvent({
         type: "SECURITY_ALERT",
         severity: "high",
