@@ -7,7 +7,7 @@ import {
   boostRequestsTable, challengesTable,
   inviteCodesTable,
 } from "@workspace/db/schema";
-import { eq, desc, asc, and, count, ne, lt, sql, inArray, or, gt, gte, isNotNull } from "drizzle-orm";
+import { eq, desc, asc, and, count, ne, lt, sql, inArray, or, gt, gte, isNotNull, ilike } from "drizzle-orm";
 import { requireAdmin, requireSuperAdmin, requirePermission } from "../middleware/admin";
 import { getAllFeatureFlags, FEATURE_FLAG_KEYS, reloadFeatureFlags, type FeatureFlagKey } from "../lib/featureFlags";
 import { sendEmail } from "../features/email/email.service";
@@ -46,6 +46,7 @@ function checkRateLimit(adminId: number, action: string, max = 20): boolean {
 }
 
 router.get("/stats", requirePermission("view_analytics"), async (req, res) => {
+  const trustLevel = sql<string>`CASE WHEN ${usersTable.role} = 'super_admin' OR ${usersTable.isOfficialAccount} THEN 'luminary' ELSE COALESCE(${userTrustScoresTable.creatorLevel}, 'new_voice') END`;
   const [userCount] = await db.select({ count: count() }).from(usersTable).where(eq(usersTable.isDeleted, false));
   const [postCount] = await db.select({ count: count() }).from(postsTable).where(eq(postsTable.isDeleted, false));
   const [reportCount] = await db.select({ count: count() }).from(reportsTable).where(eq(reportsTable.status, "pending"));
@@ -55,6 +56,11 @@ router.get("/stats", requirePermission("view_analytics"), async (req, res) => {
   const [challengeCount] = await db.select({ count: count() }).from(challengesTable).where(and(eq(challengesTable.isActive, true), gte(challengesTable.endsAt, new Date())));
   const [officialAccountCount] = await db.select({ count: count() }).from(usersTable).where(eq(usersTable.isOfficialAccount, true));
   const [boostRevenue] = await db.select({ total: sql<number>`COALESCE(SUM(paid_amount_cents), 0)` }).from(boostRequestsTable).where(eq(boostRequestsTable.status, "approved"));
+  const trustDistribution = await db.select({ level: trustLevel, count: count() })
+    .from(usersTable)
+    .leftJoin(userTrustScoresTable, eq(userTrustScoresTable.userId, usersTable.id))
+    .where(eq(usersTable.isDeleted, false))
+    .groupBy(trustLevel);
   return res.json({
     totalUsers: userCount?.count ?? 0,
     totalPosts: postCount?.count ?? 0,
@@ -65,12 +71,41 @@ router.get("/stats", requirePermission("view_analytics"), async (req, res) => {
     activeChallenges: challengeCount?.count ?? 0,
     officialAccounts: officialAccountCount?.count ?? 0,
     totalBoostRevenueCents: boostRevenue?.total ?? 0,
+    trustDistribution,
   });
 });
 
+router.get("/pulse", requirePermission("view_analytics"), async (_req, res) => {
+  const activity = await db.execute(sql`
+    WITH days AS (
+      SELECT (current_date - offsets.day_offset)::date AS day
+      FROM generate_series(0, 6) AS offsets(day_offset)
+    )
+    SELECT
+      to_char(days.day, 'YYYY-MM-DD') AS day,
+      (SELECT COUNT(*)::int FROM users u WHERE u.is_deleted = false AND u.created_at >= days.day AND u.created_at < days.day + INTERVAL '1 day') AS signups,
+      (SELECT COUNT(*)::int FROM posts p WHERE p.is_deleted = false AND p.is_published = true AND p.created_at >= days.day AND p.created_at < days.day + INTERVAL '1 day') AS posts,
+      (SELECT COUNT(*)::int FROM reports r WHERE r.created_at >= days.day AND r.created_at < days.day + INTERVAL '1 day') AS reports,
+      (SELECT COUNT(*)::int FROM boost_requests b WHERE b.created_at >= days.day AND b.created_at < days.day + INTERVAL '1 day') AS boosts
+    FROM days
+    ORDER BY days.day
+  `);
+  return res.json({ days: activity.rows });
+});
+
 router.get("/users", requirePermission("view_users"), async (req, res) => {
-  const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 50;
+  const page = Math.max(1, parseInt(req.query.page as string) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
+  const query = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
+  const escapedQuery = query.replace(/[\\%_]/g, "\\$&");
+  const userFilter = and(
+    eq(usersTable.isDeleted, false),
+    ...(query.length >= 2 ? [or(
+      ilike(usersTable.username, `%${escapedQuery}%`),
+      ilike(usersTable.email, `%${escapedQuery}%`),
+      ilike(usersTable.displayName, `%${escapedQuery}%`),
+    )!] : []),
+  );
   const users = await db
     .select({
       id: usersTable.id,
@@ -89,10 +124,10 @@ router.get("/users", requirePermission("view_users"), async (req, res) => {
     })
     .from(usersTable)
     .leftJoin(userTrustScoresTable, eq(userTrustScoresTable.userId, usersTable.id))
-    .where(eq(usersTable.isDeleted, false))
+    .where(userFilter)
     .orderBy(desc(usersTable.createdAt))
     .limit(limit).offset((page - 1) * limit);
-  const [total] = await db.select({ count: count() }).from(usersTable).where(eq(usersTable.isDeleted, false));
+  const [total] = await db.select({ count: count() }).from(usersTable).where(userFilter);
   return res.json({
     users: users.map((user) => {
       const platformTrusted = user.role === "super_admin" || user.isOfficialAccount;

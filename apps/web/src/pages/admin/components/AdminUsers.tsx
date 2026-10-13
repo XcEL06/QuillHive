@@ -27,7 +27,26 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
   const [clustersLoading, setClustersLoading] = useState(true);
   const [openCluster, setOpenCluster] = useState<string | null>(null);
   const [banningCluster, setBanningCluster] = useState<string | null>(null);
-  useEffect(() => { setLoading(true); void fetchAdmin(`/api/admin/users?page=${page}&limit=25`).then((d) => { setUsers(d.users ?? d); setTotalUsers(Number(d.total ?? d.users?.length ?? 0)); }).catch((err) => toast({ title: "Could not load users", description: err.message, variant: "destructive" })).finally(() => setLoading(false)); }, [fetchAdmin, toast, page]);
+  const [changingBanId, setChangingBanId] = useState<number | null>(null);
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      const query = search.trim();
+      const queryParam = query.length >= 2 ? `&q=${encodeURIComponent(query)}` : "";
+      void fetchAdmin(`/api/admin/users?page=${page}&limit=25${queryParam}`)
+        .then((data) => {
+          if (!active) return;
+          setUsers(data.users ?? data);
+          setTotalUsers(Number(data.total ?? data.users?.length ?? 0));
+        })
+        .catch((error) => {
+          if (active) toast({ title: "Could not load users", description: error.message, variant: "destructive" });
+        })
+        .finally(() => { if (active) setLoading(false); });
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [fetchAdmin, toast, page, search]);
   useEffect(() => { setClustersLoading(true); void fetchAdmin("/api/admin/suspicious-clusters").then((d) => setClusters(d.clusters ?? [])).catch((err) => toast({ title: "Could not load suspicious clusters", description: err.message, variant: "destructive" })).finally(() => setClustersLoading(false)); }, [fetchAdmin, toast]);
 
   const banAll = async (cluster: any) => {
@@ -42,6 +61,25 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
       toast({ title: "Could not ban cluster", description: err.message, variant: "destructive" });
     } finally {
       setBanningCluster(null);
+    }
+  };
+  const toggleBan = async (account: any) => {
+    const nextBanned = !account.isBanned;
+    const action = nextBanned ? "suspend" : "restore";
+    if (!window.confirm(`${nextBanned ? "Suspend" : "Restore"} @${account.username}?`)) return;
+    setChangingBanId(account.id);
+    try {
+      const result = await fetchAdmin(`/api/admin/users/${account.id}/ban`, { method: "POST" });
+      setUsers((current) => current.map((user) => user.id === account.id ? { ...user, isBanned: Boolean(result.isBanned), bannedAt: result.isBanned ? new Date().toISOString() : null } : user));
+      setClusters((current) => current.map((cluster) => ({
+        ...cluster,
+        accounts: cluster.accounts.map((user: any) => user.id === account.id ? { ...user, isBanned: Boolean(result.isBanned) } : user),
+      })));
+      toast({ title: result.isBanned ? "Account suspended" : "Account restored", description: `@${account.username} can ${result.isBanned ? "no longer" : "now"} sign in.` });
+    } catch (error) {
+      toast({ title: `Could not ${action} account`, description: error instanceof Error ? error.message : "Request failed", variant: "destructive" });
+    } finally {
+      setChangingBanId(null);
     }
   };
   const sendNotice = async () => {
@@ -70,14 +108,14 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
       setDetailLoading(false);
     }
   };
-  const filtered = users.filter((u) => `${u.displayName} ${u.username} ${u.email}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = users;
   const bannedVisible = users.filter((u) => u.isBanned).length;
   return <>
     <AdminOverviewStats items={[
       { label: "Total accounts", value: totalUsers, detail: "All non-deleted accounts" },
       { label: "Banned on this page", value: bannedVisible, detail: `Page ${page} · ${users.length} records loaded` },
       { label: "Flagged signup clusters", value: clusters.length, detail: "Shared signup IP hash signals" },
-      { label: "Visible after search", value: filtered.length, detail: "Current page results" },
+      { label: "Matching accounts", value: totalUsers, detail: search.trim().length >= 2 ? "Across all accounts" : "Current directory" },
     ]} />
     <section className="space-y-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -88,14 +126,14 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
     </section>
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="relative w-full max-w-sm"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by name, handle, or email" className="pl-9" /></div>
-        <p className="text-xs text-muted-foreground">{filtered.length} visible users</p>
+        <div className="relative w-full max-w-sm"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search username or email across accounts" className="pl-9" /></div>
+        <p className="text-xs text-muted-foreground">{totalUsers.toLocaleString()} matching accounts</p>
       </div>
       <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
         <div className="hidden grid-cols-[minmax(0,1fr)_130px_100px_100px_170px] gap-4 border-b border-border/70 bg-muted/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid"><span>User</span><span>Trust score</span><span>Role</span><span>Status</span><span>Actions</span></div>
-        {loading ? <div className="space-y-3 p-5">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div> : filtered.length === 0 ? <div className="p-12 text-center"><p className="text-sm font-medium">No users found</p><p className="mt-1 text-xs text-muted-foreground">Try a different search.</p></div> : <div className="divide-y divide-border/60">{filtered.map((u) => <div key={u.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_130px_100px_100px_170px] sm:items-center"><Link href={`/profile/${encodeURIComponent(u.username)}`} target="_blank" rel="noreferrer" aria-label={`Open ${u.displayName || u.username}'s profile in a new tab`} className="flex min-w-0 items-center gap-3 hover:underline"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{u.displayName?.[0] ?? u.username?.[0] ?? "?"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{u.displayName || "Unnamed user"}{u.isOfficialAccount && <Badge variant="secondary" className="ml-2 text-[9px]">Official</Badge>}</p><p className="truncate text-xs text-muted-foreground">@{u.username} · {u.email}</p></div></Link><div><p className="text-sm font-semibold tabular-nums">{Math.round(Number(u.uti) || 0)} / 100</p><p className="text-[10px] capitalize text-muted-foreground">{String(u.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div><Badge variant="outline" className="w-fit text-[10px] capitalize">{u.role}</Badge><Badge variant={u.isBanned ? "destructive" : "secondary"} className="w-fit text-[10px]">{u.isBanned ? "Banned" : "Active"}</Badge><div className="flex flex-wrap gap-1"><Button variant="outline" size="sm" className="h-8" onClick={() => void openUserDetail(u)}><Eye className="mr-1 h-3.5 w-3.5" />Details</Button>{currentUser.role === "super_admin" && <Button variant="outline" size="sm" className="h-8" onClick={() => setNoticeUser(u)}><Send className="mr-1 h-3.5 w-3.5" />Notice</Button>}</div></div>)}</div>}
+        {loading ? <div className="space-y-3 p-5">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div> : filtered.length === 0 ? <div className="p-12 text-center"><p className="text-sm font-medium">No users found</p><p className="mt-1 text-xs text-muted-foreground">Try a different search.</p></div> : <div className="divide-y divide-border/60">{filtered.map((u) => { const protectedAccount = u.id === currentUser.id || u.role === "super_admin" || (u.role === "admin" && currentUser.role !== "super_admin"); return <div key={u.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_130px_100px_100px_250px] sm:items-center"><Link href={`/profile/${encodeURIComponent(u.username)}`} target="_blank" rel="noreferrer" aria-label={`Open ${u.displayName || u.username}'s profile in a new tab`} className="flex min-w-0 items-center gap-3 hover:underline"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{u.displayName?.[0] ?? u.username?.[0] ?? "?"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{u.displayName || "Unnamed user"}{u.isOfficialAccount && <Badge variant="secondary" className="ml-2 text-[9px]">Official</Badge>}</p><p className="truncate text-xs text-muted-foreground">@{u.username} · {u.email}</p></div></Link><div><p className="text-sm font-semibold tabular-nums">{Math.round(Number(u.uti) || 0)} / 100</p><p className="text-[10px] capitalize text-muted-foreground">{String(u.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div><Badge variant="outline" className="w-fit text-[10px] capitalize">{u.role}</Badge><Badge variant={u.isBanned ? "destructive" : "secondary"} className="w-fit text-[10px]">{u.isBanned ? "Suspended" : "Active"}</Badge><div className="flex flex-wrap gap-1"><Button variant="outline" size="sm" className="h-8" onClick={() => void openUserDetail(u)}><Eye className="mr-1 h-3.5 w-3.5" />Details</Button>{!protectedAccount && <Button variant={u.isBanned ? "outline" : "destructive"} size="sm" className="h-8" disabled={changingBanId === u.id} onClick={() => void toggleBan(u)}><Ban className="mr-1 h-3.5 w-3.5" />{changingBanId === u.id ? "Working…" : u.isBanned ? "Restore" : "Suspend"}</Button>}{currentUser.role === "super_admin" && <Button variant="outline" size="sm" className="h-8" onClick={() => setNoticeUser(u)}><Send className="mr-1 h-3.5 w-3.5" />Notice</Button>}</div></div>; })}</div>}
       </div>
-      <div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((current) => current - 1)}><ChevronLeft className="mr-1 h-4 w-4" />Previous</Button><span className="text-xs text-muted-foreground">Page {page}</span><Button variant="outline" size="sm" disabled={users.length < 25} onClick={() => setPage((current) => current + 1)}>Next<ChevronRight className="ml-1 h-4 w-4" /></Button></div>
+      <div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={page === 1 || loading} onClick={() => setPage((current) => current - 1)}><ChevronLeft className="mr-1 h-4 w-4" />Previous</Button><span className="text-xs text-muted-foreground">Page {page} of {Math.max(1, Math.ceil(totalUsers / 25))}</span><Button variant="outline" size="sm" disabled={page * 25 >= totalUsers || loading} onClick={() => setPage((current) => current + 1)}>Next<ChevronRight className="ml-1 h-4 w-4" /></Button></div>
     </section>
     {currentUser.role === "super_admin" && <Dialog open={!!noticeUser} onOpenChange={(open) => { if (!open) { setNoticeUser(null); setNotice(""); } }}>
       <DialogContent className="sm:max-w-md">
