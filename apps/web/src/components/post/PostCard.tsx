@@ -478,7 +478,11 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
   });
 
   const handleDeletePermanently = async () => {
-    await deletePost({ id: post.id });
+    try {
+      await deletePost({ id: post.id });
+    } catch {
+      throw new Error('Could not delete this post. Please try again.');
+    }
     setIsHidden(true);
     window.dispatchEvent(new CustomEvent('quillhive:post-deleted', {
       detail: { postId: post.id },

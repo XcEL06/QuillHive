@@ -599,6 +599,7 @@ export async function createPost(
 export async function getPostById(id: number, viewerId: number | null) {
   const [post] = await db.select().from(postsTable).where(and(
     eq(postsTable.id, id),
+    eq(postsTable.isDeleted, false),
     or(
       eq(postsTable.isPublished, true),
       viewerId != null
@@ -613,7 +614,10 @@ export async function getPostById(id: number, viewerId: number | null) {
 }
 
 export async function updatePost(id: number, authorId: number, data: Record<string, unknown>) {
-  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, id));
+  const [post] = await db.select().from(postsTable).where(and(
+    eq(postsTable.id, id),
+    eq(postsTable.isDeleted, false),
+  ));
   if (!post) return null;
   if (post.authorId !== authorId) throw new Error("Forbidden");
   if (data.visibility !== undefined && post.type !== "spark") throw new Error("Visibility can only be changed for Sparks");
@@ -676,11 +680,16 @@ export async function updatePost(id: number, authorId: number, data: Record<stri
   return enrichPost(updated, authorId);
 }
 
-export async function deletePost(id: number, authorId: number) {
-  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, id));
+export async function deletePost(id: number, requesterId: number, canDeleteAny = false) {
+  const [post] = await db.select({
+    authorId: postsTable.authorId,
+  }).from(postsTable).where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
   if (!post) return false;
-  if (post.authorId !== authorId) throw new Error("Forbidden");
-  await db.delete(postsTable).where(eq(postsTable.id, id));
+  if (post.authorId !== requesterId && !canDeleteAny) throw new Error("Forbidden");
+  const now = new Date();
+  await db.update(postsTable)
+    .set({ isDeleted: true, deletedAt: now, updatedAt: now })
+    .where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
   return true;
 }
 

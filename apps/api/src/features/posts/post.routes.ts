@@ -121,7 +121,7 @@ postsRouter.post("/", preventSpam("posts", {
 }), validateBody(postBodySchema), PostController.createPost);
 postsRouter.get("/:id", validateParams(idParamsSchema), PostController.getPost);
 postsRouter.patch("/:id", validateParams(idParamsSchema), validateBody(updatePostBodySchema), PostController.updatePost);
-postsRouter.delete("/:id", validateParams(idParamsSchema), PostController.deletePost);
+postsRouter.delete("/:id", requireAuth, validateParams(idParamsSchema), PostController.deletePost);
 postsRouter.get("/:id/comments", validateParams(idParamsSchema), PostController.getTopLevelComments);
 postsRouter.post("/:id/comments", validateParams(idParamsSchema), preventSpam("comments", { max: 12, windowMs: 60_000 }), validateBody(commentBodySchema), PostController.createComment);
 postsRouter.post("/:id/like", validateParams(idParamsSchema), PostController.likePost);

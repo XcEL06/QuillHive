@@ -20,6 +20,7 @@ import { addReputationEvent } from "../trust/reputation.service";
 import { calculateRankingScore } from "./ranking.service";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../../lib/featureFlags";
+import { hasPermission } from "../../middleware/admin";
 
 function refreshTrustForUsers(...userIds: Array<number | null | undefined>) {
   for (const userId of [...new Set(userIds.filter(Boolean) as number[])]) {
@@ -414,8 +415,9 @@ export const deletePost = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const id = parseInt(req.params.id);
+  const currentUser = (req as Request & { currentUser?: { role: string } }).currentUser;
   try {
-    const ok = await PostService.deletePost(id, viewerId);
+    const ok = await PostService.deletePost(id, viewerId, currentUser ? hasPermission(currentUser, "delete_post") : false);
     if (!ok) return res.status(404).json({ error: "Post not found" });
     void deleteCachePattern("feed:*");
     void deleteCachePattern("trending:*");

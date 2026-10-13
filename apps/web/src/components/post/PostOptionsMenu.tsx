@@ -352,11 +352,11 @@ export function PostOptionsMenu({
             <DialogDescription>
               {confirmation === 'archive'
                 ? 'This will hide the post from public views. You can restore it later.'
-                : 'This will permanently delete the post and remove it from your feed. This action cannot be undone.'}
+                : 'This will remove the post from public views and your feed.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0">
-            {confirmation === 'archive' && <Button variant="ghost" className="mr-auto rounded-xl text-destructive" onClick={() => setConfirmation('delete')} disabled={isWorking}><Trash2 className="mr-2 h-4 w-4" /> Delete Permanently</Button>}
+            {confirmation === 'archive' && <Button variant="ghost" className="mr-auto rounded-xl text-destructive" onClick={() => setConfirmation('delete')} disabled={isWorking}><Trash2 className="mr-2 h-4 w-4" /> Delete Post</Button>}
             <Button variant="outline" className="rounded-xl" onClick={() => setConfirmation(null)} disabled={isWorking}>Cancel</Button>
             <Button variant={confirmation === 'delete' ? 'destructive' : 'default'} className="rounded-xl" onClick={() => void confirmAction()} disabled={isWorking}>{isWorking ? 'Working...' : confirmation === 'archive' ? 'Archive Post' : 'Delete Post'}</Button>
           </DialogFooter>
