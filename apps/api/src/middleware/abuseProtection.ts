@@ -7,6 +7,7 @@ type AbuseEntry = {
   resetAt: number;
   lastContentHash?: string;
   lastContentAt?: number;
+  contentHistory: Array<{ hash: string; at: number }>;
 };
 
 const entries = new Map<string, AbuseEntry>();
@@ -41,22 +42,38 @@ export function preventSpam(scope: string, options: { windowMs?: number; max?: n
     const current = entries.get(key);
     const content = typeof req.body?.[contentField] === "string" ? req.body[contentField] : "";
     const contentHash = content ? hashContent(content) : undefined;
+
+    const duplicateHits = contentHash
+      ? (current?.contentHistory ?? []).filter((entry) => entry.hash === contentHash && now - entry.at < duplicateWindowMs).length
+      : 0;
+
     if (!current || now > current.resetAt) {
-      entries.set(key, { count: 1, resetAt: now + windowMs, lastContentHash: contentHash, lastContentAt: contentHash ? now : undefined });
+      entries.set(key, {
+        count: 1,
+        resetAt: now + windowMs,
+        lastContentHash: contentHash,
+        lastContentAt: contentHash ? now : undefined,
+        contentHistory: contentHash ? [{ hash: contentHash, at: now }] : [],
+      });
       next();
       return;
     }
-    if (contentHash && current.lastContentHash === contentHash && current.lastContentAt && now - current.lastContentAt < duplicateWindowMs) {
+
+    if (contentHash && duplicateHits >= 2) {
       res.status(429).json({ error: "Duplicate content detected. Please slow down before posting again." });
       return;
     }
+
     if (current.count >= max) {
       res.status(429).json({ error: "Too many actions. Please slow down and try again." });
       return;
     }
+
     current.count += 1;
     current.lastContentHash = contentHash;
     current.lastContentAt = contentHash ? now : current.lastContentAt;
+    current.contentHistory = (current.contentHistory ?? []).filter((entry) => now - entry.at < duplicateWindowMs + windowMs)
+      .concat(contentHash ? [{ hash: contentHash, at: now }] : []);
     next();
   };
 }
