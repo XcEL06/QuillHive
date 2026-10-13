@@ -333,7 +333,7 @@ function TrustBadge({ tier, isAdmin }: { tier?: string; isAdmin?: boolean }) {
   return null;
 }
 
-export function PostCard({ post: initialPost, compact = false, hideAnalytics = false, hideBoost = false, hideReputation = false }: { post: EnrichedPost; compact?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean }) {
+export function PostCard({ post: initialPost, compact = false, hideAnalytics = false, hideBoost = false, hideReputation = false, feedItem = false }: { post: EnrichedPost; compact?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean; feedItem?: boolean }) {
   const [, setLocation] = useLocation();
   const { user: currentUser } = useAuthStore();
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
@@ -788,6 +788,8 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
         animate={{ opacity: 1, y: 0 }}
         data-card
         className={`border-0 border-b border-border/60 bg-transparent p-4 md:p-5 shadow-none transition-colors duration-200 hover:bg-muted/20 ${
+          feedItem ? 'mb-4 px-4 py-5 md:px-5 md:py-6 border-b-border/80' : ''
+        } ${
           post.isOfficialPost
             ? 'border-l-2 border-l-blue-500/50 bg-blue-500/[0.025]'
             : ''
