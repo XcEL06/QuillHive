@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageTitle } from "@/hooks/usePageTitle";
 import { Link, useLocation } from "wouter";
 import {
@@ -16,7 +17,6 @@ import {
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { getInitials } from "@/lib/utils";
-import { useGetNotifications } from "@workspace/api-client-react";
 import { useSocketEvent, useSocketConnection } from "@/hooks/useSocket";
 import { useT } from "@/lib/i18n";
 import { StrikesBanner } from "@/components/StrikesBanner";
@@ -28,7 +28,7 @@ import { useFeature } from "@/lib/features";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { RouteProgress } from "./RouteProgress";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { mediaUrl } from "@/lib/api";
+import { apiFetch, mediaUrl } from "@/lib/api";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -51,7 +51,7 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
   const { user, logout } = useAuthStore();
   const canAccessStudio = !!user && motionEnabled && ["admin", "super_admin"].includes((user as any)?.role ?? "");
   const { theme, toggleTheme } = useTheme();
-  const [liveNotifCount, setLiveNotifCount] = useState(0);
+  const queryClient = useQueryClient();
   const [liveMessageCount, setLiveMessageCount] = useState(0);
   const [baseMessageCount, setBaseMessageCount] = useState(0);
   const [trustTier, setTrustTier] = useState<string | null>(null);
@@ -87,16 +87,23 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
 
   useEffect(() => {
     if (location.startsWith("/messages")) { setLiveMessageCount(0); setBaseMessageCount(0); }
-    if (location.startsWith("/notifications")) setLiveNotifCount(0);
   }, [location]);
 
   useSocketConnection();
   usePushNotifications();
 
-  const { data: notifications } = useGetNotifications({
-    query: { enabled: !!user, queryKey: ["/api/notifications"] },
+  const { data: unreadNotificationData } = useQuery({
+    queryKey: ["/api/notifications/count"],
+    enabled: !!user,
+    refetchOnWindowFocus: true,
+    refetchInterval: 60_000,
+    queryFn: async ({ signal }) => {
+      const response = await apiFetch("/api/notifications/count", { signal });
+      if (!response.ok) throw new Error("Could not load unread alert count.");
+      return response.json() as Promise<{ unread: number }>;
+    },
   });
-  const unreadNotifCount = Array.isArray(notifications) ? notifications.filter(n => !n.isRead).length : 0;
+  const unreadNotifCount = unreadNotificationData?.unread ?? 0;
   const unreadMessageCount = baseMessageCount + liveMessageCount;
 
   usePageTitle(undefined, unreadNotifCount > 0 ? unreadNotifCount : undefined);
@@ -105,9 +112,9 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
     if (data.type === "message") {
       if (!location.startsWith("/messages")) setLiveMessageCount(prev => prev + 1);
     } else {
-      setLiveNotifCount(prev => prev + 1);
+      void queryClient.invalidateQueries({ queryKey: ["/api/notifications/count"] });
     }
-  }, [location]));
+  }, [location, queryClient]));
 
   const isActive = (href: string, exact?: boolean) => {
     if (href === "__create__") return false;
@@ -117,7 +124,6 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
   const handleNavClick = (href: string) => {
     if (href === "__create__") { setCreateOpen(true); return; }
     if (href === "/messages") { setLiveMessageCount(0); setBaseMessageCount(0); }
-    if (href === "/notifications") setLiveNotifCount(0);
   };
 
   const NAV_ITEMS = [
@@ -209,6 +215,22 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
 
           {/* Right: Messages + Theme + Avatar */}
           <div className="flex items-center gap-1 shrink-0">
+            {user && (
+              <Link
+                href="/notifications"
+                onClick={() => handleNavClick("/notifications")}
+                className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title="Alerts"
+                aria-label={unreadNotifCount > 0 ? `Alerts, ${unreadNotifCount} unread` : "Alerts"}
+              >
+                <Bell className="h-5 w-5" />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
+                    {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                  </span>
+                )}
+              </Link>
+            )}
             <Link
               href="/messages"
               onClick={() => { setLiveMessageCount(0); setBaseMessageCount(0); }}
@@ -362,6 +384,7 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
             const Icon = item.icon;
             const active = isActive(item.href, item.href === "/");
             const isCreate = item.href === "__create__";
+            const showAlertBadge = item.href === "/notifications" && unreadNotifCount > 0;
 
             return (
               <button
@@ -379,6 +402,14 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
                     : active ? "p-2.5 bg-primary/10 text-primary" : "p-2.5 text-muted-foreground"
                 }`}>
                   <Icon className={isCreate ? "w-6 h-6" : "w-5 h-5"} />
+                  {showAlertBadge && (
+                    <span
+                      className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white ring-2 ring-background"
+                      aria-label={`${unreadNotifCount} unread alerts`}
+                    >
+                      {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
+                    </span>
+                  )}
                 </div>
                 {!isCreate && (
                   <span className={`text-[9px] mt-0.5 font-medium ${active ? "text-primary" : "text-muted-foreground"}`}>

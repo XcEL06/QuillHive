@@ -30,16 +30,14 @@ export default function Notifications() {
     mutation: {
       onSuccess: () => {
         void queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-        void queryClient.invalidateQueries({ queryKey: ['unread-count'] });
-        void queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });
+        void queryClient.invalidateQueries({ queryKey: ['/api/notifications/count'] });
       }
     }
   });
 
   useSocketEvent<any>('notification:new', useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-    queryClient.invalidateQueries({ queryKey: ['unread-count'] });
-    queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/notifications/count'] });
   }, [queryClient]));
 
   const handleMarkAllRead = async () => {
@@ -54,8 +52,7 @@ export default function Notifications() {
           Array.isArray(current) ? current.map(item => ({ ...item, isRead: true })) : current,
         );
         await queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-        await queryClient.invalidateQueries({ queryKey: ['unread-count'] });
-        await queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/notifications/count'] });
         toast({ title: t('notifications.markedAllRead') });
       } else {
         throw new Error('Could not mark notifications as read');
@@ -74,8 +71,7 @@ export default function Notifications() {
       });
       if (!res.ok) throw new Error('Could not delete notification');
       queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['unread-count'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/count'] });
     } catch {
       toast({ title: t('notifications.deleteFailed'), variant: 'destructive' });
     } finally {
@@ -160,8 +156,7 @@ export default function Notifications() {
                       }).then(res => {
                         if (!res.ok) throw new Error('Could not mark notification as read');
                         queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-                        queryClient.invalidateQueries({ queryKey: ['unread-count'] });
-                        queryClient.invalidateQueries({ queryKey: ['/api/notifications/unread-count'] });
+                        queryClient.invalidateQueries({ queryKey: ['/api/notifications/count'] });
                       }).catch(() => {});
                       queryClient.setQueriesData({ queryKey: ['/api/notifications'] }, (current: any[] | undefined) =>
                         Array.isArray(current)
