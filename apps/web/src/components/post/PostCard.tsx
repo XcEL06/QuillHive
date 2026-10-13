@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'wouter';
 import { Heart, MessageCircle, Share2, Bookmark, Copy, Check, Repeat2, ShieldCheck, AlertTriangle, Languages, HelpCircle, Code2, Clock, Zap, History, Pin, Rocket, Loader2, TrendingUp, BadgeCheck, Eye, Megaphone, Star, Lightbulb, Trophy, Sparkles, Bell, Users, ExternalLink, Quote as QuoteIcon } from 'lucide-react';
 import { EditHistoryModal } from './EditHistoryModal';
-import { TrustIndicator, type TrustTier } from './TrustIndicator';
+import type { TrustTier } from './TrustIndicator';
 import { AttachmentList } from './AttachmentList';
 import { readingTimeLabel } from '@/lib/readingTime';
 import { useLikePost, useDeletePost, type Post } from '@workspace/api-client-react';
@@ -22,7 +22,6 @@ import { safeHtml } from '@/lib/sanitize';
 import { linkifyHashtags } from '@/lib/hashtags';
 import { getStoredToken } from '@/lib/api';
 import { useI18n, useT } from '@/lib/i18n';
-import { CreatorLevelBadge } from '@/components/trust/CreatorLevelBadge';
 import { PollBlock } from '@/components/post/PollBlock';
 import { PostOptionsMenu, type PostOptionAction, type PostOptionPost } from './PostOptionsMenu';
 import { ImageLightbox } from './ImageLightbox';
@@ -811,15 +810,8 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
                 {post.author.displayName}
               </Link>
 
-              {!hideReputation && (post.authorCreatorLevel === 'luminary' ? (
-                <CreatorLevelBadge level={post.authorCreatorLevel} size="xs" />
-              ) : (
-                <>
-                  <OfficialBadge isOfficial={post.authorIsOfficial} />
-                  <SuperUserBadge isSuperUser={post.authorIsSuperUser} />
-                  <TrustBadge tier={post.authorTrustTier} isAdmin={isAdmin} />
-                </>
-              ))}
+              <OfficialBadge isOfficial={post.authorIsOfficial} />
+              <SuperUserBadge isSuperUser={post.authorIsSuperUser} />
 
               <span className="text-muted-foreground">•</span>
               {postTimestamp && (
