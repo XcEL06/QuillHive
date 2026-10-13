@@ -786,10 +786,10 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         data-card
-        className={`bg-card border rounded-2xl p-4 md:p-5 shadow-sm hover:shadow-lg transition-all duration-300 ${
+        className={`border-0 border-b border-border/60 bg-transparent p-4 md:p-5 shadow-none transition-colors duration-200 hover:bg-muted/20 ${
           post.isOfficialPost
-            ? 'border-blue-500/30 hover:border-blue-400/50 shadow-blue-500/5'
-            : 'border-border/60 hover:border-primary/20'
+            ? 'border-l-2 border-l-blue-500/50 bg-blue-500/[0.025]'
+            : ''
         }`}
       >
         {/* Official Post Banner */}
