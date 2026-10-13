@@ -5,7 +5,7 @@ import {
   Compass, PenLine, MessageCircle, User as UserIcon,
   Bell, Moon, Sun, LogOut, Briefcase, Film, Settings, ShieldCheck,
   BarChart3, BookOpen, Users, Users2, Handshake,
-  Bookmark, FileText, Star, Sparkles, Link2,
+  Bookmark, FileText, Star, Sparkles, Link2, LifeBuoy,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { useTheme } from "@/hooks/use-theme";
@@ -299,6 +299,11 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
                   <DropdownMenuItem asChild>
                     <Link href="/invite" className="cursor-pointer w-full flex items-center gap-2">
                       <Users className="w-4 h-4" /> Invite Creators
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/support" className="cursor-pointer w-full flex items-center gap-2">
+                      <LifeBuoy className="w-4 h-4" /> Support & complaints
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>

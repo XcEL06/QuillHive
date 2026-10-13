@@ -628,7 +628,6 @@ export default function Profile() {
                 <LinkIcon className="w-4 h-4" /> {user.website.replace(/^https?:\/\//, '')}
               </a>
             )}
-            <span className="flex items-center gap-1.5"><Calendar className="w-4 h-4" /> {t('profile.joined', 'Joined')} <Timestamp value={user.createdAt} mode="date" /></span>
           </div>
 
           {/* Social Links */}
