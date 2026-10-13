@@ -255,6 +255,7 @@ export default function Write() {
   const [aiHashtagSuggestions, setAiHashtagSuggestions] = useState<string[]>([]);
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [content, setContent] = useState('');
+  const [pendingEditPost, setPendingEditPost] = useState<Record<string, any> | null>(null);
   const [linkPreview, setLinkPreview] = useState<LinkPreview | null>(null);
   const [isLinkPreviewLoading, setIsLinkPreviewLoading] = useState(false);
 
@@ -274,7 +275,7 @@ export default function Write() {
   });
 
   useEffect(() => {
-    if (!editPostId || !editor?.isInitialized) return;
+    if (!editPostId) return;
     if (!token || !user) {
       setIsLoadingEdit(false);
       toast({ title: 'Sign in to edit this post', variant: 'destructive' });
@@ -298,6 +299,7 @@ export default function Write() {
         const authorId = Number(post.author?.id ?? post.authorId);
         if (authorId !== Number(user.id)) throw new Error('You can only edit your own posts.');
 
+        setPendingEditPost(post);
         setTitle(post.title ?? '');
         setType(normalizePostType(post.type));
         setTagsStr(Array.isArray(post.tags)
@@ -312,7 +314,6 @@ export default function Write() {
           try { attachments = JSON.parse(attachments); } catch { attachments = []; }
         }
         setPostAttachments(Array.isArray(attachments) ? attachments : []);
-        editor.commands.setContent(post.content ?? '');
         setDraftRestored(true);
       })
       .catch((error: unknown) => {
@@ -329,7 +330,14 @@ export default function Write() {
       });
 
     return () => { active = false; };
-  }, [editPostId, editor, token, user?.id, toast, setLocation]);
+  }, [editPostId, token, user?.id, toast, setLocation]);
+
+  useEffect(() => {
+    if (!pendingEditPost || !editor?.isInitialized) return;
+    const post = pendingEditPost;
+    editor.commands.setContent(post.content ?? '');
+    setPendingEditPost(null);
+  }, [editor, pendingEditPost]);
 
   useEffect(() => {
     const standaloneUrl = editor?.isInitialized ? findStandaloneUrl(editor.getText()) : null;

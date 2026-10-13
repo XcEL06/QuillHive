@@ -17,6 +17,7 @@ export default function VerifyEmailPage() {
   const [message, setMessage] = useState<string>(t("auth.verifying", "Verifying your email..."));
   const [resendEmail, setResendEmail] = useState("");
   const [resendLoading, setResendLoading] = useState(false);
+  const currentVerificationUrl = typeof window !== "undefined" ? window.location.href : "";
 
   const resendVerification = async () => {
     if (!resendEmail || !resendEmail.includes("@")) return;
@@ -83,6 +84,11 @@ export default function VerifyEmailPage() {
             <MailCheck className="w-5 h-5" /> {t("auth.emailVerification", "Email verification")}
           </h1>
           <p className="text-muted-foreground">{message}</p>
+          {currentVerificationUrl && (
+            <p className="text-[11px] text-muted-foreground break-all bg-muted/40 rounded-lg p-2">
+              Verification link: <a href={currentVerificationUrl} className="underline break-all">{currentVerificationUrl}</a>
+            </p>
+          )}
           {status === "error" && (
             <>
               <Input

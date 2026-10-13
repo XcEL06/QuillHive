@@ -87,6 +87,7 @@ export default function Auth() {
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [emailStatus, setEmailStatus] = useState<{ allowed: boolean; reason?: string } | null>(null);
@@ -353,10 +354,23 @@ export default function Auth() {
         if (!res.ok) throw new Error(data.error || t("auth.registrationFailed", "Registration failed"));
         const inviteNotApplied = Boolean(inviteCode && data.inviteApplied === false);
         if (data.verificationRequired) {
-          setPendingVerificationToken(data.verificationToken || "");
-          setVerificationToken(data.verificationToken || "");
+          const verificationTokenValue = typeof data.verificationToken === "string" ? data.verificationToken : "";
+          const verificationUrlValue = typeof data.verificationUrl === "string" ? data.verificationUrl : "";
+          setPendingVerificationToken(verificationTokenValue || "");
+          setVerificationToken(verificationTokenValue || "");
+
           if (inviteNotApplied) toast.error("Account created, but this invite could not be applied. Ask for a current invite link.");
-          else toast.success(t("auth.accountCreatedVerify", "Account created. Verify your email to activate sign in."));
+          if (verificationTokenValue) {
+            toast.success(t("auth.accountCreatedVerify", "Account created. Verify your email to activate sign in."));
+            setLocation(`/verify-email?token=${encodeURIComponent(verificationTokenValue)}`);
+            return;
+          }
+          if (verificationUrlValue) {
+            toast.success(t("auth.accountCreatedVerify", "Account created. Verify your email to activate sign in."));
+            setLocation(`/verify-email?token=${encodeURIComponent(new URL(verificationUrlValue).searchParams.get("token") || "")}`);
+            return;
+          }
+          toast.success(t("auth.accountCreatedVerify", "Account created. Verify your email to activate sign in."));
         } else {
           storeAuth(data);
           if (inviteNotApplied) toast.error("Account created, but this invite could not be applied. Ask for a current invite link.");
@@ -553,6 +567,7 @@ export default function Auth() {
                         onClick={() => setShowPassword(s => !s)}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                         tabIndex={-1}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
@@ -562,12 +577,23 @@ export default function Auth() {
                   {!isLogin && (
                     <div className="space-y-2">
                       <Label htmlFor="confirmPassword">{t("auth.confirmPassword", "Confirm Password")}</Label>
-                      <Input
-                        id="confirmPassword" type="password" autoComplete="new-password" required minLength={8}
-                        value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                        className="rounded-xl h-12 bg-muted/30"
-                        disabled={isLoading}
-                      />
+                      <div className="relative">
+                        <Input
+                          id="confirmPassword" type={showConfirmPassword ? "text" : "password"} autoComplete="new-password" required minLength={8}
+                          value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                          className="rounded-xl h-12 bg-muted/30 pr-11"
+                          disabled={isLoading}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(s => !s)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          tabIndex={-1}
+                          aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
                   )}
 
