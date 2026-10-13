@@ -261,7 +261,7 @@ router.post("/communications/direct", requireSuperAdmin, async (req: any, res) =
 
   try {
     const result = await MessagingService.sendAdminMessage(targetUserId, content);
-    await auditLog(req.currentUser.id, "admin_direct_message_sent", "user", targetUserId, content);
+    await auditLog(req.currentUser.id, "admin_direct_message_sent", "user", targetUserId, "Direct message sent");
     return res.status(201).json({ success: true, ...result });
   } catch (error: any) {
     if (error?.message === "User not found") return res.status(404).json({ error: error.message });
@@ -312,7 +312,7 @@ router.post("/communications", requireSuperAdmin, async (req: any, res) => {
     }
     try {
       const result = await MessagingService.sendAdminMessage(userId, content);
-      await auditLog(req.currentUser.id, "admin_direct_message_sent", "user", userId, content);
+      await auditLog(req.currentUser.id, "admin_direct_message_sent", "user", userId, "Direct message sent");
       return res.status(201).json({ success: true, ...result });
     } catch (error: any) {
       if (error?.message === "User not found") return res.status(404).json({ error: error.message });
@@ -674,7 +674,16 @@ router.get("/logs", async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 50;
   const logs = await db
-    .select({ id: adminLogsTable.id, action: adminLogsTable.action, targetType: adminLogsTable.targetType, targetId: adminLogsTable.targetId, details: adminLogsTable.details, createdAt: adminLogsTable.createdAt, adminDisplayName: usersTable.displayName, adminUsername: usersTable.username })
+    .select({
+      id: adminLogsTable.id,
+      action: adminLogsTable.action,
+      targetType: adminLogsTable.targetType,
+      targetId: adminLogsTable.targetId,
+      details: sql<string | null>`CASE WHEN ${adminLogsTable.action} = 'admin_direct_message_sent' THEN NULL ELSE ${adminLogsTable.details} END`,
+      createdAt: adminLogsTable.createdAt,
+      adminDisplayName: usersTable.displayName,
+      adminUsername: usersTable.username,
+    })
     .from(adminLogsTable)
     .leftJoin(usersTable, eq(adminLogsTable.adminId, usersTable.id))
     .orderBy(desc(adminLogsTable.createdAt))

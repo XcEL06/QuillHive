@@ -408,7 +408,7 @@
     "showPostsToEveryone": "Show posts to everyone",
     "showPostsToEveryoneDesc": "Non-followers can see your posts",
     "allowMessagesFromAnyone": "Allow messages from anyone",
-    "allowMessagesFromAnyoneDesc": "Anyone can send you direct messages",
+    "allowMessagesFromAnyoneDesc": "When on, anyone can start a direct message. When off, only people you follow can message you. New accounts start with this off.",
     "showInSearchResults": "Show in search results",
     "showInSearchResultsDesc": "Your profile appears in search",
     "yourData": "Your data",

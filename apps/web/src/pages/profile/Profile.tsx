@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ToastAction } from '@/components/ui/toast';
 import { useToast } from '@/hooks/use-toast';
 import {
   MapPin, Link as LinkIcon, Calendar, UserPlus, UserCheck, Plus, Loader2, Handshake,
@@ -338,6 +339,7 @@ export default function Profile() {
   const openDirectMessage = async (initialMessage?: string) => {
     if (!data?.user?.id || !currentUser || isOpeningMessage) return;
     setIsOpeningMessage(true);
+    let privacyBlocked = false;
     try {
       const startRes = await apiFetch('/api/messages/start', {
         method: 'POST',
@@ -347,6 +349,7 @@ export default function Profile() {
       const startJson = await startRes.json().catch(() => null);
       const conversationId = Number(startJson?.conversationId);
       if (!startRes.ok || !Number.isInteger(conversationId) || conversationId < 1) {
+        privacyBlocked = startRes.status === 403;
         throw new Error(startJson?.error || 'Could not open this conversation.');
       }
 
@@ -362,6 +365,16 @@ export default function Profile() {
       void queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
       navigate(`/messages?conv=${conversationId}`);
     } catch (error) {
+      if (privacyBlocked) {
+        toast({
+          title: 'This creator limits who can message them',
+          description: 'They accept messages only from people they follow. You can follow them here; they may need to follow you before messaging is available.',
+          action: !data.user.isFollowing ? (
+            <ToastAction altText="Follow this creator" onClick={() => toggleFollow({ username })}>Follow</ToastAction>
+          ) : undefined,
+        });
+        return;
+      }
       toast({
         title: initialMessage ? 'Could not send your message' : t('profile.couldNotOpenChat', 'Could not open chat'),
         description: error instanceof Error ? error.message : undefined,
