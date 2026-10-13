@@ -1,6 +1,6 @@
 # QuillHive project overview
 
-> Generated on 2026-10-09 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
+> Generated on 2026-10-13 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
 
 ## Project shape
 
@@ -579,6 +579,8 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 ### features / trust / trust
 
+- `GET /api/admin/trust/accounts` — Read or list trust accounts. ([source](apps/api/src/features/trust/trust.routes.ts)).
+- `GET /api/admin/trust/moderation` — Read or list trust moderation. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/admin/trust/users` — Read or list trust users. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/trust/:userId` — Read or list trust. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/trust/me` — Read or list trust me. ([source](apps/api/src/features/trust/trust.routes.ts)).
@@ -622,6 +624,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `POST /api/admin/posts/:id/flag` — Create or submit posts flag. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/posts/:id/grant-boost` — Create or submit posts grant boost. ([source](apps/api/src/routes/admin.ts)).
 - `PATCH /api/admin/posts/:id/unpublish` — Unpublish content (admin posts :id). ([source](apps/api/src/routes/admin.ts)).
+- `GET /api/admin/pulse` — Read or list admin pulse. ([source](apps/api/src/routes/admin.ts)).
 - `GET /api/admin/referrals` — Read or list admin referrals. ([source](apps/api/src/routes/admin.ts)).
 - `GET /api/admin/reports` — Read or list admin reports. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/reports` — Create or submit admin reports. ([source](apps/api/src/routes/admin.ts)).
