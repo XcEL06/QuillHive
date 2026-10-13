@@ -127,11 +127,12 @@ function AppRoot({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    setInitializing(true);
     refreshUser().finally(() => {
       setInitializing(false);
       setReady(true);
     });
-  }, []);
+  }, [refreshUser, setInitializing]);
 
   if (!ready) {
     return (
@@ -147,8 +148,10 @@ function AppRoot({ children }: { children: React.ReactNode }) {
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const t = useT();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isInitializing } = useAuthStore();
   const [location, setLocation] = useLocation();
+
+  if (isInitializing) return null;
 
   useEffect(() => {
     if (!isAuthenticated) {
