@@ -43,7 +43,6 @@ interface JoinRequest {
 
 interface GroupMembersListProps {
   groupId: number;
-  joinApprovalPolicy?: "admins" | "members";
 }
 
 const ROLES: GroupRole[] = ["admin", "moderator", "member"];
@@ -52,7 +51,7 @@ function TrustBadge({ score }: { score: number | null }) {
   return <Badge variant="outline" className="whitespace-nowrap">Trust {score ?? "--"}</Badge>;
 }
 
-export function GroupMembersList({ groupId, joinApprovalPolicy = "admins" }: GroupMembersListProps) {
+export function GroupMembersList({ groupId }: GroupMembersListProps) {
   const { token } = useAuthStore();
   const { toast } = useToast();
   const [members, setMembers] = useState<Member[]>([]);
@@ -85,7 +84,7 @@ export function GroupMembersList({ groupId, joinApprovalPolicy = "admins" }: Gro
   useEffect(() => { void load(); }, [groupId, token]);
 
   useEffect(() => {
-    const canReviewRequests = myRole === "admin" || myRole === "owner" || myRole === "moderator" || (joinApprovalPolicy === "members" && myRole !== null);
+    const canReviewRequests = myRole === "admin" || myRole === "owner";
     if (!canReviewRequests || !token) {
       setRequests([]);
       return;
@@ -93,7 +92,7 @@ export function GroupMembersList({ groupId, joinApprovalPolicy = "admins" }: Gro
     void apiFetch(`/api/groups/${groupId}/join-requests`)
       .then(response => response.ok ? response.json() as Promise<{ requests?: JoinRequest[] }> : { requests: [] })
       .then(data => setRequests(Array.isArray(data.requests) ? data.requests : []));
-  }, [groupId, joinApprovalPolicy, myRole, token]);
+  }, [groupId, myRole, token]);
 
   const updateRole = async (userId: number, role: GroupRole) => {
     const response = await apiFetch(`/api/groups/${groupId}/members/${userId}`, {

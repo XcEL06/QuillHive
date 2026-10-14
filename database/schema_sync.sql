@@ -274,6 +274,8 @@ CREATE TABLE IF NOT EXISTS "conversations" (
 	"is_group" boolean DEFAULT false NOT NULL,
 	"group_name" text,
 	"opportunity_id" integer,
+	"request_status" text DEFAULT 'accepted' NOT NULL,
+	"request_recipient_id" integer,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
@@ -1101,7 +1103,7 @@ CREATE TABLE IF NOT EXISTS "creator_payment_transactions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"buyer_id" integer NOT NULL,
 	"creator_id" integer NOT NULL,
-	"service_listing_id" integer NOT NULL,
+	"service_listing_id" integer,
 	"commission_request_id" integer,
 	"amount" real NOT NULL,
 	"currency" text DEFAULT 'USD' NOT NULL,
@@ -1341,9 +1343,6 @@ EXCEPTION
     RAISE NOTICE 'Skipped column id on blocked_email_attempts: %', SQLERRM;
 END
 $schema_sync$;
-ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "last_weekly_digest_at" timestamp;
-ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "day3_nurture_sent_at" timestamp;
-ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "day7_nurture_sent_at" timestamp;
 DO $schema_sync$
 BEGIN
   IF EXISTS (
@@ -2797,6 +2796,51 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column email_digest_enabled on users: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('users') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "last_weekly_digest_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column last_weekly_digest_at: users is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column last_weekly_digest_at on users: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('users') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "day3_nurture_sent_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column day3_nurture_sent_at: users is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column day3_nurture_sent_at on users: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('users') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "day7_nurture_sent_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column day7_nurture_sent_at: users is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column day7_nurture_sent_at on users: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -4432,6 +4476,36 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column opportunity_id on conversations: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('conversations') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "request_status" text DEFAULT 'accepted' NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column request_status: conversations is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column request_status on conversations: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('conversations') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "request_recipient_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column request_recipient_id: conversations is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column request_recipient_id on conversations: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -17865,6 +17939,25 @@ DO $schema_sync$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'conversations'::regclass AND conname = 'conversations_request_recipient_id_users_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "conversations" LIMIT 1) THEN
+      ALTER TABLE "conversations" ADD CONSTRAINT "conversations_request_recipient_id_users_id_fk" FOREIGN KEY ("request_recipient_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+    ELSE
+      ALTER TABLE "conversations" ADD CONSTRAINT "conversations_request_recipient_id_users_id_fk" FOREIGN KEY ("request_recipient_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key conversations_request_recipient_id_users_id_fk NOT VALID because conversations contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key conversations_request_recipient_id_users_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
     WHERE conrelid = 'messages'::regclass AND conname = 'messages_conversation_id_conversations_id_fk'
   ) THEN
     IF NOT EXISTS (SELECT 1 FROM "messages" LIMIT 1) THEN
@@ -19863,9 +19956,9 @@ BEGIN
     WHERE conrelid = 'commission_requests'::regclass AND conname = 'commission_requests_service_listing_id_service_listings_id_fk'
   ) THEN
     IF NOT EXISTS (SELECT 1 FROM "commission_requests" LIMIT 1) THEN
-      ALTER TABLE "commission_requests" ADD CONSTRAINT "commission_requests_service_listing_id_service_listings_id_fk" FOREIGN KEY ("service_listing_id") REFERENCES "public"."service_listings"("id") ON DELETE no action ON UPDATE no action;
+      ALTER TABLE "commission_requests" ADD CONSTRAINT "commission_requests_service_listing_id_service_listings_id_fk" FOREIGN KEY ("service_listing_id") REFERENCES "public"."service_listings"("id") ON DELETE set null ON UPDATE no action;
     ELSE
-      ALTER TABLE "commission_requests" ADD CONSTRAINT "commission_requests_service_listing_id_service_listings_id_fk" FOREIGN KEY ("service_listing_id") REFERENCES "public"."service_listings"("id") ON DELETE no action ON UPDATE no action NOT VALID;
+      ALTER TABLE "commission_requests" ADD CONSTRAINT "commission_requests_service_listing_id_service_listings_id_fk" FOREIGN KEY ("service_listing_id") REFERENCES "public"."service_listings"("id") ON DELETE set null ON UPDATE no action NOT VALID;
       RAISE NOTICE 'Added foreign key commission_requests_service_listing_id_service_listings_id_fk NOT VALID because commission_requests contains existing rows';
     END IF;
   END IF;
@@ -19958,9 +20051,9 @@ BEGIN
     WHERE conrelid = 'creator_payment_transactions'::regclass AND conname = 'creator_payment_transactions_service_listing_id_service_listings_id_fk'
   ) THEN
     IF NOT EXISTS (SELECT 1 FROM "creator_payment_transactions" LIMIT 1) THEN
-      ALTER TABLE "creator_payment_transactions" ADD CONSTRAINT "creator_payment_transactions_service_listing_id_service_listings_id_fk" FOREIGN KEY ("service_listing_id") REFERENCES "public"."service_listings"("id") ON DELETE no action ON UPDATE no action;
+      ALTER TABLE "creator_payment_transactions" ADD CONSTRAINT "creator_payment_transactions_service_listing_id_service_listings_id_fk" FOREIGN KEY ("service_listing_id") REFERENCES "public"."service_listings"("id") ON DELETE set null ON UPDATE no action;
     ELSE
-      ALTER TABLE "creator_payment_transactions" ADD CONSTRAINT "creator_payment_transactions_service_listing_id_service_listings_id_fk" FOREIGN KEY ("service_listing_id") REFERENCES "public"."service_listings"("id") ON DELETE no action ON UPDATE no action NOT VALID;
+      ALTER TABLE "creator_payment_transactions" ADD CONSTRAINT "creator_payment_transactions_service_listing_id_service_listings_id_fk" FOREIGN KEY ("service_listing_id") REFERENCES "public"."service_listings"("id") ON DELETE set null ON UPDATE no action NOT VALID;
       RAISE NOTICE 'Added foreign key creator_payment_transactions_service_listing_id_service_listings_id_fk NOT VALID because creator_payment_transactions contains existing rows';
     END IF;
   END IF;

@@ -216,7 +216,14 @@
       "idx": 30,
       "version": "7",
       "when": 1791966500001,
-      "tag": "0034_group_join_approval_policy",
+      "tag": "0033_nullable_deleted_service_listing_references",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1791966500002,
+      "tag": "0034_nullable_commission_service_listing_reference",
       "breakpoints": true
     }
   ]

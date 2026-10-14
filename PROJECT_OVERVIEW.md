@@ -1,6 +1,6 @@
 # QuillHive project overview
 
-> Generated on 2026-10-13 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
+> Generated on 2026-10-14 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
 
 ## Project shape
 
@@ -294,7 +294,6 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 ### features / groups / groupAdmin
 
-- `DELETE /api/groups/:id` — Remove groups. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `GET /api/groups/:id/activity` — Read or list groups activity. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `POST /api/groups/:id/archive` — Create or submit groups archive. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `POST /api/groups/:id/bans` — Create or submit groups bans. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
@@ -370,6 +369,8 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `POST /api/messages/conversations/:conversationId/payment-proposals` — Create or submit conversations payment proposals. ([source](apps/api/src/features/messaging/messaging.routes.ts)).
 - `PATCH /api/messages/conversations/:conversationId/payment-proposals/:proposalId` — Update conversations payment proposals. ([source](apps/api/src/features/messaging/messaging.routes.ts)).
 - `POST /api/messages/conversations/:conversationId/seen` — Mark conversation messages as seen (messages conversations :conversationId). ([source](apps/api/src/features/messaging/messaging.routes.ts)).
+- `GET /api/messages/requests` — Read or list messages requests. ([source](apps/api/src/features/messaging/messaging.routes.ts)).
+- `POST /api/messages/requests/:conversationId/respond` — Create or submit requests respond. ([source](apps/api/src/features/messaging/messaging.routes.ts)).
 - `POST /api/messages/send` — Send a message or notification (messages). ([source](apps/api/src/features/messaging/messaging.routes.ts)).
 - `POST /api/messages/start` — Start the requested operation (messages). ([source](apps/api/src/features/messaging/messaging.routes.ts)).
 - `GET /api/messages/unread-count` — Return the unread count (messages). ([source](apps/api/src/features/messaging/messaging.routes.ts)).
@@ -410,6 +411,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 - `POST /api/polls` — Create or submit polls. ([source](apps/api/src/features/polls/polls.routes.ts)).
 - `GET /api/polls/:id` — Read or list polls. ([source](apps/api/src/features/polls/polls.routes.ts)).
+- `PATCH /api/polls/:id` — Update polls. ([source](apps/api/src/features/polls/polls.routes.ts)).
 - `POST /api/polls/:id/vote` — Record a vote (polls :id). ([source](apps/api/src/features/polls/polls.routes.ts)).
 - `GET /api/polls/:id/voters` — Read or list polls voters. ([source](apps/api/src/features/polls/polls.routes.ts)).
 - `GET /api/polls/post/:postId` — Read or list polls post. ([source](apps/api/src/features/polls/polls.routes.ts)).
@@ -654,6 +656,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `POST /api/admin/users/:id/notice` — Create or submit users notice. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/users/:id/official` — Create or submit users official. ([source](apps/api/src/routes/admin.ts)).
 - `PATCH /api/admin/users/:id/reach` — Update users reach. ([source](apps/api/src/routes/admin.ts)).
+- `POST /api/admin/users/:id/revive` — Create or submit users revive. ([source](apps/api/src/routes/admin.ts)).
 - `PATCH /api/admin/users/:id/role` — Update users role. ([source](apps/api/src/routes/admin.ts)).
 - `GET /api/admin/users/:id/strikes` — Read or list users strikes. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/users/:id/strikes` — Create or submit users strikes. ([source](apps/api/src/routes/admin.ts)).
@@ -678,6 +681,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 - `GET /api/groups` — Read or list groups. ([source](apps/api/src/routes/groups.ts)).
 - `POST /api/groups` — Create or submit groups. ([source](apps/api/src/routes/groups.ts)).
+- `DELETE /api/groups/:id` — Remove groups. ([source](apps/api/src/routes/groups.ts)).
 - `GET /api/groups/:id` — Read or list groups. ([source](apps/api/src/routes/groups.ts)).
 - `POST /api/groups/:id/join` — Create or submit groups join. ([source](apps/api/src/routes/groups.ts)).
 - `POST /api/groups/:id/opportunities/:opportunityId/reshare` — Create or submit opportunities reshare. ([source](apps/api/src/routes/groups.ts)).

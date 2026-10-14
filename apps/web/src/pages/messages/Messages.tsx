@@ -764,43 +764,45 @@ export default function Messages() {
               </ScrollArea>
 
               {/* Input */}
-              {activeConv && !isClosedOutgoingRequest && !(isOutgoingRequest && localMessages.length > 0) ? <div className="p-4 border-t border-border/50 bg-card shrink-0">
-                <div className="mb-2 flex items-center gap-2">
-                  <AttachmentPicker
-                    attachments={messageAttachments}
-                    onChange={setMessageAttachments}
-                    category="general"
-                    max={5}
-                    compact
-                    label="Attach file"
-                  />
-                  {messageAttachments.length > 0 && (
-                    <span className="text-xs text-muted-foreground">{messageAttachments.length} file{messageAttachments.length === 1 ? '' : 's'} ready</span>
-                  )}
-                </div> : isOutgoingRequest && localMessages.length > 0 ? (
+              {activeConv && (isOutgoingRequest && localMessages.length > 0) ? (
                   <div className="border-t border-border/50 bg-card px-4 py-3 text-center text-xs text-muted-foreground">
                     You can send another message after this request is accepted.
                   </div>
-                ) : isClosedOutgoingRequest ? (
+              ) : activeConv && isClosedOutgoingRequest ? (
                   <div className="border-t border-border/50 bg-card px-4 py-3 text-center text-xs text-muted-foreground">
                     This conversation is unavailable.
                   </div>
-                ) : null}
-                <form
-                  onSubmit={handleSend}
-                  className="flex items-center gap-2 bg-muted/30 p-1.5 rounded-full border border-border/50 focus-within:border-primary/50 transition-colors"
-                >
-                  <Input
-                    placeholder={t('messages.typePlaceholder', 'Type a message...')}
-                    value={messageText}
-                    onChange={e => handleTyping(e.target.value)}
-                    className="border-0 bg-transparent focus-visible:ring-0 flex-1 px-4"
-                  />
-                  <Button type="submit" size="icon" disabled={isSending || (!messageText.trim() && messageAttachments.length === 0)} className="rounded-full shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground">
-                    <Send className="w-4 h-4" />
-                  </Button>
-                </form>
-              </div>
+              ) : activeConv ? (
+                <div className="p-4 border-t border-border/50 bg-card shrink-0">
+                  <div className="mb-2 flex items-center gap-2">
+                    <AttachmentPicker
+                      attachments={messageAttachments}
+                      onChange={setMessageAttachments}
+                      category="general"
+                      max={5}
+                      compact
+                      label="Attach file"
+                    />
+                    {messageAttachments.length > 0 && (
+                      <span className="text-xs text-muted-foreground">{messageAttachments.length} file{messageAttachments.length === 1 ? '' : 's'} ready</span>
+                    )}
+                  </div>
+                  <form
+                    onSubmit={handleSend}
+                    className="flex items-center gap-2 bg-muted/30 p-1.5 rounded-full border border-border/50 focus-within:border-primary/50 transition-colors"
+                  >
+                    <Input
+                      placeholder={t('messages.typePlaceholder', 'Type a message...')}
+                      value={messageText}
+                      onChange={e => handleTyping(e.target.value)}
+                      className="border-0 bg-transparent focus-visible:ring-0 flex-1 px-4"
+                    />
+                    <Button type="submit" size="icon" disabled={isSending || (!messageText.trim() && messageAttachments.length === 0)} className="rounded-full shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground">
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </form>
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center">

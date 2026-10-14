@@ -116,7 +116,7 @@ export const creatorPaymentTransactionsTable = pgTable("creator_payment_transact
   id: serial("id").primaryKey(),
   buyerId: integer("buyer_id").notNull().references(() => usersTable.id),
   creatorId: integer("creator_id").notNull().references(() => usersTable.id),
-  serviceListingId: integer("service_listing_id").references(() => serviceListingsTable.id),
+  serviceListingId: integer("service_listing_id").references(() => serviceListingsTable.id, { onDelete: "set null" }),
   commissionRequestId: integer("commission_request_id").references(() => commissionRequestsTable.id),
   amount: real("amount").notNull(),
   currency: text("currency").notNull().default("USD"),

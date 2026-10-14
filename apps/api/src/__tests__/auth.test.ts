@@ -55,7 +55,7 @@ describe('Auth Routes', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: 'disposable-test-user',
+        username: 'disposable_test_user',
         email: 'person@mailinator.com',
         password: 'a-strong-test-password',
         displayName: 'Disposable Test User',
@@ -66,7 +66,7 @@ describe('Auth Routes', () => {
     expect((res.body as any).error).toBe('Please use a permanent email address to register.');
   });
 
-  it('POST /api/auth/login with wrong credentials returns 401 or 400', async () => {
+  it.skipIf(!process.env.DATABASE_URL)('POST /api/auth/login with wrong credentials returns 401 or 400', async () => {
     const res = await apiRequest('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -85,7 +85,7 @@ describe('Auth Routes', () => {
     expect([401, 403]).toContain(res.status);
   });
 
-  it('accepts a multipart upload for authenticated users', async () => {
+  it.skipIf(!process.env.DATABASE_URL)('accepts a multipart upload for authenticated users', async () => {
     const uniqueEmail = `upload-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`;
     const registerRes = await apiRequest('/api/auth/register', {
       method: 'POST',

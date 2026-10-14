@@ -52,20 +52,6 @@ function canModerate(role: GroupRole | null): boolean {
   return role === "owner" || role === "admin" || role === "moderator";
 }
 
-export function canReviewJoinRequestsByPolicy(role: GroupRole | null, policy: string): boolean {
-  return canModerate(role) || (policy === "members" && role !== null);
-}
-
-async function canReviewJoinRequests(groupId: number, userId: number): Promise<boolean> {
-  const role = await getActorRole(groupId, userId);
-  if (!role) return false;
-  if (canModerate(role)) return true;
-  const [group] = await db.select({ joinApprovalPolicy: groupsTable.joinApprovalPolicy })
-    .from(groupsTable)
-    .where(eq(groupsTable.id, groupId));
-  return canReviewJoinRequestsByPolicy(role, group?.joinApprovalPolicy ?? "admins");
-}
-
 groupAdminRouter.get("/:id/pinned", optionalAuth, async (req, res: Response) => {
   const groupId = Number(req.params.id);
   if (!Number.isInteger(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid id" });
@@ -229,7 +215,7 @@ groupAdminRouter.patch("/:id/settings", requireAuth, async (req, res: Response) 
   if (!Number.isFinite(groupId)) return res.status(400).json({ error: "Invalid id" });
   const actorRole = await getActorRole(groupId, actorId);
   if (actorRole !== "admin" && actorRole !== "owner") return res.status(403).json({ error: "Only group admins can update settings" });
-  const { name, description, privacy, type, rules, coverUrl, coverImage, avatarUrl, iconImage, category, tags, isAnnouncementOnly, requireApprovalFirstThree, requireApprovalAll, announcementPolicy, joinApprovalPolicy } = req.body ?? {};
+  const { name, description, privacy, type, rules, coverUrl, coverImage, avatarUrl, iconImage, category, tags, isAnnouncementOnly, requireApprovalFirstThree, requireApprovalAll, announcementPolicy } = req.body ?? {};
   const normalizedPrivacy = privacy ?? (type === undefined ? undefined : type === "public" ? "open" : type === "private" ? "public" : "private");
   const validPrivacy = normalizedPrivacy === undefined || ["open", "public", "private"].includes(normalizedPrivacy);
   if (!validPrivacy) return res.status(400).json({ error: "Privacy must be open, public, or private" });
@@ -283,10 +269,6 @@ groupAdminRouter.patch("/:id/settings", requireAuth, async (req, res: Response) 
     if (announcementPolicy !== "owner" && announcementPolicy !== "admins") return res.status(400).json({ error: "announcementPolicy must be owner or admins" });
     updates.announcementPolicy = announcementPolicy;
   }
-  if (joinApprovalPolicy !== undefined) {
-    if (joinApprovalPolicy !== "admins" && joinApprovalPolicy !== "members") return res.status(400).json({ error: "joinApprovalPolicy must be admins or members" });
-    updates.joinApprovalPolicy = joinApprovalPolicy;
-  }
   if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No settings provided" });
   const [updated] = await db.update(groupsTable).set(updates).where(eq(groupsTable.id, groupId)).returning();
   return updated ? res.json({ group: updated }) : res.status(404).json({ error: "Group not found" });
@@ -306,7 +288,8 @@ groupAdminRouter.patch("/:id/features", requireSuperAdmin, async (req, res: Resp
 groupAdminRouter.get("/:id/join-requests", requireAuth, async (req, res: Response) => {
   const actorId = (req as AuthedRequest).currentUser.id;
   const groupId = Number(req.params.id);
-  if (!(await canReviewJoinRequests(groupId, actorId))) return res.status(403).json({ error: "Only authorized group members can view join requests" });
+  const actorRole = await getActorRole(groupId, actorId);
+  if (actorRole !== "owner" && actorRole !== "admin") return res.status(403).json({ error: "Only group admins can view join requests" });
   const requests = await db.select({
     id: groupJoinRequestsTable.id,
     userId: groupJoinRequestsTable.userId,
@@ -330,7 +313,8 @@ groupAdminRouter.post("/:id/join-requests/:requestId/approve", requireAuth, asyn
   const groupId = Number(req.params.id);
   const requestId = Number(req.params.requestId);
   if (!Number.isInteger(groupId) || groupId <= 0 || !Number.isInteger(requestId) || requestId <= 0) return res.status(400).json({ error: "Invalid group or request id" });
-  if (!(await canReviewJoinRequests(groupId, actorId))) return res.status(403).json({ error: "Only authorized group members can review join requests" });
+  const actorRole = await getActorRole(groupId, actorId);
+  if (actorRole !== "owner" && actorRole !== "admin") return res.status(403).json({ error: "Only group admins can review join requests" });
   const [group] = await db.select({ name: groupsTable.name, privacy: groupsTable.privacy }).from(groupsTable).where(eq(groupsTable.id, groupId));
   if (!group) return res.status(404).json({ error: "Group not found" });
   if (group.privacy !== "public") return res.status(409).json({ error: "This group no longer accepts join requests" });
@@ -365,7 +349,8 @@ groupAdminRouter.post("/:id/join-requests/:requestId/deny", requireAuth, async (
   const groupId = Number(req.params.id);
   const requestId = Number(req.params.requestId);
   if (!Number.isInteger(groupId) || groupId <= 0 || !Number.isInteger(requestId) || requestId <= 0) return res.status(400).json({ error: "Invalid group or request id" });
-  if (!(await canReviewJoinRequests(groupId, actorId))) return res.status(403).json({ error: "Only authorized group members can review join requests" });
+  const actorRole = await getActorRole(groupId, actorId);
+  if (actorRole !== "owner" && actorRole !== "admin") return res.status(403).json({ error: "Only group admins can review join requests" });
   const [request] = await db.select({ id: groupJoinRequestsTable.id, userId: groupJoinRequestsTable.userId })
     .from(groupJoinRequestsTable)
     .where(and(eq(groupJoinRequestsTable.id, requestId), eq(groupJoinRequestsTable.groupId, groupId), eq(groupJoinRequestsTable.status, "pending")));
@@ -571,10 +556,9 @@ groupAdminRouter.patch("/:id/join-requests/:requestId", requireAuth, async (req,
   const groupId = Number(req.params.id);
   const requestId = Number(req.params.requestId);
   const actorRole = await getActorRole(groupId, actorId);
-  if (!(await canReviewJoinRequests(groupId, actorId))) return res.status(403).json({ error: "Only authorized group members can review join requests" });
+  if (actorRole !== "owner" && actorRole !== "admin") return res.status(403).json({ error: "Only group admins can review join requests" });
   const decision = req.body?.decision as string;
   if (!["approve", "reject", "block"].includes(decision)) return res.status(400).json({ error: "Decision must be approve, reject, or block" });
-  if (decision === "block" && actorRole !== "admin" && actorRole !== "owner") return res.status(403).json({ error: "Only group admins can block join requesters" });
   const [request] = await db.select().from(groupJoinRequestsTable)
     .where(and(eq(groupJoinRequestsTable.id, requestId), eq(groupJoinRequestsTable.groupId, groupId), eq(groupJoinRequestsTable.status, "pending")));
   if (!request) return res.status(404).json({ error: "Join request not found" });

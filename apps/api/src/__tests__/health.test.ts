@@ -41,8 +41,9 @@ async function apiRequest(path: string, init?: RequestInit) {
 }
 
 describe('Health Check', () => {
-  it('GET /api/health returns 200', async () => {
-    const res = await apiRequest('/api/health');
-    expect(res.status).toBe(200);
+  it('GET /api/healthz reports database readiness', async () => {
+    const res = await apiRequest('/api/healthz');
+    expect([200, 503]).toContain(res.status);
+    expect((res.body as { checks?: { database?: string } }).checks?.database).toBe(res.status === 200 ? 'ok' : 'fail');
   });
 });
