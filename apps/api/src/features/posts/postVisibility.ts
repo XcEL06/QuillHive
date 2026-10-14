@@ -50,5 +50,31 @@ export function postVisibilityCondition(viewerId: number | null, isSuperAdmin = 
             )
         )
       )`;
-  return and(postTypeVisibility, groupVisibility)!;
+  const authorAudienceVisibility = viewerId === null
+    ? sql`EXISTS (
+        SELECT 1 FROM users audience_author
+        WHERE audience_author.id = ${postsTable.authorId}
+          AND audience_author.profile_visibility = 'public'
+          AND audience_author.show_posts_to_everyone = true
+      )`
+    : sql`EXISTS (
+        SELECT 1 FROM users audience_author
+        WHERE audience_author.id = ${postsTable.authorId}
+          AND (
+            audience_author.id = ${viewerId}
+            OR (
+              audience_author.profile_visibility = 'public'
+              AND audience_author.show_posts_to_everyone = true
+            )
+            OR (
+              audience_author.profile_visibility <> 'private'
+              AND EXISTS (
+                SELECT 1 FROM follows audience_follow
+                WHERE audience_follow.follower_id = ${viewerId}
+                  AND audience_follow.following_id = audience_author.id
+              )
+            )
+          )
+      )`;
+  return and(postTypeVisibility, groupVisibility, authorAudienceVisibility)!;
 }

@@ -279,7 +279,7 @@ function Router() {
         <AuthGuard><Network /></AuthGuard>
       </Route>
       <Route path="/polls/new">
-        <AuthGuard><PollNew /></AuthGuard>
+        <AuthGuard><FeatureRoute flag="polls_enabled"><PollNew /></FeatureRoute></AuthGuard>
       </Route>
       <Route path="/chains/new">
         <AuthGuard><FeatureRoute flag="chains_enabled"><ChainNew /></FeatureRoute></AuthGuard>
@@ -297,7 +297,7 @@ function Router() {
         <AuthGuard><FeatureRoute flag="chains_enabled"><ChainDiscover /></FeatureRoute></AuthGuard>
       </Route>
       <Route path="/write">
-        <AuthGuard><Write /></AuthGuard>
+        <AuthGuard><FeatureRoute flag="post_creation_enabled"><Write /></FeatureRoute></AuthGuard>
       </Route>
       <Route path="/profile/:username">
         <AuthGuard><Profile /></AuthGuard>
@@ -358,7 +358,7 @@ function Router() {
         <AuthGuard><Trending /></AuthGuard>
       </Route>
       <Route path="/sparks/new">
-        <AuthGuard><SparksNew /></AuthGuard>
+        <AuthGuard><FeatureRoute flag="quick_posts_enabled"><SparksNew /></FeatureRoute></AuthGuard>
       </Route>
       <Route path="/challenges">
         <AuthGuard><Challenges /></AuthGuard>

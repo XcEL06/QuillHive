@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   jobsTable, usersTable, topicFollowsTable, topicsTable,
-  creatorProfilesTable, userTrustScoresTable, postsTable,
+  creatorProfilesTable, creatorAvailabilityTable, userTrustScoresTable, postsTable,
   opportunityApplicationsTable, conversationsTable, conversationParticipantsTable, messagesTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, or, isNull, gt, sql, inArray, gte } from "drizzle-orm";
@@ -481,7 +481,16 @@ router.get("/:id/creator-matches", async (req, res) => {
   const hireableUsers = await db.select({
     id: usersTable.id,
     identityType: usersTable.identityType,
-  }).from(usersTable).where(eq(usersTable.hireMeEnabled, true)).limit(100);
+  }).from(creatorAvailabilityTable)
+    .innerJoin(usersTable, and(
+      eq(usersTable.id, creatorAvailabilityTable.userId),
+      eq(usersTable.isDeleted, false),
+      eq(usersTable.isBanned, false),
+      eq(usersTable.showInSearch, true),
+      eq(usersTable.profileVisibility, "public"),
+    ))
+    .where(or(eq(creatorAvailabilityTable.status, "available"), eq(creatorAvailabilityTable.status, "open_to_opportunities")))
+    .limit(100);
 
   const now30 = new Date(Date.now() - 30 * 24 * 60 * 60_000);
 
@@ -537,8 +546,15 @@ router.get("/creators", async (req, res) => {
       avatarUrl: usersTable.avatarUrl,
       bio: usersTable.bio,
     })
-    .from(usersTable)
-    .where(eq(usersTable.hireMeEnabled, true))
+    .from(creatorAvailabilityTable)
+    .innerJoin(usersTable, and(
+      eq(usersTable.id, creatorAvailabilityTable.userId),
+      eq(usersTable.isDeleted, false),
+      eq(usersTable.isBanned, false),
+      eq(usersTable.showInSearch, true),
+      eq(usersTable.profileVisibility, "public"),
+    ))
+    .where(or(eq(creatorAvailabilityTable.status, "available"), eq(creatorAvailabilityTable.status, "open_to_opportunities")))
     .limit(limit)
     .offset((page - 1) * limit);
 

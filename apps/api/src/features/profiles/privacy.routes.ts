@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { getViewerId } from "../../lib/auth-types";
+import { invalidateUserCache } from "./profile.service";
 
 export const privacyRouter = Router();
 
@@ -48,5 +49,6 @@ privacyRouter.patch("/", async (req, res: Response) => {
     allowMessagesFromAnyone: usersTable.allowMessagesFromAnyone,
     showInSearch: usersTable.showInSearch,
   });
+  await invalidateUserCache(userId);
   return res.json(updated);
 });

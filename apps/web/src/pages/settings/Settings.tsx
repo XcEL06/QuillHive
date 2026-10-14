@@ -59,6 +59,7 @@ export default function Settings() {
   usePageTitle('Settings');
   const { user, setUser, logout } = useAuthStore();
   const creatorIncomeEnabled = useFeature('creator_income_enabled');
+  const passkeyEnabled = useFeature('passkey_enabled');
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
   const { theme, toggleTheme } = useTheme();
   const { toast } = useToast();
@@ -97,9 +98,15 @@ export default function Settings() {
   const [isSavingNotifPref, setIsSavingNotifPref] = useState(false);
   const [creatorSettings, setCreatorSettings] = useState({
     emailDigestEnabled: (user as any)?.emailDigestEnabled ?? true,
-    topicNotificationEnabled: (user as any)?.topicNotificationEnabled ?? true,
     hireMeEnabled: (user as any)?.hireMeEnabled ?? false,
   });
+  useEffect(() => {
+    if (!user) return;
+    setCreatorSettings({
+      emailDigestEnabled: (user as any).emailDigestEnabled ?? true,
+      hireMeEnabled: (user as any).hireMeEnabled ?? false,
+    });
+  }, [user?.id, (user as any)?.emailDigestEnabled, (user as any)?.hireMeEnabled]);
   const [isSavingCreatorSettings, setIsSavingCreatorSettings] = useState(false);
   const [isSavingAccountInfo, setIsSavingAccountInfo] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -498,11 +505,11 @@ export default function Settings() {
     if (activeSection === 'education') fetchEducation();
     if (activeSection === 'security') {
       fetch2faStatus();
-      fetchPasskeys();
+      if (passkeyEnabled) fetchPasskeys();
     }
     if (activeSection === 'privacy' && !privacyLoaded) fetchPrivacy();
     if (activeSection === 'notifications' && !notifPrefs && !isLoadingNotifPrefs) void loadNotifPrefs();
-  }, [activeSection]);
+  }, [activeSection, passkeyEnabled]);
 
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const input = e.currentTarget;
@@ -979,7 +986,7 @@ export default function Settings() {
                     )}
                   </div>
 
-                  <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
+                  {passkeyEnabled && <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -1016,7 +1023,7 @@ export default function Settings() {
                         ))}
                       </div>
                     )}
-                  </div>
+                  </div>}
                 </div>
               )}
 
@@ -1269,21 +1276,19 @@ export default function Settings() {
                       <div className="space-y-6">
                         {GROUPS.map(group => (
                           <div key={group.label}>
-                            <div className="grid grid-cols-[minmax(0,1fr)_repeat(3,44px)] sm:grid-cols-[minmax(0,1fr)_repeat(3,68px)] gap-x-1 sm:gap-x-2 items-center px-1 mb-2">
+                            <div className="grid grid-cols-[minmax(0,1fr)_repeat(2,44px)] sm:grid-cols-[minmax(0,1fr)_repeat(2,68px)] gap-x-1 sm:gap-x-2 items-center px-1 mb-2">
                               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{group.label}</h4>
                               <span className="text-[10px] text-center leading-tight text-muted-foreground">In-app</span>
                               <span className="text-[10px] text-center text-muted-foreground">Push</span>
-                              <span className="text-[10px] text-center text-muted-foreground">Email</span>
                             </div>
                             <div className="rounded-xl border border-border/40 divide-y divide-border/40 overflow-hidden">
                               {group.types.map(item => {
                                 const p = notifPrefs[item.key] ?? { inApp: true, push: false, email: false };
                                 return (
-                                  <div key={item.key} className="grid grid-cols-[minmax(0,1fr)_repeat(3,44px)] sm:grid-cols-[minmax(0,1fr)_repeat(3,68px)] gap-x-1 sm:gap-x-2 items-center px-2 sm:px-4 py-3 hover:bg-muted/30 transition-colors">
+                                  <div key={item.key} className="grid grid-cols-[minmax(0,1fr)_repeat(2,44px)] sm:grid-cols-[minmax(0,1fr)_repeat(2,68px)] gap-x-1 sm:gap-x-2 items-center px-2 sm:px-4 py-3 hover:bg-muted/30 transition-colors">
                                     <span className="min-w-0 text-sm">{item.label}</span>
                                     <div className="flex justify-center"><Switch aria-label={`${item.label}: in-app`} disabled={isSavingNotifPref} checked={p.inApp} onCheckedChange={v => patchNotifPref(item.key, 'inApp', v)} /></div>
                                     <div className="flex justify-center"><Switch aria-label={`${item.label}: push`} disabled={isSavingNotifPref} checked={p.push} onCheckedChange={v => patchNotifPref(item.key, 'push', v)} /></div>
-                                    <div className="flex justify-center"><Switch aria-label={`${item.label}: email`} disabled={isSavingNotifPref} checked={p.email} onCheckedChange={v => patchNotifPref(item.key, 'email', v)} /></div>
                                   </div>
                                 );
                               })}
@@ -1308,16 +1313,6 @@ export default function Settings() {
                           onCheckedChange={(checked) => setCreatorSettings(s => ({ ...s, emailDigestEnabled: checked }))}
                         />
                       </div>
-                      <div className="flex items-center justify-between py-4 border-b border-border/40">
-                        <div>
-                          <p className="font-medium text-sm">{t('settings.topicPostNotifications')}</p>
-                          <p className="text-xs text-muted-foreground mt-0.5">{t('settings.topicPostNotificationsDesc')}</p>
-                        </div>
-                        <Switch
-                          checked={creatorSettings.topicNotificationEnabled}
-                          onCheckedChange={(checked) => setCreatorSettings(s => ({ ...s, topicNotificationEnabled: checked }))}
-                        />
-                      </div>
                     </div>
                   </div>
                   <Button
@@ -1329,7 +1324,7 @@ export default function Settings() {
                         const res = await fetch('/api/users/me/settings', {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-                          body: JSON.stringify({ emailDigestEnabled: creatorSettings.emailDigestEnabled, topicNotificationEnabled: creatorSettings.topicNotificationEnabled }),
+                          body: JSON.stringify({ emailDigestEnabled: creatorSettings.emailDigestEnabled }),
                         });
                         if (res.ok) {
                           const updated = await res.json();

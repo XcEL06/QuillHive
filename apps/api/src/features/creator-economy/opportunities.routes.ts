@@ -86,7 +86,13 @@ opportunitiesRouter.get(
         bio: usersTable.bio,
       })
       .from(usersTable)
-      .where(inArray(usersTable.id, userIds));
+      .where(and(
+        inArray(usersTable.id, userIds),
+        eq(usersTable.isDeleted, false),
+        eq(usersTable.isBanned, false),
+        eq(usersTable.showInSearch, true),
+        eq(usersTable.profileVisibility, "public"),
+      ));
 
     // ── 3. Endorsement counts per creator×skill ───────────────────────────────
     const endorsements = await db

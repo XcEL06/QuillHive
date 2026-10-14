@@ -30,10 +30,13 @@ function friendlyError(msg: string): string {
 }
 
 export default function Auth() {
+  const registrationOpen = useFeature("registration_open");
+  const magicLinkEnabled = useFeature("magic_link_enabled");
+  const passkeyEnabled = useFeature("passkey_enabled");
   const [isLogin, setIsLogin] = useState(() => {
     if (typeof window === "undefined") return true;
     const mode = new URLSearchParams(window.location.search).get("mode");
-    return window.location.pathname !== "/signup" && mode !== "signup" && mode !== "register";
+    return !registrationOpen || (window.location.pathname !== "/signup" && mode !== "signup" && mode !== "register");
   });
   const [, setLocation] = useLocation();
   const googleOAuthEnabled = useFeature("google_oauth_enabled");
@@ -48,6 +51,10 @@ export default function Auth() {
   const magicConsumed = useRef(false);
   // Guard: prevent double form submission
   const submitting = useRef(false);
+
+  useEffect(() => {
+    if (!registrationOpen) setIsLogin(true);
+  }, [registrationOpen]);
 
   useEffect(() => {
     if (user) {
@@ -680,7 +687,7 @@ export default function Auth() {
                 </div>
 
                 <div className="space-y-3">
-                  {isLogin && <>
+                  {isLogin && magicLinkEnabled && <>
                   {/* Magic link */}
                   <Button
                     type="button" variant="outline"
@@ -749,7 +756,7 @@ export default function Auth() {
                     </a>
                   </div>}
 
-                  {isLogin && <p className="text-[11px] text-muted-foreground text-center">
+                  {isLogin && passkeyEnabled && <p className="text-[11px] text-muted-foreground text-center">
                     {t("auth.passkeyHint", "Passkey sign-in is available in Settings → Security after you sign in once.")}
                   </p>}
                 </div>
@@ -759,8 +766,8 @@ export default function Auth() {
 
             <div className="mt-6 text-center">
               <p className="text-muted-foreground">
-                {isLogin ? t("auth.noAccount", "Don't have an account?") : t("auth.hasAccount", "Already have an account?")}{" "}
-                <button
+                {isLogin ? (registrationOpen ? t("auth.noAccount", "Don't have an account?") : t("auth.registrationClosed", "Registration is currently closed.")) : t("auth.hasAccount", "Already have an account?")} {" "}
+                {(registrationOpen || !isLogin) && <button
                   onClick={() => {
                     setLoginChallengeId(null);
                     setLoginChallengeEmail("");
@@ -770,7 +777,7 @@ export default function Auth() {
                   className="font-semibold text-primary hover:underline"
                 >
                   {isLogin ? t("auth.signUp", "Sign up") : t("auth.signIn", "Sign in")}
-                </button>
+                </button>}
               </p>
             </div>
 

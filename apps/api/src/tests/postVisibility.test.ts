@@ -18,7 +18,9 @@ describe("Spark visibility", () => {
 
     expect(query.sql).toMatch(/author_id.*=\s*\$\d/);
     expect(query.sql).toMatch(/follower_id.*=\s*\$\d/);
-    expect(query.params.filter(value => value === viewerId)).toHaveLength(3);
+    expect(query.sql).toContain("profile_visibility");
+    expect(query.sql).toContain("show_posts_to_everyone");
+    expect(query.params.filter(value => value === viewerId).length).toBeGreaterThanOrEqual(3);
   });
 
   it("removes Spark and group visibility predicates for super-admin inspection queries", () => {

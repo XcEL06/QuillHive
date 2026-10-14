@@ -83,6 +83,7 @@ async function _getUserWithCounts(userId: number, viewerId: number | null) {
     "twoFactorSecret",
     "passwordResetTokenHash",
     "passwordResetExpires",
+    "email",
     "signupIpHash",
     "signupUserAgent",
     "lastKnownIPHash",
@@ -90,6 +91,11 @@ async function _getUserWithCounts(userId: number, viewerId: number | null) {
     "lastKnownTimezone",
   ] as const) {
     delete (safeUser as Partial<typeof user>)[field];
+  }
+  if (!user.showWebsite) safeUser.website = null;
+  if (!user.showLocation) {
+    safeUser.location = null;
+    safeUser.country = null;
   }
   return {
     ...safeUser,
@@ -303,12 +309,18 @@ export async function getCreatorProfile(userId: number) {
     .from(creatorProfilesTable)
     .where(eq(creatorProfilesTable.userId, userId));
 
-  if (!profile) return null;
+  const [availability] = await db
+    .select({ status: creatorAvailabilityTable.status })
+    .from(creatorAvailabilityTable)
+    .where(eq(creatorAvailabilityTable.userId, userId));
+  if (!profile && !availability) return null;
 
   return {
-    ...profile,
-    skills: JSON.parse(profile.skills || "[]") as string[],
-    links: JSON.parse(profile.links || "[]") as { label: string; url: string }[],
+    ...(profile ?? { userId, verified: false, skills: "[]", links: "[]", availableFor: "[]" }),
+    isAvailableForHire: availability?.status === "available" || availability?.status === "open_to_opportunities",
+    skills: JSON.parse(profile?.skills || "[]") as string[],
+    links: JSON.parse(profile?.links || "[]") as { label: string; url: string }[],
+    availableFor: JSON.parse(profile?.availableFor || "[]") as string[],
   };
 }
 

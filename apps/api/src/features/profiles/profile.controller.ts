@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { createHash } from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, followsTable, postsTable, commentsTable, likesTable, postTopicsTable, userTrustScoresTable, workHistoryTable, educationHistoryTable, savedPostsTable, profileViewsTable } from "@workspace/db/schema";
+import { usersTable, followsTable, postsTable, commentsTable, likesTable, postTopicsTable, userTrustScoresTable, workHistoryTable, educationHistoryTable, savedPostsTable, profileViewsTable, creatorAvailabilityTable } from "@workspace/db/schema";
 import { eq, and, sql, ilike, desc, or, inArray, notInArray } from "drizzle-orm";
 import {
   hashPassword,
@@ -44,6 +44,16 @@ function getViewerId(req: Request): number | null {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) return null;
   return getSessionUserId(auth.slice(7));
+}
+
+async function canViewProfile(profileUser: any, viewerId: number | null): Promise<boolean> {
+  if (viewerId === profileUser.id || profileUser.profileVisibility === "public") return true;
+  if (profileUser.profileVisibility !== "followers" || viewerId === null) return false;
+  const [follow] = await db.select({ id: followsTable.followerId }).from(followsTable).where(and(
+    eq(followsTable.followerId, viewerId),
+    eq(followsTable.followingId, profileUser.id),
+  ));
+  return Boolean(follow);
 }
 
 // ─── Reserved usernames ───────────────────────────────────────────────────────
@@ -95,6 +105,9 @@ const DISPOSABLE_DOMAINS = new Set([
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export const register = async (req: Request, res: Response) => {
+  if (!(await isFeatureEnabled("registration_open"))) {
+    return res.status(403).json({ error: "registration_closed", message: "New account registration is currently closed." });
+  }
   const { username, email, password, displayName } = req.body;
   const normalizedEmail = String(email ?? "").trim().toLowerCase();
   const refRaw = (req.body?.ref ?? req.query?.ref ?? "") as string;
@@ -626,7 +639,6 @@ export const getFeaturedUsers = async (req: Request, res: Response) => {
 export const getHireableCreators = async (req: Request, res: Response) => {
   const limit = Math.min(parseInt(req.query.limit as string) || 6, 20);
   try {
-    const { creatorProfilesTable: cpTable } = await import("@workspace/db/schema");
     const rows = await db
       .select({
         id: usersTable.id,
@@ -635,9 +647,9 @@ export const getHireableCreators = async (req: Request, res: Response) => {
         avatarUrl: usersTable.avatarUrl,
         bio: usersTable.bio,
       })
-      .from(cpTable)
-      .innerJoin(usersTable, and(eq(usersTable.id, cpTable.userId), eq(usersTable.isDeleted, false), eq(usersTable.isBanned, false), eq(usersTable.showInSearch, true)))
-      .where(eq(cpTable.isAvailableForHire, true))
+      .from(creatorAvailabilityTable)
+      .innerJoin(usersTable, and(eq(usersTable.id, creatorAvailabilityTable.userId), eq(usersTable.isDeleted, false), eq(usersTable.isBanned, false), eq(usersTable.showInSearch, true)))
+      .where(or(eq(creatorAvailabilityTable.status, "available"), eq(creatorAvailabilityTable.status, "open_to_opportunities")))
       .orderBy(sql`RANDOM()`)
       .limit(limit);
     return res.json(rows);
@@ -653,6 +665,7 @@ export const getUserByUsername = async (req: Request, res: Response) => {
   const [profileUser] = await (db as any).select().from(usersTable)
     .where(and(ilike(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!profileUser) return res.status(404).json({ error: "User not found" });
+  if (!(await canViewProfile(profileUser, viewerId))) return res.status(404).json({ error: "User not found" });
 
   // Non-blocking profile view tracking (never fails the request)
   void (async () => {
@@ -695,9 +708,16 @@ export const getUserByUsername = async (req: Request, res: Response) => {
     .limit(6);
 
   const creatorProfile = await getCreatorProfile(profileUser.id);
+  const publicUser = { ...userWithCounts } as Record<string, any>;
+  if (profileUser.showEmail) publicUser.email = profileUser.email;
+  if (!profileUser.showWebsite) publicUser.website = null;
+  if (!profileUser.showLocation) {
+    publicUser.location = null;
+    publicUser.country = null;
+  }
 
   return res.json({
-    user: userWithCounts,
+    user: publicUser,
     workHistory,
     educationHistory,
     creatorProfile,
@@ -754,6 +774,7 @@ export const getUserPosts = async (req: Request, res: Response) => {
   const [user] = await (db as any).select().from(usersTable)
     .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
+  if (!(await canViewProfile(user, viewerId))) return res.status(404).json({ error: "User not found" });
 
   const postFilter = and(
     eq(postsTable.authorId, user.id),
@@ -1092,10 +1113,12 @@ export const updateMyCreatorProfile = async (req: Request, res: Response) => {
 };
 
 export const getCreatorProfileByUsername = async (req: Request, res: Response) => {
+  const viewerId = getViewerId(req);
   const { username } = req.params;
   const [user] = await (db as any).select().from(usersTable)
     .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
+  if (!(await canViewProfile(user, viewerId))) return res.status(404).json({ error: "User not found" });
 
   const profile = await getCreatorProfile(user.id);
   return res.json(profile || { userId: user.id, skills: [], links: [], verified: false, isAvailableForHire: false, availableFor: [] });
@@ -1171,7 +1194,6 @@ export const updateSettings = async (req: Request, res: Response) => {
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const allowed: Record<string, boolean> = {};
   if (typeof req.body.emailDigestEnabled === "boolean") allowed.emailDigestEnabled = req.body.emailDigestEnabled;
-  if (typeof req.body.topicNotificationEnabled === "boolean") allowed.topicNotificationEnabled = req.body.topicNotificationEnabled;
   if (typeof req.body.hireMeEnabled === "boolean") allowed.hireMeEnabled = req.body.hireMeEnabled;
   if (Object.keys(allowed).length === 0) return res.status(400).json({ error: "No valid settings provided" });
   await db.update(usersTable).set({ ...allowed, updatedAt: new Date() }).where(eq(usersTable.id, viewerId));
@@ -1252,10 +1274,12 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
 };
 
 export const getUserPortfolio = async (req: Request, res: Response) => {
+  const viewerId = getViewerId(req);
   const { username } = req.params;
   const [user] = await (db as any).select().from(usersTable)
     .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
+  if (!(await canViewProfile(user, viewerId))) return res.status(404).json({ error: "User not found" });
 
   const featured = await db
     .select({
@@ -1273,6 +1297,7 @@ export const getUserPortfolio = async (req: Request, res: Response) => {
     .limit(6);
 
   const counts = await getUserWithCounts(user.id, null);
+  const creatorProfile = await getCreatorProfile(user.id);
 
   const safeUser: Record<string, unknown> = {
     id: user.id,
@@ -1282,14 +1307,14 @@ export const getUserPortfolio = async (req: Request, res: Response) => {
     headline: user.headline,
     avatarUrl: user.avatarUrl,
     coverUrl: user.coverUrl,
-    website: user.website,
+    website: user.showWebsite ? user.website : null,
     twitter: user.twitter,
     linkedin: user.linkedin,
     instagram: user.instagram,
     facebook: user.facebook,
-    location: user.location,
-    country: user.country,
-    hireMeEnabled: user.hireMeEnabled,
+    location: user.showLocation ? user.location : null,
+    country: user.showLocation ? user.country : null,
+    hireMeEnabled: creatorProfile?.isAvailableForHire ?? false,
     showEmail: user.showEmail,
     identityType: user.identityType ?? null,
     isPremium: user.isPremium,

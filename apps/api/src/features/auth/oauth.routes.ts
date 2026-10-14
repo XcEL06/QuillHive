@@ -194,6 +194,11 @@ async function handleGithubCallback(req: Request, res: Response): Promise<void> 
     } else {
       let [user] = await db.select().from(usersTable).where(eq(usersTable.email, email.toLowerCase()));
       if (!user) {
+        if (!(await isFeatureEnabled("registration_open"))) {
+          const target = new URL("/login", appUrl);
+          target.searchParams.set("error", "registration_closed");
+          return res.redirect(target.toString());
+        }
         let baseUsername = ghProfile.login.toLowerCase().replace(/[^a-z0-9_]/g, "_").slice(0, 28);
         let username = baseUsername;
         let suffix = 1;
@@ -280,6 +285,11 @@ async function handleCallback(req: Request, res: Response, provider: string) {
   } else {
     let [user] = await db.select().from(usersTable).where(eq(usersTable.email, profile.email));
     if (!user) {
+      if (!(await isFeatureEnabled("registration_open"))) {
+        const target = new URL("/login", frontendUrl());
+        target.searchParams.set("error", "registration_closed");
+        return res.redirect(target.toString());
+      }
       const username = `user_${randomBytes(4).toString("hex")}`;
       [user] = await db.insert(usersTable).values({
         username,

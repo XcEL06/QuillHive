@@ -65,6 +65,7 @@ import { chainsRouter } from "../features/chains/chains.routes";
 import { carouselRouter } from "../features/carousel/carousel.routes";
 import { masterAdminRouter } from "../features/admin/master.routes";
 import { spamReviewRouter } from "../features/admin/spamReview.routes";
+import { requireFeatureFlag } from "../middleware/featureFlag";
 
 const router: IRouter = Router();
 
@@ -75,7 +76,7 @@ router.use("/posts", postsRouter);
 router.use("/sparks", sparksRouter);
 router.use("/comments", commentsRouter);
 router.use("/messages", messagesRouter);
-router.use("/gallery", galleryRouter);
+router.use("/gallery", requireFeatureFlag("gallery_enabled"), galleryRouter);
 router.use("/collaboration", collaborationRouter);
 router.use("/analytics", analyticsRouter);
 router.use("/email", emailRouter);
@@ -102,13 +103,13 @@ router.use("/topics", topicsRouter);
 router.use(feedRouter);
 router.use(topicFeedRouter);
 router.use("/mentions", mentionsRouter);
-router.use("/series", seriesRouter);
-router.use(seriesNavRouter);
+router.use("/series", requireFeatureFlag("series_enabled"), seriesRouter);
+router.use("/posts", requireFeatureFlag("series_enabled"), seriesNavRouter);
 router.use("/strikes", strikesRouter);
 router.use("/groups", groupAdminRouter);
-router.use("/collections", collectionsRouter);
+router.use("/collections", requireFeatureFlag("collections_enabled"), collectionsRouter);
 router.use("/income", incomeRouter);
-router.use("/embed", embedRouter);
+router.use("/embed", requireFeatureFlag("embed_enabled"), embedRouter);
 router.use("/auth/2fa", twofaRouter);
 
 // Login activity & sessions
@@ -122,8 +123,8 @@ router.use(postVersionsRouter);
 
 // Reader experience
 router.use("/reading-progress", readingProgressRouter);
-router.use("/highlights", highlightsRouter);
-router.use("/polls", pollsRouter);
+router.use("/highlights", requireFeatureFlag("highlights_enabled"), highlightsRouter);
+router.use("/polls", requireFeatureFlag("polls_enabled"), pollsRouter);
 
 // Trust & safety
 router.use("/blocks", blocksRouter);
@@ -152,8 +153,8 @@ router.use(publicFeaturedRouter);
 router.use("/invites", invitesRouter);
 
 // Auth: magic link, passkeys, social login
-router.use("/auth/magic-link", magicLinkRouter);
-router.use("/auth/passkey", passkeyRouter);
+router.use("/auth/magic-link", requireFeatureFlag("magic_link_enabled"), magicLinkRouter);
+router.use("/auth/passkey", requireFeatureFlag("passkey_enabled"), passkeyRouter);
 router.use("/auth/oauth", oauthRouter);
 
 // Privacy preferences
@@ -189,7 +190,7 @@ router.use("/admin", officialPostsRouter);
 router.use(officialPublicRouter);
 
 // Collaborative chains (E1–E6)
-router.use(chainsRouter);
+router.use("/chains", requireFeatureFlag("chains_enabled"), chainsRouter);
 
 // Carousel generator (Unsplash + Pexels)
 router.use(carouselRouter);

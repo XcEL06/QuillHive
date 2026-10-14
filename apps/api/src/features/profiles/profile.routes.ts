@@ -116,7 +116,6 @@ usersRouter.patch("/me/profile", validateBody(profileSchema), ProfileController.
 usersRouter.patch("/me/creator-mode", validateBody(z.object({ isCreatorMode: z.boolean() })), ProfileController.toggleCreatorMode);
 usersRouter.patch("/me/settings", validateBody(z.object({
   emailDigestEnabled: z.boolean().optional(),
-  topicNotificationEnabled: z.boolean().optional(),
   hireMeEnabled: z.boolean().optional(),
 })), ProfileController.updateSettings);
 usersRouter.post("/me/verification", validateBody(z.object({ kind: z.enum(["phone", "identity"]) })), ProfileController.requestVerification);

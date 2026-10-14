@@ -118,7 +118,6 @@ app.get("/api/features", async (_req, res) => {
       "highlights_enabled",
       "gallery_enabled",
       "embed_enabled",
-      "ab_testing_enabled",
       "collections_enabled",
       "creator_income_enabled",
       "magic_link_enabled",
