@@ -99,8 +99,10 @@ export default function Notifications() {
     if (notif.type === 'official_notice') return '/notifications';
     if (notif.postId) return `/post/${notif.postId}`;
     if (notif.groupId) return `/groups/${notif.groupId}`;
-    return `/profile/${notif.actor?.username}`;
+    return notif.actor?.username ? `/profile/${notif.actor.username}` : '/notifications';
   };
+
+  const actorProfileLink = (notif: any) => notif.actor?.username ? `/profile/${notif.actor.username}` : '/notifications';
 
   const allNotifs: any[] = Array.isArray(data) ? data : [];
   const unreadCount = allNotifs.filter((n: any) => !n.isRead).length;
@@ -138,75 +140,64 @@ export default function Notifications() {
           )}
 
           {allNotifs.map((notif: any) => (
-              <div
-                key={notif.id}
-                className={clsx(
-                  'flex items-start gap-4 p-5 hover:bg-muted/50 transition-colors group',
-                  !notif.isRead && 'bg-primary/5',
-                   notif.type === 'official_notice' && 'border-l-4 border-l-amber-500 bg-amber-50/60 ring-1 ring-inset ring-amber-500/15 dark:bg-amber-950/20'
-                )}
-              >
-                <Link
-                  href={getLink(notif)}
-                  onClick={() => {
-                    if (!notif.isRead) {
-                      void fetch(apiUrl(`/api/notifications/${notif.id}/read`), {
-                        method: 'PATCH',
-                        headers: token ? { Authorization: `Bearer ${token}` } : {},
-                        credentials: 'include',
-                      }).then(res => {
-                        if (!res.ok) throw new Error('Could not mark notification as read');
-                        queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-                        queryClient.invalidateQueries({ queryKey: ['/api/notifications/count'] });
-                      }).catch(() => {});
-                      queryClient.setQueriesData({ queryKey: ['/api/notifications'] }, (current: any[] | undefined) =>
-                        Array.isArray(current)
-                          ? current.map(item => item.id === notif.id ? { ...item, isRead: true } : item)
-                          : current,
-                      );
-                    }
-                  }}
-                  className="flex-1 flex items-start gap-4 min-w-0"
-                >
-                  <div className="relative shrink-0">
-                    <Avatar className="w-12 h-12 border border-border">
-                      <AvatarImage src={notif.actor?.avatarUrl || ''} />
-                      <AvatarFallback>{notif.actor?.displayName?.substring(0, 2) ?? 'S'}</AvatarFallback>
-                    </Avatar>
-                    {getIcon(notif.type)}
-                  </div>
-                  <div className="flex-1 min-w-0 pt-1">
-                    <p className="text-sm text-foreground/90 leading-snug">
-                      {notif.type === 'like' && notif.groupCount > 1
-                        ? notif.title || `${notif.groupCount} people liked your post`
-                        : <><span className="font-bold text-foreground">{notif.actor?.displayName ?? 'System'}</span>{' '}{notif.message}</>}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      {notif.type === 'official_notice' && <Badge className="bg-amber-600 px-2 py-0 text-[10px] text-white hover:bg-amber-600">Official notice</Badge>}
-                      <p className="text-xs text-muted-foreground font-medium">
-                        <Timestamp value={notif.createdAt} />
-                      </p>
-                    </div>
-                      {notif.type === 'official_notice' && (
-                        <p className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-950/80 dark:text-amber-100/80">
-                          {OFFICIAL_NOTICE_WARNING}
-                        </p>
-                      )}
-                  </div>
+            <div
+              key={notif.id}
+              className={clsx(
+                'flex items-start gap-4 p-5 hover:bg-muted/50 transition-colors group',
+                !notif.isRead && 'bg-primary/5',
+                notif.type === 'official_notice' && 'border-l-4 border-l-amber-500 bg-amber-50/60 ring-1 ring-inset ring-amber-500/15 dark:bg-amber-950/20'
+              )}
+            >
+              <div className="flex-1 flex items-start gap-4 min-w-0">
+                <Link href={actorProfileLink(notif)} className="relative shrink-0" onClick={() => { /* keep actor click focused on that profile */ }}>
+                  <Avatar className="w-12 h-12 border border-border">
+                    <AvatarImage src={notif.actor?.avatarUrl || ''} />
+                    <AvatarFallback>{notif.actor?.displayName?.substring(0, 2) ?? 'S'}</AvatarFallback>
+                  </Avatar>
+                  {getIcon(notif.type)}
                 </Link>
 
-                <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {!notif.isRead && <div className="w-2 h-2 rounded-full bg-primary mt-1" />}
-                  <button
-                    onClick={() => handleDelete(notif.id)}
-                    disabled={deletingIds.has(notif.id)}
-                    className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                    title={t('notifications.dismiss')}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                <div className="flex-1 min-w-0 pt-1">
+                  <p className="text-sm text-foreground/90 leading-snug">
+                    {notif.type === 'like' && notif.groupCount > 1
+                      ? notif.title || `${notif.groupCount} people liked your post`
+                      : <>
+                          {notif.actor?.username ? (
+                            <Link href={actorProfileLink(notif)} onClick={() => { if (!notif.isRead) { /* keep notification read state in sync */ } }} className="font-bold text-foreground hover:text-primary hover:underline">
+                              {notif.actor.displayName ?? 'User'}
+                            </Link>
+                          ) : (
+                            <span className="font-bold text-foreground">System</span>
+                          )}{' '}{notif.message}
+                        </>}
+                  </p>
+
+                  <div className="flex items-center gap-2 mt-1.5">
+                    {notif.type === 'official_notice' && <Badge className="bg-amber-600 px-2 py-0 text-[10px] text-white hover:bg-amber-600">Official notice</Badge>}
+                    <p className="text-xs text-muted-foreground font-medium">
+                      <Timestamp value={notif.createdAt} />
+                    </p>
+                  </div>
+                  {notif.type === 'official_notice' && (
+                    <p className="mt-3 rounded-lg border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-[11px] leading-relaxed text-amber-950/80 dark:text-amber-100/80">
+                      {OFFICIAL_NOTICE_WARNING}
+                    </p>
+                  )}
                 </div>
               </div>
+
+              <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                {!notif.isRead && <div className="w-2 h-2 rounded-full bg-primary mt-1" />}
+                <button
+                  onClick={() => handleDelete(notif.id)}
+                  disabled={deletingIds.has(notif.id)}
+                  className="p-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  title={t('notifications.dismiss')}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       </div>

@@ -188,7 +188,15 @@ function GroupActivityTimeline({ groupId }: { groupId: number }) {
   return <ol className="space-y-3">{activity.map(item => {
     const minutes = Math.max(0, Math.floor((Date.now() - Date.parse(item.createdAt)) / 60000));
     const ago = minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
-    return <li key={item.id} className="flex items-start justify-between gap-3 text-xs"><span>{item.action === 'poll_ended' ? labels[item.action] : <><strong>{item.actorName || (item.actorUsername ? `@${item.actorUsername}` : 'A member')}</strong> {labels[item.action] ?? item.action.replace(/_/g, ' ')}</>}</span><time className="shrink-0 text-muted-foreground">{ago}</time></li>;
+    return <li key={item.id} className="flex items-start justify-between gap-3 text-xs"><span>{item.action === 'poll_ended' ? labels[item.action] : <>
+      {item.actorUsername ? (
+        <Link href={`/profile/${encodeURIComponent(item.actorUsername)}`} className="font-semibold text-foreground hover:text-primary hover:underline">
+          {item.actorName || `@${item.actorUsername}`}
+        </Link>
+      ) : (
+        <strong>{item.actorName || 'A member'}</strong>
+      )}{' '}{labels[item.action] ?? item.action.replace(/_/g, ' ')}
+    </>}</span><time className="shrink-0 text-muted-foreground">{ago}</time></li>;
   })}</ol>;
 }
 

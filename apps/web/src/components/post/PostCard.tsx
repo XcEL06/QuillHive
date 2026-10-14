@@ -943,12 +943,24 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
               className="mt-3 block rounded-xl border border-border/70 bg-muted/20 p-3 hover:border-primary/40 transition-colors"
             >
               <div className="flex items-center gap-2 mb-2">
-                <Avatar className="h-6 w-6">
-                  <AvatarImage src={post.quotedPost.author?.avatarUrl || ''} />
-                  <AvatarFallback className="text-[10px]">{post.quotedPost.author?.displayName?.slice(0, 2)}</AvatarFallback>
-                </Avatar>
-                <span className="text-xs font-semibold">{post.quotedPost.author?.displayName || 'Original post'}</span>
-                {post.quotedPost.author?.username && <span className="text-xs text-muted-foreground">@{post.quotedPost.author.username}</span>}
+                {post.quotedPost.author?.username ? (
+                  <Link href={`/profile/${post.quotedPost.author.username}`} onClick={(event) => event.stopPropagation()} className="flex items-center gap-2 min-w-0 hover:text-primary transition-colors">
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={post.quotedPost.author?.avatarUrl || ''} />
+                      <AvatarFallback className="text-[10px]">{post.quotedPost.author?.displayName?.slice(0, 2)}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs font-semibold truncate">{post.quotedPost.author?.displayName || 'Original post'}</span>
+                    <span className="text-xs text-muted-foreground truncate">@{post.quotedPost.author.username}</span>
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={post.quotedPost.author?.avatarUrl || ''} />
+                      <AvatarFallback className="text-[10px]">{post.quotedPost.author?.displayName?.slice(0, 2)}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-xs font-semibold">{post.quotedPost.author?.displayName || 'Original post'}</span>
+                  </div>
+                )}
               </div>
               <p className="text-sm text-muted-foreground line-clamp-3">{post.quotedPost.excerpt || post.quotedPost.content}</p>
               {post.quotedPost.imageUrl && (
