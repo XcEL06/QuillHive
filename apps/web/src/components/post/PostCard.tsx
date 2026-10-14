@@ -226,7 +226,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: React.ReactNode; gr
 function OfficialPostBanner({ category }: { category: string | null | undefined }) {
   const cfg = CATEGORY_CONFIG[category ?? ""] ?? CATEGORY_CONFIG["announcement"];
   return (
-    <div className={`-mx-5 -mt-5 mb-4 px-5 py-3 bg-gradient-to-r ${cfg.gradient} border-b ${cfg.borderColor} flex items-center justify-between`}>
+    <div className={`-mx-4 -mt-4 mb-4 rounded-t-xl px-4 py-3 bg-gradient-to-r ${cfg.gradient} border-b ${cfg.borderColor} flex items-center justify-between`}>
       <div className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${cfg.textColor}`}>
         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${cfg.accent}`}>
           {cfg.icon}
@@ -809,8 +809,9 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         data-card
-        className={`border-0 border-b border-border/60 bg-transparent p-4 md:p-5 shadow-none transition-colors duration-200 hover:bg-muted/20 ${
-          feedItem ? 'mb-4 px-4 py-5 md:px-5 md:py-6 border-b-border/80' : ''
+        className={`${feedItem
+          ? 'rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors duration-200 hover:border-border'
+          : 'border-0 border-b border-border/60 bg-transparent p-4 md:p-5 shadow-none transition-colors duration-200 hover:bg-muted/20'
         } ${
           post.isOfficialPost
             ? 'border-l-2 border-l-blue-500/50 bg-blue-500/[0.025]'

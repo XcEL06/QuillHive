@@ -642,7 +642,7 @@ function AuthenticatedHome() {
           </div>
         )}
 
-        <div className="space-y-0">
+        <div className="space-y-4">
           {newPostsAvailable > 0 && (
             <button
               type="button"
@@ -655,7 +655,7 @@ function AuthenticatedHome() {
 
           {isDisplayLoading && (
             Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="border-b border-border/50 px-4 py-5 space-y-4">
+              <div key={i} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-4">
                 <div className="flex items-center gap-3">
                   <Skeleton className="w-10 h-10 rounded-full" />
                   <div className="space-y-2">
