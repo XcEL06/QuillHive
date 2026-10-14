@@ -707,7 +707,8 @@ router.get("/:id/posts", async (req, res) => {
   const viewerId = viewer?.id ?? null;
   const isSuperAdmin = viewer?.role === "super_admin";
   const id = parseInt(req.params.id);
-  const page = parseInt(req.query.page as string) || 1;
+  const requestedPage = Number(req.query.page);
+  const page = Number.isInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const limit = 20;
 
   const [group] = await db.select({ privacy: groupsTable.privacy, type: groupsTable.type, creatorId: groupsTable.creatorId }).from(groupsTable).where(eq(groupsTable.id, id));
@@ -726,17 +727,27 @@ router.get("/:id/posts", async (req, res) => {
     }
   }
 
+  const visibility = and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId, isSuperAdmin));
+  const [totalResult] = await db.select({ count: sql<number>`count(*)::int` }).from(postsTable).where(visibility);
   const posts = await db.select({ post: postsTable, groupDetails: groupPostDetailsTable }).from(postsTable)
     .leftJoin(groupPostDetailsTable, eq(groupPostDetailsTable.postId, postsTable.id))
-    .where(and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId, isSuperAdmin)))
+    .where(visibility)
     .orderBy(desc(postsTable.createdAt))
     .limit(limit).offset((page - 1) * limit);
 
+  const authorIds = [...new Set(posts.map(({ post }) => post.authorId).filter(authorId => authorId !== group.creatorId))];
+  const authorMemberships = authorIds.length > 0
+    ? await db.select({ userId: groupMembersTable.userId, role: groupMembersTable.role })
+      .from(groupMembersTable)
+      .where(and(eq(groupMembersTable.groupId, id), inArray(groupMembersTable.userId, authorIds), inArray(groupMembersTable.status, ["active", "muted"])))
+    : [];
+  const authorRoles = new Map(authorMemberships.map(member => [member.userId, member.role]));
   const enriched = await Promise.all(posts.map(async ({ post, groupDetails }) => {
     const poll = groupDetails?.poll;
     const votes = poll?.votes ?? {};
     return {
       ...(await enrichPost(post, viewerId)),
+      authorGroupRole: post.authorId === group.creatorId ? "owner" : authorRoles.get(post.authorId) ?? null,
       groupDetails: groupDetails ? {
         ...groupDetails,
         poll: poll ? {
@@ -749,7 +760,7 @@ router.get("/:id/posts", async (req, res) => {
       } : null,
     };
   }));
-  return res.json({ posts: enriched, total: enriched.length, page, limit });
+  return res.json({ posts: enriched, total: totalResult?.count ?? 0, page, limit });
 });
 
 export default router;

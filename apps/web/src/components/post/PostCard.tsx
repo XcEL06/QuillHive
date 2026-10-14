@@ -46,6 +46,7 @@ type EnrichedPost = Post & {
   isEdited?: boolean;
   trustScore?: { cis: number; retention: number; tier: TrustTier } | null;
   groupId?: number | null;
+  authorGroupRole?: 'owner' | 'admin' | 'moderator' | 'member' | null;
   titleA?: string | null;
   titleB?: string | null;
   abSelectedTitle?: 'a' | 'b' | null;
@@ -837,6 +838,11 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
 
               <OfficialBadge isOfficial={post.authorIsOfficial} />
               <SuperUserBadge isSuperUser={post.authorIsSuperUser} />
+              {post.groupId != null && post.authorGroupRole && (
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  {post.authorGroupRole === 'owner' ? 'Group Admin' : post.authorGroupRole === 'admin' ? 'Admin' : post.authorGroupRole === 'moderator' ? 'Moderator' : 'Member'}
+                </Badge>
+              )}
 
               <span className="text-muted-foreground">•</span>
               {postTimestamp && (

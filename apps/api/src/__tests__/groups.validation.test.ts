@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { canReviewJoinRequestsByPolicy } from '../features/groups/groupAdmin.routes';
 
 vi.mock('@workspace/db', () => ({
   db: {
@@ -43,6 +44,13 @@ describe('Group create validation', () => {
     expect(getGroupJoinAction('open')).toBe('join');
     expect(getGroupJoinAction('public')).toBe('request');
     expect(getGroupJoinAction('private')).toBe('invite');
+  });
+
+  it('limits join-request review according to group policy', () => {
+    expect(canReviewJoinRequestsByPolicy('member', 'admins')).toBe(false);
+    expect(canReviewJoinRequestsByPolicy('member', 'members')).toBe(true);
+    expect(canReviewJoinRequestsByPolicy('moderator', 'admins')).toBe(true);
+    expect(canReviewJoinRequestsByPolicy(null, 'members')).toBe(false);
   });
 
   it('allows creating a private group without a category', () => {

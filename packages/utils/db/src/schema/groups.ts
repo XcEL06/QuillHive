@@ -25,6 +25,7 @@ export const groupsTable = pgTable("groups", {
   requireApprovalFirstThree: boolean("require_approval_first_three").notNull().default(false),
   requireApprovalAll: boolean("require_approval_all").notNull().default(false),
   announcementPolicy: text("announcement_policy").notNull().default("admins"),
+  joinApprovalPolicy: text("join_approval_policy").notNull().default("admins"),
   isArchived: boolean("is_archived").notNull().default(false),
   isDeleted: boolean("is_deleted").notNull().default(false),
   features: jsonb("features").$type<{ eventsEnabled: boolean }>().notNull().default({ eventsEnabled: false }),

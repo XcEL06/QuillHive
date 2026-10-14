@@ -43,6 +43,7 @@ interface JoinRequest {
 
 interface GroupMembersListProps {
   groupId: number;
+  joinApprovalPolicy?: "admins" | "members";
 }
 
 const ROLES: GroupRole[] = ["admin", "moderator", "member"];
@@ -51,7 +52,7 @@ function TrustBadge({ score }: { score: number | null }) {
   return <Badge variant="outline" className="whitespace-nowrap">Trust {score ?? "--"}</Badge>;
 }
 
-export function GroupMembersList({ groupId }: GroupMembersListProps) {
+export function GroupMembersList({ groupId, joinApprovalPolicy = "admins" }: GroupMembersListProps) {
   const { token } = useAuthStore();
   const { toast } = useToast();
   const [members, setMembers] = useState<Member[]>([]);
@@ -84,11 +85,15 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
   useEffect(() => { void load(); }, [groupId, token]);
 
   useEffect(() => {
-    if ((myRole !== "admin" && myRole !== "owner") || !token) return;
+    const canReviewRequests = myRole === "admin" || myRole === "owner" || myRole === "moderator" || (joinApprovalPolicy === "members" && myRole !== null);
+    if (!canReviewRequests || !token) {
+      setRequests([]);
+      return;
+    }
     void apiFetch(`/api/groups/${groupId}/join-requests`)
       .then(response => response.ok ? response.json() as Promise<{ requests?: JoinRequest[] }> : { requests: [] })
       .then(data => setRequests(Array.isArray(data.requests) ? data.requests : []));
-  }, [groupId, myRole, token]);
+  }, [groupId, joinApprovalPolicy, myRole, token]);
 
   const updateRole = async (userId: number, role: GroupRole) => {
     const response = await apiFetch(`/api/groups/${groupId}/members/${userId}`, {
@@ -157,7 +162,7 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
         <Avatar className="h-10 w-10"><AvatarImage src={member.avatarUrl ?? undefined} /><AvatarFallback>{(member.displayName || member.username || "?").slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
         <div className="min-w-0"><Link href={`/u/${member.username}`} className="block truncate text-sm font-semibold hover:underline">{member.displayName || member.username}</Link><p className="truncate text-xs text-muted-foreground">@{member.username} · joined <Timestamp value={member.joinedAt} mode="date" /></p></div>
         <TrustBadge score={member.trustScore} />
-        <Badge variant="secondary" className="capitalize">{member.role}</Badge>
+        <Badge variant="secondary">{member.role === "owner" ? "Group Admin" : member.role === "admin" ? "Admin" : member.role === "moderator" ? "Moderator" : "Member"}</Badge>
       </div>
       {canModerate && member.role !== "owner" && <div className="flex flex-wrap items-center gap-2">
         {canManage && <Select value={member.role} onValueChange={value => void updateRole(member.userId, value as GroupRole)}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map(role => <SelectItem key={role} value={role} className="capitalize">{role}</SelectItem>)}</SelectContent></Select>}

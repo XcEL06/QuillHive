@@ -65,8 +65,10 @@ interface GroupView {
   requireApprovalFirstThree?: boolean;
   requireApprovalAll?: boolean;
   announcementPolicy?: 'owner' | 'admins';
+  joinApprovalPolicy?: 'admins' | 'members';
   features?: { eventsEnabled: boolean };
   hasPendingJoinRequest?: boolean;
+  isMember?: boolean;
   memberRole?: 'owner' | 'admin' | 'moderator' | 'member' | null;
 }
 
@@ -299,11 +301,14 @@ function GroupDetail({ id }: { id: number }) {
   const [location, setLocation] = useLocation();
 
   const { data: group, isLoading: groupLoading, isError: groupError, refetch } = useGetGroup(id);
-  const { data: postsData, isLoading: postsLoading, isError: postsError, refetch: refetchPosts } = useGetGroupPosts(id, {});
+  const [postsPage, setPostsPage] = useState(1);
+  const [loadedPosts, setLoadedPosts] = useState<any[]>([]);
+  const [pinnedRefreshKey, setPinnedRefreshKey] = useState(0);
+  const { data: postsData, isLoading: postsLoading, isError: postsError, refetch: refetchPosts } = useGetGroupPosts(id, { page: postsPage });
   const { token } = useAuthStore();
   const [myRole, setMyRole] = useState<GroupView['memberRole']>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState({ name: '', description: '', privacy: 'open', rules: '', coverUrl: '', iconUrl: '', isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false, announcementPolicy: 'admins' });
+  const [settings, setSettings] = useState({ name: '', description: '', privacy: 'open', rules: '', coverUrl: '', iconUrl: '', isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false, announcementPolicy: 'admins', joinApprovalPolicy: 'admins' });
   const [composerType, setComposerType] = useState('discussion');
   const [postContent, setPostContent] = useState('');
   const [postTitle, setPostTitle] = useState('');
@@ -351,8 +356,23 @@ function GroupDetail({ id }: { id: number }) {
     if (!group) return;
     const current = group as GroupView;
     setMyRole(current.memberRole ?? null);
-    setSettings({ name: current.name, description: current.description ?? '', privacy: current.privacy ?? (current.type === 'secret' ? 'private' : current.type === 'private' ? 'public' : 'open'), rules: (current.rules ?? []).join('\n'), coverUrl: current.coverImage ?? current.coverUrl ?? '', iconUrl: current.iconImage ?? current.avatarUrl ?? '', isAnnouncementOnly: current.isAnnouncementOnly ?? false, requireApprovalFirstThree: current.requireApprovalFirstThree ?? false, requireApprovalAll: current.requireApprovalAll ?? false, announcementPolicy: current.announcementPolicy ?? 'admins' });
+    setSettings({ name: current.name, description: current.description ?? '', privacy: current.privacy ?? (current.type === 'secret' ? 'private' : current.type === 'private' ? 'public' : 'open'), rules: (current.rules ?? []).join('\n'), coverUrl: current.coverImage ?? current.coverUrl ?? '', iconUrl: current.iconImage ?? current.avatarUrl ?? '', isAnnouncementOnly: current.isAnnouncementOnly ?? false, requireApprovalFirstThree: current.requireApprovalFirstThree ?? false, requireApprovalAll: current.requireApprovalAll ?? false, announcementPolicy: current.announcementPolicy ?? 'admins', joinApprovalPolicy: current.joinApprovalPolicy ?? 'admins' });
   }, [group]);
+
+  useEffect(() => {
+    setPostsPage(1);
+    setLoadedPosts([]);
+  }, [id]);
+
+  useEffect(() => {
+    if (!postsData) return;
+    const pagePosts = Array.isArray(postsData.posts) ? postsData.posts : [];
+    setLoadedPosts(current => {
+      if (postsPage === 1) return pagePosts;
+      const existingIds = new Set(current.map(post => post.id));
+      return [...current, ...pagePosts.filter(post => !existingIds.has(post.id))];
+    });
+  }, [postsData, postsPage]);
 
   useEffect(() => {
     if (!group) return;
@@ -394,7 +414,7 @@ function GroupDetail({ id }: { id: number }) {
   }, [id, myRole, token]);
 
   useEffect(() => {
-    if (!token || !['owner', 'admin', 'moderator'].includes(myRole ?? '')) {
+    if (!token || (!['owner', 'admin', 'moderator'].includes(myRole ?? '') && !(group?.joinApprovalPolicy === 'members' && group.isMember))) {
       setJoinRequests([]);
       return;
     }
@@ -403,7 +423,7 @@ function GroupDetail({ id }: { id: number }) {
       .then(response => response.ok ? response.json() : { requests: [] })
       .then(data => setJoinRequests(Array.isArray(data.requests) ? data.requests : []))
       .finally(() => setJoinRequestsLoading(false));
-  }, [id, myRole, token]);
+  }, [id, myRole, token, group?.joinApprovalPolicy, group?.isMember]);
 
   useEffect(() => {
     if (!token || !['owner', 'admin', 'moderator'].includes(myRole ?? '')) {
@@ -604,7 +624,10 @@ function GroupDetail({ id }: { id: number }) {
       editor?.commands.clearContent();
       setPollOptions(['', '']);
       setPollDuration('1d');
-      void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'posts'] });
+      setPostsPage(1);
+      setLoadedPosts([]);
+      setPinnedRefreshKey(value => value + 1);
+      void queryClient.invalidateQueries({ queryKey: [`/api/groups/${id}/posts`] });
       void refetch();
       toast({ title: 'Added to the community' });
     } catch (error) {
@@ -682,6 +705,8 @@ function GroupDetail({ id }: { id: number }) {
   if (!group) return <AppLayout publicPage={!user}><div className="py-20 text-center text-muted-foreground">{t('groups.notFound', 'Group not found')}</div></AppLayout>;
 
   const groupView = group as GroupView;
+  const canReviewJoinRequests = ['owner', 'admin', 'moderator'].includes(myRole ?? '') || (groupView.joinApprovalPolicy === 'members' && groupView.isMember);
+  const hasMorePosts = (postsPage * (postsData?.limit ?? 20)) < (postsData?.total ?? 0);
   if (!user && (groupView.privacy === 'private' || groupView.type === 'secret')) {
     return <AppLayout publicPage>
       <div className="mx-auto max-w-xl px-4 py-20 text-center">
@@ -692,7 +717,7 @@ function GroupDetail({ id }: { id: number }) {
     </AppLayout>;
   }
   const inviteCode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('invite') : null;
-  const allGroupPosts = Array.isArray(postsData?.posts) ? postsData.posts as any[] : [];
+  const allGroupPosts = loadedPosts;
   const questions = allGroupPosts.filter(post => post.groupDetails?.type === 'question');
   const featuredAnnouncements = allGroupPosts.filter(post => post.groupDetails?.type === 'announcement').slice(0, 3);
   const pendingGroupPosts = pendingPosts;
@@ -735,7 +760,7 @@ function GroupDetail({ id }: { id: number }) {
       canModerate={myRole === 'owner' || myRole === 'admin' || myRole === 'moderator'}
       isPinned={Boolean(post.groupDetails?.isPinned)}
       commentsEnabled={post.groupDetails?.commentsEnabled !== false}
-      onChanged={() => { void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'posts'] }); void queryClient.invalidateQueries({ queryKey: ['/api/groups', id, 'pinned'] }); }}
+      onChanged={() => { void queryClient.invalidateQueries({ queryKey: [`/api/groups/${id}/posts`] }); setPinnedRefreshKey(value => value + 1); }}
     />
   </article>;
 
@@ -810,7 +835,7 @@ function GroupDetail({ id }: { id: number }) {
                 <TabsTrigger value="polls">Polls</TabsTrigger>
                 <TabsTrigger value="announcements">Announcements</TabsTrigger>
                 {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="pending">Pending{pendingPosts.length ? ` (${pendingPosts.length})` : ''}</TabsTrigger>}
-                {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="join-requests">Join requests{joinRequests.length ? ` (${joinRequests.length})` : ''}</TabsTrigger>}
+                {canReviewJoinRequests && <TabsTrigger value="join-requests">Join requests{joinRequests.length ? ` (${joinRequests.length})` : ''}</TabsTrigger>}
                 {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="reports">Reports{moderationReports.length ? ` (${moderationReports.length})` : ''}</TabsTrigger>}
               </TabsList>
 
@@ -843,6 +868,8 @@ function GroupDetail({ id }: { id: number }) {
                   </button>)}
                 </div>
               </section>}
+
+              {activeTab === 'feed' && <PinnedPosts groupId={id} myRole={myRole ?? null} refreshKey={pinnedRefreshKey} />}
 
               {activeTab === 'feed' && group.isMember && <section className="mb-5 space-y-3 rounded-lg border border-border/70 bg-card p-4">
                 <h2 className="text-sm font-semibold">Add to the conversation</h2>
@@ -899,10 +926,14 @@ function GroupDetail({ id }: { id: number }) {
                   <div className="min-w-0"><p className="text-sm font-semibold">{report.postTitle || `Post #${report.targetId}`}</p><p className="mt-1 text-xs text-muted-foreground">{report.reason.replace(/_/g, ' ')} · reported by {report.reporterName || `@${report.reporterUsername}`} · <Timestamp value={report.createdAt} mode="date" /></p></div>
                   <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void reviewGroupReport(report.id, 'dismiss')}>Dismiss</Button><Button size="sm" variant="destructive" onClick={() => void reviewGroupReport(report.id, 'remove_post')}>Remove post</Button><Button size="sm" variant="ghost" onClick={() => void reviewGroupReport(report.id, 'escalate')}>Escalate</Button></div>
                 </article>)}
-              </div> : (postsLoading || (activeTab === 'pending' && pendingLoading)) ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}</div> : postsError ? <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-center" role="alert"><p className="text-sm text-destructive">Could not load group posts.</p><Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => void refetchPosts()}>Retry</Button></div> : visiblePosts.length === 0 ? <div className="flex min-h-64 flex-col items-center justify-center border-y border-dashed border-border px-6 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary"><EmptyIcon className="h-7 w-7" /></div>
-                <h3 className="font-semibold">{emptyStates[activeTab]?.title}</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">{emptyStates[activeTab]?.body}</p>
-              </div> : activeTab === 'announcements' ? <div className="space-y-5 border-l border-amber-500/40 pl-4">{visiblePosts.map(renderGroupPost)}</div> : <div className="space-y-5">{visiblePosts.map(renderGroupPost)}</div>}
+              </div> : ((postsLoading && loadedPosts.length === 0) || (activeTab === 'pending' && pendingLoading)) ? <div className="space-y-4">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}              </div> : (postsError && loadedPosts.length === 0) ? <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-center" role="alert"><p className="text-sm text-destructive">Could not load group posts.</p><Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => void refetchPosts()}>Retry</Button></div> : <>
+                {visiblePosts.length === 0 ? <div className="flex min-h-64 flex-col items-center justify-center border-y border-dashed border-border px-6 text-center">
+                  <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10 text-primary"><EmptyIcon className="h-7 w-7" /></div>
+                  <h3 className="font-semibold">{emptyStates[activeTab]?.title}</h3><p className="mt-1 max-w-sm text-sm text-muted-foreground">{emptyStates[activeTab]?.body}</p>
+                </div> : activeTab === 'announcements' ? <div className="space-y-5 border-l border-amber-500/40 pl-4">{visiblePosts.map(renderGroupPost)}</div> : <div className="space-y-5">{visiblePosts.map(renderGroupPost)}</div>}
+                {hasMorePosts && activeTab !== 'pending' && <div className="flex justify-center pt-2"><Button type="button" variant="outline" size="sm" disabled={postsLoading} onClick={() => setPostsPage(page => page + 1)}>{postsLoading ? 'Loading...' : 'Load more posts'}</Button></div>}
+                {postsError && loadedPosts.length > 0 && <div className="text-center"><Button type="button" size="sm" variant="outline" onClick={() => void refetchPosts()}>Could not load more posts · Retry</Button></div>}
+              </>}
             </Tabs>
           </main>
 
@@ -917,8 +948,6 @@ function GroupDetail({ id }: { id: number }) {
                 {(groupView.rules?.length ?? 0) > 0 ? <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs leading-relaxed text-muted-foreground">{groupView.rules?.map((rule, index) => <li key={`${index}-${rule}`}>{rule}</li>)}</ol> : <p className="mt-2 text-xs text-muted-foreground">No rules have been added.</p>}
               </details>
             </section>
-
-            <section className="border-b border-border/70 pb-4"><PinnedPosts groupId={id} myRole={myRole ?? null} /></section>
 
             <section className="space-y-3 border-b border-border/70 pb-4"><h2 className="text-sm font-semibold">Recent activity</h2><GroupActivityTimeline groupId={id} /></section>
 
@@ -953,6 +982,7 @@ function GroupDetail({ id }: { id: number }) {
                 <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalFirstThree} onChange={e => setSettings(s => ({ ...s, requireApprovalFirstThree: e.target.checked, requireApprovalAll: false }))} />Require approval for each member's first 3 posts</label>
                 <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalAll} onChange={e => setSettings(s => ({ ...s, requireApprovalAll: e.target.checked, requireApprovalFirstThree: false }))} />Require approval for all posts</label>
                 <label className="flex items-center justify-between gap-3 text-xs"><span>Who can post announcements</span><Select value={settings.announcementPolicy} onValueChange={announcementPolicy => setSettings(s => ({ ...s, announcementPolicy }))}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="owner">Owner only</SelectItem><SelectItem value="admins">Admins</SelectItem></SelectContent></Select></label>
+                <label className="flex items-center justify-between gap-3 text-xs"><span>Who can approve join requests</span><Select value={settings.joinApprovalPolicy} onValueChange={joinApprovalPolicy => setSettings(s => ({ ...s, joinApprovalPolicy }))}><SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="admins">Admins and moderators</SelectItem><SelectItem value="members">Any member</SelectItem></SelectContent></Select></label>
                 <ImageUploadField value={settings.iconUrl} onChange={iconUrl => setSettings(s => ({ ...s, iconUrl }))} category="group" label="Change group icon" previewClassName="h-20 w-20" />
                 <ImageUploadField value={settings.coverUrl} onChange={coverUrl => setSettings(s => ({ ...s, coverUrl }))} category="group" label="Change cover image" />
                 <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void saveSettings()}>Save settings</Button><Button size="sm" variant="outline" onClick={() => setLifecycleAction('archive')}>Archive group</Button><Button size="sm" variant="destructive" onClick={() => setLifecycleAction('delete')}>Delete group</Button></div>
@@ -1281,7 +1311,7 @@ function GroupMembersRoute({ slug }: { slug: string }) {
   return <AppLayout><main className="mx-auto max-w-5xl space-y-5 px-4 py-6">
     <Link href={`/g/${slug}`} className="text-sm text-muted-foreground hover:text-foreground">← Back to {group.name}</Link>
     <header className="flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4"><div><p className="text-xs font-semibold uppercase text-muted-foreground">{group.name}</p><h1 className="mt-1 text-2xl font-semibold">Member management</h1></div><span className="text-sm text-muted-foreground">{group.memberCount ?? group.membersCount} members</span></header>
-    <GroupMembersList groupId={group.id} />
+    <GroupMembersList groupId={group.id} joinApprovalPolicy={group.joinApprovalPolicy ?? 'admins'} />
   </main></AppLayout>;
 }
 
