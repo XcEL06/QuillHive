@@ -14,7 +14,6 @@ import { Timestamp } from '@/lib/postTimestamp';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { apiUrl, getStoredToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
-import { formatAccountAge } from '@/lib/accountAge';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { ApplyOpportunityActions } from '@/components/opportunities/ApplyOpportunityActions';
 import { OpportunityShareDialog } from '@/components/opportunities/OpportunityShareDialog';
@@ -289,11 +288,11 @@ export function JobsPanel() {
                   {matchData && <MatchBadge score={matchData.score} />}
                 </div>
 
-                <h4 className="font-semibold text-sm mb-0.5 line-clamp-1">{job.title}</h4>
+                <h4 className="font-semibold text-sm mb-0.5 line-clamp-1"><Link href={`/opportunities/${job.id}`}>{job.title}</Link></h4>
                 {j.companyName && <p className="text-xs text-muted-foreground">at {j.companyName}</p>}
 
                 <p className="text-xs text-muted-foreground mt-1">
-                  Posted by {job.author.displayName} · Member since {formatAccountAge(job.author.createdAt)} · Trust: {j.author.trustTier ?? 'new'}
+                  Posted by {job.author.displayName} · Trust: {j.author.trustTier ?? 'new'}
                   {j.author.trustTier === 'new' && (
                     <span className="ml-2 font-medium text-amber-500">· New account — verify before paying anything</span>
                   )}

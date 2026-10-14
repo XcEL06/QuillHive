@@ -197,6 +197,7 @@ async function createNotification(
           title: opts.title ?? null,
           postId: opts.postId ?? null,
           groupId: opts.groupId ?? null,
+          url: opts.url ?? null,
           category,
           digestGroup: opts.digestGroup ?? null,
           isRead: false,

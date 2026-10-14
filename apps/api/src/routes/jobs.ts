@@ -373,7 +373,7 @@ router.post("/:id/apply", async (req, res) => {
     return application;
   });
 
-  await notify({ userId: job.authorId, actorId: viewerId, type: "system", title: "New opportunity application", message: `Someone applied to "${job.title.slice(0, 100)}".`, url: conversationId ? `/messages?conv=${conversationId}` : "/workspace?tab=work" });
+  await notify({ userId: job.authorId, actorId: viewerId, type: "system", title: "New opportunity application", message: `Someone applied to "${job.title.slice(0, 100)}".`, url: `/opportunities/${job.id}` });
   return res.status(201).json({ application: result, conversationId });
 });
 

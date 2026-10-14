@@ -457,8 +457,10 @@ CREATE TABLE IF NOT EXISTS "notifications" (
 	"is_read" boolean DEFAULT false NOT NULL,
 	"category" text DEFAULT 'social' NOT NULL,
 	"digest_group" text,
+  "url" text,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
+ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "url" text;
 
 CREATE TABLE IF NOT EXISTS "appreciations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

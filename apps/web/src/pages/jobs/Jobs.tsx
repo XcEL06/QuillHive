@@ -15,7 +15,6 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link } from 'wouter';
 import { getStoredToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
-import { formatAccountAge } from '@/lib/accountAge';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { ApplyOpportunityActions } from '@/components/opportunities/ApplyOpportunityActions';
 import { OpportunityShareDialog } from '@/components/opportunities/OpportunityShareDialog';
@@ -126,7 +125,7 @@ function BestMatchesSection({ matchMap }: { matchMap: Map<number, { score: numbe
                     }`}>{job.type}</Badge>
                     <MatchBadge score={job.matchScore} />
                   </div>
-                  <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1">{job.title}</h3>
+                  <h3 className="font-semibold text-sm text-foreground group-hover:text-primary transition-colors line-clamp-1"><Link href={`/opportunities/${job.id}`}>{job.title}</Link></h3>
                   {job.companyName && <p className="text-xs text-muted-foreground">at {job.companyName}</p>}
                 </div>
                 <Link href={`/profile/${job.author.username}`}>
@@ -365,9 +364,9 @@ export default function Jobs() {
                           <span className="text-xs text-muted-foreground">at <span className="font-medium text-foreground">{j.companyName}</span></span>
                         )}
                       </div>
-                      <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors">{job.title}</h3>
+                      <h3 className="text-xl font-bold text-foreground group-hover:text-primary transition-colors"><Link href={`/opportunities/${job.id}`}>{job.title}</Link></h3>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Posted by <Link href={`/profile/${job.author.username}`} className="text-foreground hover:underline font-medium">{job.author.displayName}</Link> · Member since {formatAccountAge(job.author.createdAt)} · Trust: {j.author.trustTier ?? 'new'}
+                        Posted by <Link href={`/profile/${job.author.username}`} className="text-foreground hover:underline font-medium">{job.author.displayName}</Link> · Trust: {j.author.trustTier ?? 'new'}
                         {j.author.trustTier === 'new' && (
                           <span className="ml-2 font-medium text-amber-500">· New account — verify before paying anything</span>
                         )}

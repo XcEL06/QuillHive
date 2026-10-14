@@ -10,6 +10,7 @@ export const notificationsTable = pgTable("notifications", {
   actorId: integer("actor_id").notNull().references(() => usersTable.id),
   postId: integer("post_id"),
   groupId: integer("group_id"),
+  url: text("url"),
   message: text("message").notNull(),
   title: text("title"),
   groupCount: integer("group_count").default(1),

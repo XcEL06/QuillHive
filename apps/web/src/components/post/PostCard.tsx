@@ -87,7 +87,7 @@ function renderHashtags(content: string) {
     part.startsWith('#') ? (
       <Link
         key={index}
-        href={`/search?q=${encodeURIComponent(part)}`}
+        href={`/topics/${encodeURIComponent(part.slice(1).toLowerCase())}`}
         onClick={(event) => event.stopPropagation()}
         className="text-primary hover:underline"
       >

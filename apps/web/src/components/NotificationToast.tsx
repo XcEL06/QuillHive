@@ -16,6 +16,7 @@ interface NotificationPayload {
   category: string;
   postId?: number | null;
   groupId?: number | null;
+  url?: string | null;
   actor?: {
     id: number;
     username: string;
@@ -49,11 +50,14 @@ function getNotifIcon(type: string): React.ReactNode {
 }
 
 function getNotifLink(notif: NotificationPayload): string {
-  if (notif.postId) return `/post/${notif.postId}`;
-  if (notif.groupId) return `/groups/${notif.groupId}`;
   if (notif.type === "follow" && notif.actor?.username) {
     return `/profile/${notif.actor.username}`;
   }
+  if ((notif.type === "group_invite" || notif.type.startsWith("group_")) && notif.groupId) return `/groups/${notif.groupId}`;
+  if (["like", "comment", "comment_like", "reply", "mention", "quote", "share", "highlight"].includes(notif.type) && notif.postId) return `/post/${notif.postId}`;
+  if (notif.url?.startsWith("/") && !notif.url.startsWith("//")) return notif.url;
+  if (notif.postId) return `/post/${notif.postId}`;
+  if (notif.groupId) return `/groups/${notif.groupId}`;
   if (notif.type.startsWith("library_")) return "/library";
   return "/notifications";
 }

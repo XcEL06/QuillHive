@@ -59,6 +59,7 @@ const Challenges = lazy(() => import("@/pages/challenges/Challenges"));
 const Pricing = lazy(() => import("@/pages/pricing/Pricing"));
 const Drafts = lazy(() => import("@/pages/drafts/Drafts"));
 const Opportunities = lazy(() => import("@/pages/opportunities/Opportunities"));
+const OpportunityDetail = lazy(() => import("@/pages/opportunities/OpportunityDetail"));
 const TalentScout = lazy(() => import("@/pages/opportunities/TalentScout"));
 const PostJob = lazy(() => import("@/pages/jobs/PostJob"));
 const Library = lazy(() => import("@/pages/library/Library"));
@@ -418,6 +419,9 @@ function Router() {
         <AuthGuard><InvitePage /></AuthGuard>
       </Route>
 
+      <Route path="/opportunities/:id">
+        <OpportunityDetail />
+      </Route>
       <Route path="/opportunities/search">
         <Redirect to="/workspace?tab=talent" />
       </Route>

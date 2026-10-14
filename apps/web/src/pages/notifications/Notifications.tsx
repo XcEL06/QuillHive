@@ -97,12 +97,31 @@ export default function Notifications() {
 
   const getLink = (notif: any) => {
     if (notif.type === 'official_notice') return '/notifications';
+    if (notif.type === 'follow' && notif.actor?.username) return `/profile/${encodeURIComponent(notif.actor.username)}`;
+    if ((notif.type === 'group_invite' || notif.type.startsWith('group_')) && notif.groupId) return `/groups/${notif.groupId}`;
+    if (['like', 'comment', 'comment_like', 'reply', 'mention', 'quote', 'share', 'highlight'].includes(notif.type) && notif.postId) return `/post/${notif.postId}`;
+    if (notif.url?.startsWith('/') && !notif.url.startsWith('//')) return notif.url;
     if (notif.postId) return `/post/${notif.postId}`;
     if (notif.groupId) return `/groups/${notif.groupId}`;
     return notif.actor?.username ? `/profile/${notif.actor.username}` : '/notifications';
   };
 
   const actorProfileLink = (notif: any) => notif.actor?.username ? `/profile/${notif.actor.username}` : '/notifications';
+  const markNotificationRead = (notif: any) => {
+    if (notif.isRead) return;
+    void fetch(apiUrl(`/api/notifications/${notif.id}/read`), {
+      method: 'PATCH',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    }).then(res => {
+      if (!res.ok) throw new Error('Could not mark notification as read');
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications/count'] });
+    }).catch(() => {});
+    queryClient.setQueriesData({ queryKey: ['/api/notifications'] }, (current: any[] | undefined) =>
+      Array.isArray(current) ? current.map(item => item.id === notif.id ? { ...item, isRead: true } : item) : current,
+    );
+  };
 
   const allNotifs: any[] = Array.isArray(data) ? data : [];
   const unreadCount = allNotifs.filter((n: any) => !n.isRead).length;
@@ -149,7 +168,7 @@ export default function Notifications() {
               )}
             >
               <div className="flex-1 flex items-start gap-4 min-w-0">
-                <Link href={actorProfileLink(notif)} className="relative shrink-0" onClick={() => { /* keep actor click focused on that profile */ }}>
+                <Link href={actorProfileLink(notif)} className="relative shrink-0" onClick={() => markNotificationRead(notif)}>
                   <Avatar className="w-12 h-12 border border-border">
                     <AvatarImage src={notif.actor?.avatarUrl || ''} />
                     <AvatarFallback>{notif.actor?.displayName?.substring(0, 2) ?? 'S'}</AvatarFallback>
@@ -160,15 +179,15 @@ export default function Notifications() {
                 <div className="flex-1 min-w-0 pt-1">
                   <p className="text-sm text-foreground/90 leading-snug">
                     {notif.type === 'like' && notif.groupCount > 1
-                      ? notif.title || `${notif.groupCount} people liked your post`
+                      ? <Link href={getLink(notif)} onClick={() => markNotificationRead(notif)} className="hover:text-primary hover:underline">{notif.title || `${notif.groupCount} people liked your post`}</Link>
                       : <>
                           {notif.actor?.username ? (
-                            <Link href={actorProfileLink(notif)} onClick={() => { if (!notif.isRead) { /* keep notification read state in sync */ } }} className="font-bold text-foreground hover:text-primary hover:underline">
+                            <Link href={actorProfileLink(notif)} onClick={() => markNotificationRead(notif)} className="font-bold text-foreground hover:text-primary hover:underline">
                               {notif.actor.displayName ?? 'User'}
                             </Link>
                           ) : (
                             <span className="font-bold text-foreground">System</span>
-                          )}{' '}{notif.message}
+                          )}{' '}<Link href={getLink(notif)} onClick={() => markNotificationRead(notif)} className="hover:text-primary hover:underline">{notif.message}</Link>
                         </>}
                   </p>
 
