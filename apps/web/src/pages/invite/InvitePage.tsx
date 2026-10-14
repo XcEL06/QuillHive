@@ -185,12 +185,8 @@ export default function InvitePage() {
                   </div>
                   <div>
                     <p className="text-white text-sm font-medium">Invited creator</p>
-                    <p className="text-white/40 text-xs">
-                      Joined {code.usedAt ? <Timestamp value={code.usedAt} mode="date" /> : "-"}
-                    </p>
                   </div>
                 </div>
-                <span className="text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">Joined</span>
               </div>
             ))}
           </div>
