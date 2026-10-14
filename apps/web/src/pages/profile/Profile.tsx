@@ -239,37 +239,35 @@ export default function Profile() {
         .catch(() => { setProfileContentPosts([]); setProfileContentHasMore(false); setProfileContentError(true); })
         .finally(() => setProfileContentLoading(false));
     }
-    if (creatorIncomeEnabled) {
-      const cp = (data as { creatorProfile?: CreatorProfile })?.creatorProfile;
-      if (cp) setCreatorProfile(cp);
-      else if (data?.user?.username) {
-        fetch(`/api/users/${encodeURIComponent(data.user.username)}/creator`)
-          .then(response => {
-            if (!response.ok) throw new Error("Could not load creator profile");
-            return response.json();
-          })
-          .then((profile: CreatorProfile) => {
-            if (!creatorProfileRequestCancelled) {
-              setCreatorProfile({
-                ...profile,
-                skills: profile.skills || [],
-                links: profile.links || [],
-                availableFor: profile.availableFor || [],
-              });
-            }
-          })
-          .catch(error => {
-            if (!creatorProfileRequestCancelled) {
-              toast({
-                title: "Could not load creator profile",
-                description: error instanceof Error ? error.message : "Please try again.",
-                variant: "destructive",
-              });
-            }
-          });
-      }
-    } else {
-      setCreatorProfile({ skills: [], links: [], verified: false, isAvailableForHire: false, availableFor: [] });
+    const cp = (data as { creatorProfile?: CreatorProfile })?.creatorProfile;
+    if (cp) setCreatorProfile(cp);
+    else if (data?.user?.username) {
+      fetch(`/api/users/${encodeURIComponent(data.user.username)}/creator`)
+        .then(response => {
+          if (!response.ok) throw new Error("Could not load creator profile");
+          return response.json();
+        })
+        .then((profile: CreatorProfile) => {
+          if (!creatorProfileRequestCancelled) {
+            setCreatorProfile({
+              ...profile,
+              skills: profile.skills || [],
+              links: profile.links || [],
+              availableFor: profile.availableFor || [],
+            });
+          }
+        })
+        .catch(error => {
+          if (!creatorProfileRequestCancelled) {
+            toast({
+              title: "Could not load creator profile",
+              description: error instanceof Error ? error.message : "Please try again.",
+              variant: "destructive",
+            });
+          }
+        });
+    }
+    if (!creatorIncomeEnabled) {
       setEndorsements({});
       setIsEditCreatorOpen(false);
     }
@@ -530,7 +528,7 @@ export default function Profile() {
         <div className="mb-8">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-3xl font-serif font-bold text-foreground">{user.displayName}</h1>
-            {creatorIncomeEnabled && creatorProfile.isAvailableForHire && (
+            {creatorProfile.isAvailableForHire && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-semibold border border-amber-300 dark:border-amber-700">
                 <Zap className="w-3.5 h-3.5" />
                 {t('profile.openToOpportunities', '⚡ Available for others to find')}

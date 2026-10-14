@@ -6,19 +6,15 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link } from 'wouter';
-import { getStoredToken } from '@/lib/api';
-import { useFeature } from '@/lib/features';
+import { apiFetch, getStoredToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { getInitials } from '@/lib/utils';
+import { useLocation } from 'wouter';
 import {
-  Search, Award, Clock, DollarSign, Briefcase, Globe, Zap, ChevronRight, Users2, CreditCard,
+  Search, Award, Clock, MessageCircle, ChevronRight, Users2, Zap,
 } from 'lucide-react';
 
 interface SkillBadge { skill: string; endorsements: number }
-interface Listing {
-  id: number; title: string; category: string; pricingModel: string;
-  priceFrom: number | null; priceTo: number | null; currency: string; skills: string;
-}
 interface Creator {
   user: { id: number; username: string; displayName: string; avatarUrl: string | null; bio: string | null };
   availability: {
@@ -26,7 +22,7 @@ interface Creator {
     ratePerHour: number | null; currency: string; timezone: string | null;
     publicNote: string | null; updatedAt: string;
   };
-  skills: SkillBadge[]; totalEndorsements: number; listings: Listing[]; affinityScore: number;
+  skills: SkillBadge[]; totalEndorsements: number; affinityScore: number;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -34,25 +30,13 @@ const STATUS_COLORS: Record<string, string> = {
   open_to_opportunities: 'bg-blue-500/15 text-blue-600 border-blue-200 dark:border-blue-800',
 };
 const STATUS_LABELS: Record<string, string> = {
-  available: 'Open to work',
-  open_to_opportunities: 'Collaboration Ready',
+  available: 'Available',
+  open_to_opportunities: 'Open to opportunities',
 };
 
-function CreatorCard({ creator, checkoutEnabled, onCheckout }: { creator: Creator; checkoutEnabled: boolean; onCheckout: (listing: Listing) => void }) {
-  const { user, availability, skills, totalEndorsements, listings, affinityScore } = creator;
+function CreatorCard({ creator, onMessage, messaging }: { creator: Creator; onMessage: () => void; messaging: boolean }) {
+  const { user, availability, skills, totalEndorsements, affinityScore } = creator;
   const topSkills = skills.slice(0, 3);
-  const listing = listings[0] ?? null;
-
-  const formatRate = () => {
-    if (!availability.ratePerHour) return null;
-    return `${availability.currency} ${availability.ratePerHour}/hr`;
-  };
-
-  const formatPrice = (l: Listing) => {
-    if (!l.priceFrom) return l.pricingModel === 'negotiable' ? 'Negotiable' : null;
-    const lo = `${l.currency} ${l.priceFrom.toLocaleString()}`;
-    return l.priceTo ? `${lo}–${l.priceTo.toLocaleString()}` : `from ${lo}`;
-  };
 
   return (
     <div data-card className="group rounded-2xl border border-border bg-card hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 flex flex-col overflow-hidden">
@@ -89,9 +73,9 @@ function CreatorCard({ creator, checkoutEnabled, onCheckout }: { creator: Creato
                 <Clock className="w-3 h-3" />{availability.hoursPerWeek}h/wk
               </span>
             )}
-            {formatRate() && (
+            {availability.ratePerHour && (
               <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                <DollarSign className="w-3 h-3" />{formatRate()}
+                {availability.currency} {availability.ratePerHour}/hr
               </span>
             )}
           </div>
@@ -105,9 +89,9 @@ function CreatorCard({ creator, checkoutEnabled, onCheckout }: { creator: Creato
         </div>
       </div>
 
-      {user.bio && (
+      {(availability.publicNote || user.bio) && (
         <div className="px-4 md:px-5 pb-2">
-          <p className="text-xs text-muted-foreground line-clamp-2">{user.bio}</p>
+          <p className="text-xs text-muted-foreground line-clamp-2">{availability.publicNote || user.bio}</p>
         </div>
       )}
 
@@ -123,31 +107,15 @@ function CreatorCard({ creator, checkoutEnabled, onCheckout }: { creator: Creato
         </div>
       )}
 
-      {listing && (
-        <div className="mx-4 md:mx-5 mb-3 p-3 rounded-xl border border-border bg-muted/30">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-semibold text-foreground truncate">{listing.title}</p>
-            {formatPrice(listing) && <span className="text-[10px] font-semibold text-foreground shrink-0 whitespace-nowrap">{formatPrice(listing)}</span>}
-          </div>
-        </div>
-      )}
-
       <div className="mt-auto px-4 md:px-5 pb-4 md:pb-5 flex flex-wrap gap-2">
         <Link href={`/profile/${user.username}`} className="min-w-0 flex-1 basis-32">
           <Button variant="outline" size="sm" className="h-auto min-h-8 w-full whitespace-normal py-2 text-center text-xs leading-tight">
             View Profile <ChevronRight className="w-3 h-3" />
           </Button>
         </Link>
-        {checkoutEnabled && listing?.pricingModel === 'fixed' && listing.priceFrom && (
-          <Button size="sm" className="h-auto min-h-8 gap-1 whitespace-normal py-2 text-xs leading-tight" onClick={() => onCheckout(listing)}>
-            <CreditCard className="w-3 h-3" /> Pay
-          </Button>
-        )}
-        <Link href={`/profile/${user.username}?action=collaborate`} className="min-w-0 flex-1 basis-32">
-          <Button size="sm" variant="outline" className="h-auto min-h-8 w-full gap-1 whitespace-normal py-2 text-center text-xs leading-tight">
-            <Briefcase className="w-3 h-3" /> Request collaboration
-          </Button>
-        </Link>
+        <Button size="sm" variant="outline" className="h-auto min-h-8 min-w-0 flex-1 basis-32 gap-1 whitespace-normal py-2 text-xs leading-tight" onClick={onMessage} disabled={messaging}>
+          <MessageCircle className="w-3 h-3" /> {messaging ? 'Opening…' : 'Message'}
+        </Button>
       </div>
     </div>
   );
@@ -173,8 +141,8 @@ function CreatorCardSkeleton() {
 
 export function TalentPanel() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const token = getStoredToken();
-  const checkoutEnabled = useFeature('creator_income_enabled');
 
   const [creators, setCreators] = useState<Creator[]>([]);
   const [total, setTotal] = useState(0);
@@ -184,22 +152,29 @@ export function TalentPanel() {
 
   const [skillFilter, setSkillFilter] = useState('');
   const [availableForFilter, setAvailableForFilter] = useState('all');
-  const [checkoutListingId, setCheckoutListingId] = useState<number | null>(null);
+  const [messagingUserId, setMessagingUserId] = useState<number | null>(null);
 
-  const handleCheckout = async (listing: Listing) => {
-    setCheckoutListingId(listing.id);
+  const handleMessage = async (userId: number) => {
+    if (!token) {
+      toast({ title: 'Sign in to message creators' });
+      return;
+    }
+    setMessagingUserId(userId);
     try {
-      const res = await fetch('/api/payments/service/initiate', {
+      const res = await apiFetch('/api/messages/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ serviceListingId: listing.id, redirectUrl: `${window.location.origin}/payments/complete` }),
+        body: JSON.stringify({ userId }),
       });
-      const data = await res.json() as { link?: string; error?: string };
-      if (!res.ok || !data.link) throw new Error(data.error ?? 'Could not start checkout');
-      window.location.assign(data.link);
+      const data = await res.json() as { conversationId?: number; error?: string };
+      if (!res.ok || !Number.isInteger(data.conversationId) || !data.conversationId) {
+        throw new Error(data.error ?? 'Could not open this conversation.');
+      }
+      setLocation(`/messages?conv=${data.conversationId}`);
     } catch (error) {
-      toast({ title: 'Checkout unavailable', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' });
-      setCheckoutListingId(null);
+      toast({ title: 'Could not open message', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' });
+    } finally {
+      setMessagingUserId(null);
     }
   };
 
@@ -267,20 +242,20 @@ export function TalentPanel() {
       </div>
 
       {total > 0 && (
-        <p className="text-xs text-muted-foreground">{total.toLocaleString()} people available</p>
+        <p className="text-xs text-muted-foreground">{total.toLocaleString()} creators open to opportunities</p>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {loading && creators.length === 0
           ? Array.from({ length: 4 }).map((_, i) => <CreatorCardSkeleton key={i} />)
-          : creators.map(c => <CreatorCard key={c.user.id} creator={c} checkoutEnabled={checkoutEnabled && checkoutListingId === null} onCheckout={handleCheckout} />)
+          : creators.map(c => <CreatorCard key={c.user.id} creator={c} onMessage={() => handleMessage(c.user.id)} messaging={messagingUserId === c.user.id} />)
         }
       </div>
 
       {!loading && creators.length === 0 && (
         <div className="text-center py-12">
           <Users2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">No creators found matching your filters.</p>
+          <p className="text-sm text-muted-foreground">No creators are open to opportunities yet.</p>
         </div>
       )}
 

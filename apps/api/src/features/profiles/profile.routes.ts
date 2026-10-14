@@ -61,6 +61,7 @@ const creatorSchema = z.object({
   skills: z.array(z.string().min(1).max(60)).max(20).optional(),
   links: z.array(z.object({ label: z.string().min(1).max(50), url: z.string().min(1).max(500) })).max(10).optional(),
   isAvailableForHire: z.boolean().optional(),
+  availableFor: z.array(z.string().max(80)).max(10).optional(),
 });
 
 export const authRouter = Router();
@@ -119,7 +120,7 @@ usersRouter.patch("/me/settings", validateBody(z.object({
   hireMeEnabled: z.boolean().optional(),
 })), ProfileController.updateSettings);
 usersRouter.post("/me/verification", validateBody(z.object({ kind: z.enum(["phone", "identity"]) })), ProfileController.requestVerification);
-usersRouter.patch("/me/creator", requireCreatorIncomeEnabled, validateBody(creatorSchema), ProfileController.updateMyCreatorProfile);
+usersRouter.patch("/me/creator", validateBody(creatorSchema), ProfileController.updateMyCreatorProfile);
 
 usersRouter.get("/me/profile-strength", ProfileController.getProfileStrength);
 usersRouter.get("/me/profile-viewers", requireAuth, ProfileController.getProfileViewers);
@@ -141,7 +142,7 @@ usersRouter.get("/featured", ProfileController.getFeaturedUsers);
 usersRouter.get("/me/saved", ProfileController.getMySavedPosts);
 usersRouter.get("/:username/portfolio", ProfileController.getUserPortfolio);
 usersRouter.get("/:username", ProfileController.getUserByUsername);
-usersRouter.get("/:username/creator", requireCreatorIncomeEnabled, ProfileController.getCreatorProfileByUsername);
+usersRouter.get("/:username/creator", ProfileController.getCreatorProfileByUsername);
 usersRouter.get("/:username/posts", ProfileController.getUserPosts);
 usersRouter.post("/:username/follow", ProfileController.followUser);
 usersRouter.get("/:username/followers", requireAuth, ProfileController.getFollowers);

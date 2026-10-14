@@ -6,6 +6,7 @@ import {
   likesTable,
   commentsTable,
   creatorProfilesTable,
+  creatorAvailabilityTable,
   postSharesTable,
   repostsTable,
   savedPostsTable,
@@ -353,4 +354,12 @@ export async function upsertCreatorProfile(
       .returning();
     return parseProfile(created);
   }
+}
+
+export async function syncCreatorAvailability(userId: number, isOpenToOpportunities: boolean) {
+  const status = isOpenToOpportunities ? "open_to_opportunities" : "unavailable";
+  await db.insert(creatorAvailabilityTable).values({ userId, status }).onConflictDoUpdate({
+    target: creatorAvailabilityTable.userId,
+    set: { status, updatedAt: new Date() },
+  });
 }

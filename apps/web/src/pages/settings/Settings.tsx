@@ -848,8 +848,8 @@ export default function Settings() {
                   <div className="border-t border-border/50 pt-5">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <h3 className="font-medium">{t('settings.hireMeButton')}</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">{t('settings.hireMeButtonDesc')}</p>
+                        <h3 className="font-medium">{t('settings.hireMeButton', 'Open to opportunities')}</h3>
+                        <p className="mt-1 text-sm text-muted-foreground">{t('settings.hireMeButtonDesc', 'Show your profile in Find Talent when you are open to hiring or collaboration opportunities. This is not a service listing.')}</p>
                       </div>
                       <Switch
                         checked={creatorSettings.hireMeEnabled}

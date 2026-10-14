@@ -19,6 +19,7 @@ import {
   enrichPost,
   getCreatorProfile,
   upsertCreatorProfile,
+  syncCreatorAvailability,
 } from "./profile.service";
 import {
   checkEmail,
@@ -693,8 +694,7 @@ export const getUserByUsername = async (req: Request, res: Response) => {
     .orderBy(desc(postsTable.createdAt))
     .limit(6);
 
-  const creatorIncomeEnabled = await isFeatureEnabled("creator_income_enabled");
-  const creatorProfile = creatorIncomeEnabled ? await getCreatorProfile(profileUser.id) : null;
+  const creatorProfile = await getCreatorProfile(profileUser.id);
 
   return res.json({
     user: userWithCounts,
@@ -1085,6 +1085,9 @@ export const updateMyCreatorProfile = async (req: Request, res: Response) => {
 
   const { skills, links, isAvailableForHire, availableFor } = req.body;
   const profile = await upsertCreatorProfile(viewerId, { skills, links, isAvailableForHire, availableFor });
+  if (typeof isAvailableForHire === "boolean") {
+    await syncCreatorAvailability(viewerId, isAvailableForHire);
+  }
   return res.json(profile);
 };
 
@@ -1172,6 +1175,10 @@ export const updateSettings = async (req: Request, res: Response) => {
   if (typeof req.body.hireMeEnabled === "boolean") allowed.hireMeEnabled = req.body.hireMeEnabled;
   if (Object.keys(allowed).length === 0) return res.status(400).json({ error: "No valid settings provided" });
   await db.update(usersTable).set({ ...allowed, updatedAt: new Date() }).where(eq(usersTable.id, viewerId));
+  if (typeof allowed.hireMeEnabled === "boolean") {
+    await upsertCreatorProfile(viewerId, { isAvailableForHire: allowed.hireMeEnabled });
+    await syncCreatorAvailability(viewerId, allowed.hireMeEnabled);
+  }
   const user = await getUserWithCounts(viewerId, null);
   return res.json(user);
 };

@@ -419,10 +419,10 @@ function Router() {
       </Route>
 
       <Route path="/opportunities/search">
-        <FeatureRoute flag="creator_income_enabled"><Redirect to="/workspace?tab=talent" /></FeatureRoute>
+        <Redirect to="/workspace?tab=talent" />
       </Route>
       <Route path="/opportunities">
-        <FeatureRoute flag="creator_income_enabled"><Redirect to="/workspace?tab=talent" /></FeatureRoute>
+        <Redirect to="/workspace?tab=talent" />
       </Route>
       <Route path="/jobs/post">
         <AuthGuard><PostJob /></AuthGuard>
