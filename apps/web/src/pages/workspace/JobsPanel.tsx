@@ -212,7 +212,7 @@ export function JobsPanel() {
 
           const handleDelete = async () => {
             if (!isOwner) return;
-            const confirmed = window.confirm('Permanently delete this opportunity and its applications? This cannot be undone.');
+            const confirmed = window.confirm('Permanently delete this opportunity and its applications? Any related message conversations will be kept but unlinked. This cannot be undone.');
             if (!confirmed) return;
             try {
               const token = getStoredToken();
