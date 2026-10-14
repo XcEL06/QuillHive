@@ -5,7 +5,7 @@ import { EditHistoryModal } from './EditHistoryModal';
 import type { TrustTier } from './TrustIndicator';
 import { AttachmentList } from './AttachmentList';
 import { readingTimeLabel } from '@/lib/readingTime';
-import { useLikePost, useDeletePost, type Post } from '@workspace/api-client-react';
+import { useLikePost, useDeletePost, useGetGroup, type Post } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
 import { apiUrl, mediaUrl, copyTextToClipboard, getPostShareUrl } from '@/lib/api';
@@ -107,6 +107,24 @@ function OfficialBadge({ isOfficial }: { isOfficial?: boolean }) {
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs">Official QuillHive Account</TooltipContent>
     </Tooltip>
+  );
+}
+
+function GroupPostAttribution({ groupId }: { groupId: number }) {
+  const { data: group } = useGetGroup(groupId);
+  if (!group) return null;
+
+  return (
+    <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+      <Link href={`/groups/${groupId}`} className="flex min-w-0 items-center gap-2 hover:text-foreground">
+        <Avatar className="h-5 w-5 shrink-0">
+          <AvatarImage src={group.avatarUrl ? mediaUrl(group.avatarUrl) : undefined} alt="" />
+          <AvatarFallback className="text-[9px]">{group.name.slice(0, 1)}</AvatarFallback>
+        </Avatar>
+        <span className="shrink-0">Posted in</span>
+        <span className="truncate font-semibold text-foreground">{group.name}</span>
+      </Link>
+    </div>
   );
 }
 
@@ -801,6 +819,8 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
       >
         {/* Official Post Banner */}
         {post.isOfficialPost && <OfficialPostBanner category={post.postCategory} />}
+
+        {post.groupId != null && <GroupPostAttribution groupId={post.groupId} />}
 
         {/* Header */}
         <div className="mb-4 flex items-center gap-3 min-w-0">

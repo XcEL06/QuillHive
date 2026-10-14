@@ -98,7 +98,8 @@ const PUBLIC_ROUTES = [
 
 function isPublicRoute(location: string) {
   const pathname = location.split("?", 1)[0].replace(/\/$/, "") || "/";
-  return PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  return /^\/groups\/\d+$/.test(pathname)
+    || PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
 
 function PageLoader() {
@@ -311,7 +312,7 @@ function Router() {
         <AuthGuard><Messages /></AuthGuard>
       </Route>
       <Route path="/groups/:id">
-        <AuthGuard><Groups /></AuthGuard>
+        <Groups />
       </Route>
       <Route path="/g/:slug">
         <AuthGuard><Groups /></AuthGuard>

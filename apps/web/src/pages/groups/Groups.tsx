@@ -638,10 +638,10 @@ function GroupDetail({ id }: { id: number }) {
 
   const shareGroup = async () => {
     try {
-      await copyTextToClipboard(`${window.location.origin}/g/${(groupView.slug || String(id))}`);
-      toast({ title: 'Community link copied' });
+      await copyTextToClipboard(`${window.location.origin}/groups/${id}`);
+      toast({ title: 'Group link copied', description: 'Anyone can open this link to view the group.' });
     } catch {
-      toast({ title: 'Could not copy community link', variant: 'destructive' });
+      toast({ title: 'Could not copy group link', variant: 'destructive' });
     }
   };
 
@@ -658,7 +658,7 @@ function GroupDetail({ id }: { id: number }) {
   };
 
   if (groupLoading) return (
-    <AppLayout>
+    <AppLayout publicPage={!user}>
       <div className="max-w-4xl mx-auto px-4 animate-pulse space-y-4">
         <Skeleton className="w-full h-48 rounded-2xl" />
         <Skeleton className="h-8 w-64" />
@@ -667,10 +667,19 @@ function GroupDetail({ id }: { id: number }) {
     </AppLayout>
   );
 
-  if (groupError) return <AppLayout><div className="mx-auto max-w-xl py-20 text-center"><p className="text-sm text-destructive" role="alert">Could not load this group.</p><Button type="button" variant="outline" className="mt-4" onClick={() => void refetch()}>Retry</Button></div></AppLayout>;
-  if (!group) return <AppLayout><div className="py-20 text-center text-muted-foreground">{t('groups.notFound', 'Group not found')}</div></AppLayout>;
+  if (groupError) return <AppLayout publicPage={!user}><div className="mx-auto max-w-xl py-20 text-center"><p className="text-sm text-destructive" role="alert">Could not load this group.</p><Button type="button" variant="outline" className="mt-4" onClick={() => void refetch()}>Retry</Button></div></AppLayout>;
+  if (!group) return <AppLayout publicPage={!user}><div className="py-20 text-center text-muted-foreground">{t('groups.notFound', 'Group not found')}</div></AppLayout>;
 
   const groupView = group as GroupView;
+  if (!user && (groupView.privacy === 'private' || groupView.type === 'secret')) {
+    return <AppLayout publicPage>
+      <div className="mx-auto max-w-xl px-4 py-20 text-center">
+        <h1 className="font-serif text-2xl font-bold">{group.name}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">This group is invite-only. Sign in with an account that has an invitation to continue.</p>
+        <Link href="/login"><Button className="mt-5">Sign in</Button></Link>
+      </div>
+    </AppLayout>;
+  }
   const inviteCode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('invite') : null;
   const allGroupPosts = Array.isArray(postsData?.posts) ? postsData.posts as any[] : [];
   const questions = allGroupPosts.filter(post => post.groupDetails?.type === 'question');
@@ -739,7 +748,7 @@ function GroupDetail({ id }: { id: number }) {
   const EmptyIcon = emptyStates[activeTab]?.icon ?? MessageSquare;
 
   return (
-    <AppLayout>
+    <AppLayout publicPage={!user}>
       <div className="mx-auto w-full max-w-6xl px-4 pb-8 md:px-6">
         <Link href="/groups" className="mb-4 flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> {t('groups.backToGroups', 'Back to Groups')}
@@ -767,13 +776,13 @@ function GroupDetail({ id }: { id: number }) {
             </div>
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2 pb-1">
-            {group.isMember ? <Button variant="secondary" disabled>Joined</Button> : groupView.hasPendingJoinRequest ? <Button variant="outline" disabled>Request pending</Button> : groupView.privacy === 'private' || groupView.type === 'secret' ? inviteCode ? <Button onClick={() => void acceptGroupInvite(inviteCode)}>Accept invite</Button> : <Badge variant="outline">Invite-only</Badge> : <Button onClick={() => toggleJoin({ id })} disabled={isJoining}>{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button>}
+            {group.isMember ? <Button variant="secondary" disabled>Joined</Button> : groupView.hasPendingJoinRequest ? <Button variant="outline" disabled>Request pending</Button> : groupView.privacy === 'private' || groupView.type === 'secret' ? inviteCode ? <Button onClick={() => void acceptGroupInvite(inviteCode)}>Accept invite</Button> : <Badge variant="outline">Invite-only</Badge> : !user ? <Link href="/login"><Button>{groupView.privacy === 'public' ? 'Sign in to request to join' : 'Sign in to join'}</Button></Link> : <Button onClick={() => toggleJoin({ id })} disabled={isJoining}>{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button>}
+            {groupView.privacy !== 'private' && groupView.type !== 'secret' && <Button variant="outline" onClick={() => void shareGroup()} className="gap-1.5"><Copy className="h-4 w-4" />Copy link</Button>}
             <Button variant="outline" onClick={() => setInviteOpen(true)} disabled={!group.isMember} className="gap-1.5"><UserPlus className="h-4 w-4" />Invite</Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Community actions"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {group.isMember && <DropdownMenuItem onSelect={() => toggleJoin({ id })}><LogOut className="mr-2 h-4 w-4" />Leave community</DropdownMenuItem>}
-                <DropdownMenuItem onSelect={() => void shareGroup()}><Copy className="mr-2 h-4 w-4" />Copy community link</DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setReportOpen(true)}>Report community</DropdownMenuItem>
               </DropdownMenuContent>
