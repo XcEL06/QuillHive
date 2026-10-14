@@ -88,6 +88,7 @@ export function SessionsCard({
   };
 
   const revokeSession = async (sessionId: number) => {
+    if (!window.confirm('Revoke this session? That device will need to sign in again.')) return;
     setRevokingSession(sessionId);
     try {
       const res = await fetch(`/api/auth/sessions/${sessionId}`, { method: 'DELETE', headers });

@@ -147,7 +147,7 @@ export const deleteDraft = async (req: Request, res: Response) => {
   if (existing.authorId !== viewerId) return res.status(403).json({ error: "Forbidden" });
   if (existing.isPublished) return res.status(400).json({ error: "Cannot delete a published post via this endpoint" });
 
-  await db.update(postsTable).set({ isDeleted: true, updatedAt: new Date() }).where(eq(postsTable.id, draftId));
+  await PostService.deletePostsPermanently([draftId]);
   return res.json({ ok: true });
 };
 

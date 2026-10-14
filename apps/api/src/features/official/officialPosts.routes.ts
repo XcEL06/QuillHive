@@ -11,6 +11,7 @@ import { requireAuth, requireAdmin } from "../../middleware/admin";
 import { z } from "zod";
 import { getIO } from "../../lib/socket";
 import { assertOfficialSystemAccount, OFFICIAL_SYSTEM_ACCOUNT } from "../../lib/officialSystemAccount";
+import * as PostService from "../posts/post.service";
 
 export const officialPostsRouter: Router = Router();
 export const officialPublicRouter: Router = Router();
@@ -421,10 +422,7 @@ officialPostsRouter.delete("/official-posts/:id", requireAdmin, async (req: Auth
 
   if (!existing) return res.status(404).json({ error: "Official post not found" });
 
-  await db
-    .update(postsTable)
-    .set({ isDeleted: true, deletedAt: new Date(), isPublished: false })
-    .where(eq(postsTable.id, id));
+  await PostService.deletePost(id, req.currentUser.id, true);
 
   await auditLog(req.currentUser.id, "official_post_deleted", id);
 

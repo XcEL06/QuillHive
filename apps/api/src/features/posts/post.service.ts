@@ -3,10 +3,19 @@ import {
   postsTable,
   likesTable,
   commentsTable,
+  commentLikesTable,
   followsTable,
   notificationsTable,
   topicsTable,
   postTopicsTable,
+  postSharesTable,
+  repostsTable,
+  savedPostsTable,
+  postViewsTable,
+  collectionPostsTable,
+  creatorTipsTable,
+  paidPostAccessTable,
+  writingActivityTable,
   safetyPreferencesTable,
   mutedUsersTable,
   usersTable,
@@ -680,17 +689,53 @@ export async function updatePost(id: number, authorId: number, data: Record<stri
   return enrichPost(updated, authorId);
 }
 
+type PostDeleteExecutor = Pick<typeof db, "select" | "update" | "delete">;
+
+async function removePostRows(executor: PostDeleteExecutor, postIds: number[]) {
+  if (postIds.length === 0) return;
+
+  await executor.update(postsTable).set({ quotedPostId: null })
+    .where(inArray(postsTable.quotedPostId, postIds));
+
+  const comments = await executor.select({ id: commentsTable.id })
+    .from(commentsTable)
+    .where(inArray(commentsTable.postId, postIds));
+  const commentIds = comments.map(({ id }) => id);
+  if (commentIds.length > 0) {
+    await executor.delete(commentLikesTable).where(inArray(commentLikesTable.commentId, commentIds));
+    await executor.delete(commentsTable).where(inArray(commentsTable.id, commentIds));
+  }
+
+  await executor.delete(likesTable).where(inArray(likesTable.postId, postIds));
+  await executor.delete(postSharesTable).where(inArray(postSharesTable.postId, postIds));
+  await executor.delete(repostsTable).where(inArray(repostsTable.postId, postIds));
+  await executor.delete(savedPostsTable).where(inArray(savedPostsTable.postId, postIds));
+  await executor.delete(postTopicsTable).where(inArray(postTopicsTable.postId, postIds));
+  await executor.delete(collectionPostsTable).where(inArray(collectionPostsTable.postId, postIds));
+  await executor.delete(postViewsTable).where(inArray(postViewsTable.postId, postIds));
+  await executor.delete(postTrustScoresTable).where(inArray(postTrustScoresTable.postId, postIds));
+  await executor.delete(paidPostAccessTable).where(inArray(paidPostAccessTable.postId, postIds));
+  await executor.delete(writingActivityTable).where(inArray(writingActivityTable.postId, postIds));
+  await executor.update(creatorTipsTable).set({ postId: null })
+    .where(inArray(creatorTipsTable.postId, postIds));
+  await executor.delete(postsTable).where(inArray(postsTable.id, postIds));
+}
+
+export async function deletePostsPermanently(postIds: number[], executor?: PostDeleteExecutor) {
+  if (executor) return removePostRows(executor, postIds);
+  return db.transaction((tx) => removePostRows(tx, postIds));
+}
+
 export async function deletePost(id: number, requesterId: number, canDeleteAny = false) {
-  const [post] = await db.select({
-    authorId: postsTable.authorId,
-  }).from(postsTable).where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
-  if (!post) return false;
-  if (post.authorId !== requesterId && !canDeleteAny) throw new Error("Forbidden");
-  const now = new Date();
-  await db.update(postsTable)
-    .set({ isDeleted: true, deletedAt: now, updatedAt: now })
-    .where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
-  return true;
+  return db.transaction(async (tx) => {
+    const [post] = await tx.select({ authorId: postsTable.authorId })
+      .from(postsTable)
+      .where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
+    if (!post) return false;
+    if (post.authorId !== requesterId && !canDeleteAny) throw new Error("Forbidden");
+    await removePostRows(tx, [id]);
+    return true;
+  });
 }
 
 export async function toggleLike(postId: number, userId: number) {

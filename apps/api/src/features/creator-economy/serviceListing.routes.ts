@@ -6,6 +6,7 @@ import { db } from "@workspace/db";
 import {
   serviceListingsTable,
   commissionRequestsTable,
+  creatorPaymentTransactionsTable,
   skillEndorsementsTable,
   usersTable,
   creatorAvailabilityTable,
@@ -155,7 +156,15 @@ serviceListingsRouter.delete("/:id", requireAuth, validateParams(z.object({ id: 
   const [listing] = await db.select({ creatorId: serviceListingsTable.creatorId }).from(serviceListingsTable).where(eq(serviceListingsTable.id, Number(req.params.id)));
   if (!listing) return res.status(404).json({ error: "Not found" });
   if (listing.creatorId !== req.currentUser.id) return res.status(403).json({ error: "Forbidden" });
-  await db.update(serviceListingsTable).set({ isActive: false }).where(eq(serviceListingsTable.id, Number(req.params.id)));
+  await db.transaction(async (tx) => {
+    await tx.update(commissionRequestsTable)
+      .set({ serviceListingId: null })
+      .where(eq(commissionRequestsTable.serviceListingId, Number(req.params.id)));
+    await tx.update(creatorPaymentTransactionsTable)
+      .set({ serviceListingId: null })
+      .where(eq(creatorPaymentTransactionsTable.serviceListingId, Number(req.params.id)));
+    await tx.delete(serviceListingsTable).where(eq(serviceListingsTable.id, Number(req.params.id)));
+  });
   return res.json({ success: true });
 });
 

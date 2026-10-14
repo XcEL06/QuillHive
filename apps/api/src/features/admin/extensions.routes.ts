@@ -192,7 +192,7 @@ adminExtensionsRouter.post("/featured-slots", requireSuperAdmin, async (req: Req
 adminExtensionsRouter.delete("/featured-slots/:id", requireSuperAdmin, async (req: Request, res: Response) => {
   const adminId = (req as AuthedReq).currentUser.id;
   const id = Number(req.params["id"]);
-  await db.update(featuredSlotsTable).set({ isActive: false }).where(eq(featuredSlotsTable.id, id));
+  await db.delete(featuredSlotsTable).where(eq(featuredSlotsTable.id, id));
   await audit(adminId, "featured_slot_delete", "featured_slot", id);
   res.json({ ok: true });
 });

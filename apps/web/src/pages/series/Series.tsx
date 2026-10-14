@@ -101,6 +101,7 @@ export default function Series() {
   };
 
   const handleDelete = async (id: number) => {
+    if (!window.confirm('Permanently delete this series? Posts in it will remain on your profile.')) return;
     try {
       const res = await fetch(`/api/series/${id}`, { method: 'DELETE', headers: authHeaders });
       if (!res.ok) throw new Error(`Request failed (${res.status})`);

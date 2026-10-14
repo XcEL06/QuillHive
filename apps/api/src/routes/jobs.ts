@@ -310,9 +310,13 @@ router.delete("/:id", async (req, res) => {
   if (!job) return res.status(404).json({ error: "Opportunity not found" });
   if (job.authorId !== viewerId) return res.status(403).json({ error: "Forbidden" });
 
-  await db.update(jobsTable)
-    .set({ isActive: false, moderationStatus: "closed", expiresAt: new Date() })
-    .where(eq(jobsTable.id, id));
+  await db.transaction(async (tx) => {
+    await tx.update(conversationsTable)
+      .set({ opportunityId: null })
+      .where(eq(conversationsTable.opportunityId, id));
+    await tx.delete(opportunityApplicationsTable).where(eq(opportunityApplicationsTable.jobId, id));
+    await tx.delete(jobsTable).where(eq(jobsTable.id, id));
+  });
 
   return res.json({ ok: true, deleted: true });
 });

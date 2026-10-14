@@ -7,6 +7,7 @@ import { hashPassword, verifyPassword, getSessionUserId, destroySession } from "
 import { createEmailVerification, getPublicAppUrl, sendEmail } from "../email/email.service";
 import { logger } from "../../lib/logger";
 import { disconnectUserSockets } from "../../lib/socket";
+import { permanentlyDeleteAccountData } from "./accountDeletion.service";
 
 function getUserIdFromAuth(req: Request): number | null {
   const auth = req.headers.authorization;
@@ -178,30 +179,7 @@ export const deleteMyAccount = async (req: Request, res: Response) => {
     return res.status(400).json({ error: "Type DELETE to confirm" });
   }
 
-  // Soft delete: anonymize + mark deleted, preserves referential integrity.
-  await db.update(usersTable).set({
-    isDeleted: true,
-    deletedAt: new Date(),
-    email: `deleted-${userId}-${Date.now()}@deleted.local`,
-    username: `deleted_${userId}_${Date.now()}`,
-    displayName: "Deleted user",
-    bio: null,
-    headline: null,
-    avatarUrl: null,
-    coverUrl: null,
-    website: null,
-    location: null,
-    country: null,
-    facebook: null,
-    linkedin: null,
-    twitter: null,
-    instagram: null,
-    passwordHash: hashPassword(randomBytes(32).toString("hex")),
-    twoFactorEnabled: false,
-    twoFactorSecret: null,
-    passwordResetTokenHash: null,
-    passwordResetExpires: null,
-  }).where(eq(usersTable.id, userId));
+  await permanentlyDeleteAccountData(userId);
 
   const auth = req.headers.authorization;
   if (auth?.startsWith("Bearer ")) await destroySession(auth.slice(7));

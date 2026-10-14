@@ -114,6 +114,7 @@ export default function Collections() {
   };
 
   const handleDelete = async (id: number) => {
+    if (!window.confirm('Permanently delete this collection? Its saved post links will also be removed.')) return;
     try {
       const res = await fetch(`/api/collections/${id}`, { method: 'DELETE', headers: authHeaders });
       if (!res.ok) throw new Error(`Request failed (${res.status})`);

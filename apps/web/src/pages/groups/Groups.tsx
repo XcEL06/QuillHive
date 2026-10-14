@@ -436,6 +436,7 @@ function GroupDetail({ id }: { id: number }) {
 
   const removePost = async (postId: number) => {
     if (!token) return;
+    if (!window.confirm('Permanently delete this group post? This cannot be undone.')) return;
     const res = await fetch(`/api/groups/${id}/posts/${postId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
     if (res.ok) {
       toast({ title: 'Post removed' });
@@ -467,6 +468,7 @@ function GroupDetail({ id }: { id: number }) {
   };
 
   const reviewGroupReport = async (reportId: number, decision: 'dismiss' | 'remove_post' | 'escalate') => {
+    if (decision === 'remove_post' && !window.confirm('Permanently delete the reported group post? This cannot be undone.')) return;
     const response = await apiFetch(`/api/groups/${id}/reports/${reportId}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision }),
     });
@@ -557,11 +559,20 @@ function GroupDetail({ id }: { id: number }) {
 
   const performLifecycleAction = async () => {
     if (!lifecycleAction) return;
-    const response = await apiFetch(`/api/groups/${id}${lifecycleAction === 'archive' ? '/archive' : ''}`, { method: lifecycleAction === 'archive' ? 'POST' : 'DELETE' });
-    if (!response.ok) return toast({ title: `Could not ${lifecycleAction} group`, variant: 'destructive' });
-    toast({ title: lifecycleAction === 'archive' ? 'Group archived' : 'Group deleted' });
-    setLifecycleAction(null);
-    setLocation('/groups');
+    try {
+      const response = await apiFetch(`/api/groups/${id}${lifecycleAction === 'archive' ? '/archive' : ''}`, { method: lifecycleAction === 'archive' ? 'POST' : 'DELETE' });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.error ?? `Could not ${lifecycleAction} group.`);
+      toast({ title: lifecycleAction === 'archive' ? 'Group archived' : 'Group permanently deleted' });
+      setLifecycleAction(null);
+      setLocation('/groups');
+    } catch (error) {
+      toast({
+        title: `Could not ${lifecycleAction} group`,
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const submitGroupPost = async () => {
@@ -953,7 +964,7 @@ function GroupDetail({ id }: { id: number }) {
       </div>
 
       <Dialog open={Boolean(lifecycleAction)} onOpenChange={open => { if (!open) setLifecycleAction(null); }}>
-        <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{lifecycleAction === 'archive' ? 'Archive this group?' : 'Delete this group?'}</DialogTitle><DialogDescription>{lifecycleAction === 'archive' ? 'The group will be hidden from discovery. Existing posts remain available by direct link.' : 'The group will be soft-deleted and no longer accessible. Its posts remain stored.'}</DialogDescription></DialogHeader><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setLifecycleAction(null)}>Cancel</Button><Button variant={lifecycleAction === 'delete' ? 'destructive' : 'default'} onClick={() => void performLifecycleAction()}>{lifecycleAction === 'archive' ? 'Archive group' : 'Delete group'}</Button></div></DialogContent>
+        <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{lifecycleAction === 'archive' ? 'Archive this group?' : 'Permanently delete this group?'}</DialogTitle><DialogDescription>{lifecycleAction === 'archive' ? 'The group will be hidden from discovery. Existing posts remain available by direct link.' : 'This permanently deletes the group, its posts, memberships, join requests, and invites. This action cannot be undone.'}</DialogDescription></DialogHeader><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setLifecycleAction(null)}>Cancel</Button><Button variant={lifecycleAction === 'delete' ? 'destructive' : 'default'} onClick={() => void performLifecycleAction()}>{lifecycleAction === 'archive' ? 'Archive group' : 'Permanently delete group'}</Button></div></DialogContent>
       </Dialog>
       <Dialog open={mentionOpen} onOpenChange={setMentionOpen}>
         <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Mention a member</DialogTitle></DialogHeader>

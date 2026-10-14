@@ -250,6 +250,7 @@ export default function Settings() {
   };
 
   const removePasskey = async (id: number) => {
+    if (!window.confirm('Remove this passkey? You will no longer be able to sign in with it.')) return;
     try {
       const res = await fetch(`/api/auth/passkey/${id}`, {
         method: 'DELETE',
@@ -578,6 +579,7 @@ export default function Settings() {
     finally { setIsSavingWork(false); }
   };
   const handleDeleteWork = async (id: number) => {
+    if (!window.confirm('Permanently delete this work experience?')) return;
     try { await fetch(`/api/users/me/work-history/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} }); setWorkHistory(p => p.filter(w => w.id !== id)); toast({ title: t('settings.deleted') }); }
     catch { toast({ title: t('settings.failedToDeleteAccount'), variant: 'destructive' }); }
   };
@@ -599,6 +601,7 @@ export default function Settings() {
     finally { setIsSavingEdu(false); }
   };
   const handleDeleteEdu = async (id: number) => {
+    if (!window.confirm('Permanently delete this education entry?')) return;
     try { await fetch(`/api/users/me/education/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} }); setEducationHistory(p => p.filter(e => e.id !== id)); toast({ title: t('settings.deleted') }); }
     catch { toast({ title: t('settings.failedToDeleteAccount'), variant: 'destructive' }); }
   };

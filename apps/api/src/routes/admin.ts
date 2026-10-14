@@ -16,6 +16,8 @@ import { BOOST_PLANS, type PlanKey } from "../features/boost/boost.routes";
 import { deleteCachePattern } from "../lib/cache";
 import { memDeletePattern } from "../lib/memCache";
 import * as MessagingService from "../features/messaging/messaging.service";
+import * as PostService from "../features/posts/post.service";
+import { permanentlyDeleteAccountData } from "../features/profiles/accountDeletion.service";
 import { getOfficialSystemAccountId } from "../lib/officialSystemAccount";
 import { addJob, getQueue } from "../lib/queue/queue";
 import { getUserTrustScore } from "../features/trust/trust.service";
@@ -470,8 +472,7 @@ router.delete("/users/:id", requirePermission("delete_user"), async (req: any, r
   const [target] = await db.select().from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.isDeleted, false)));
   if (!target) return res.status(404).json({ error: "User not found" });
 
-  await db.update(usersTable).set({ isDeleted: true, deletedAt: new Date(), updatedAt: new Date() }).where(eq(usersTable.id, id));
-  await db.update(postsTable).set({ isDeleted: true, deletedAt: new Date(), updatedAt: new Date() }).where(eq(postsTable.authorId, id));
+  await permanentlyDeleteAccountData(id);
   await auditLog(req.currentUser.id, "user_deleted", "user", id, target.username);
   return res.json({ success: true });
 });
@@ -584,7 +585,7 @@ router.delete("/posts/:id", requirePermission("delete_post"), async (req: any, r
   if (!checkRateLimit(req.currentUser.id, "delete_post")) return res.status(429).json({ error: "Too many delete actions. Try again in a minute." });
   const [post] = await db.select().from(postsTable).where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
   if (!post) return res.status(404).json({ error: "Post not found" });
-  await db.update(postsTable).set({ isDeleted: true, deletedAt: new Date(), updatedAt: new Date() }).where(eq(postsTable.id, id));
+  await PostService.deletePost(id, req.currentUser.id, true);
   await auditLog(req.currentUser.id, "post_deleted", "post", id, post.title ?? undefined);
   return res.json({ success: true });
 });
@@ -1049,9 +1050,9 @@ router.patch("/rules/:id", requireSuperAdmin, async (req: any, res) => {
 
 router.delete("/rules/:id", requireSuperAdmin, async (req: any, res) => {
   const id = parseInt(req.params.id);
-  const [rule] = await db.update(moderationRulesTable).set({ isActive: false }).where(eq(moderationRulesTable.id, id)).returning();
+  const [rule] = await db.delete(moderationRulesTable).where(eq(moderationRulesTable.id, id)).returning();
   if (!rule) return res.status(404).json({ error: "Rule not found" });
-  await auditLog(req.currentUser.id, "rule_deactivated", "rule", id);
+  await auditLog(req.currentUser.id, "rule_deleted", "rule", id);
   return res.json({ success: true });
 });
 

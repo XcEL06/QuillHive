@@ -6,6 +6,7 @@ import { eq, and, sql, ilike, desc, inArray, gte } from "drizzle-orm";
 import { getSessionUserId } from "../lib/auth";
 import { loadCurrentUser } from "../lib/auth-types";
 import { enrichPost } from "../features/profiles/profile.service";
+import { deletePostsPermanently } from "../features/posts/post.service";
 import { postVisibilityCondition } from "../features/posts/postVisibility";
 import { sanitizeRichText } from "../lib/sanitize";
 
@@ -608,6 +609,40 @@ router.get("/:id", async (req, res) => {
 
   const enriched = await enrichGroup(group, viewerId, viewer?.role === "super_admin");
   return res.json(enriched);
+});
+
+router.delete("/:id", async (req, res) => {
+  const actorId = getViewerId(req);
+  if (!actorId) return res.status(401).json({ error: "Unauthorized" });
+  const groupId = Number(req.params.id);
+  if (!Number.isInteger(groupId) || groupId <= 0) return res.status(400).json({ error: "Invalid group id" });
+
+  const outcome = await db.transaction(async (tx) => {
+    const [group] = await tx.select({ creatorId: groupsTable.creatorId })
+      .from(groupsTable)
+      .where(eq(groupsTable.id, groupId))
+      .for("update");
+    if (!group) return "missing" as const;
+
+    if (group.creatorId !== actorId) {
+      const [membership] = await tx.select({ role: groupMembersTable.role, status: groupMembersTable.status })
+        .from(groupMembersTable)
+        .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, actorId)));
+      if (membership?.status !== "active" || membership.role !== "admin") return "forbidden" as const;
+    }
+
+    const groupPosts = await tx.select({ id: postsTable.id })
+      .from(postsTable)
+      .where(eq(postsTable.groupId, groupId));
+    await deletePostsPermanently(groupPosts.map(({ id }) => id), tx);
+    await tx.delete(groupMembersTable).where(eq(groupMembersTable.groupId, groupId));
+    await tx.delete(groupsTable).where(eq(groupsTable.id, groupId));
+    return "deleted" as const;
+  });
+
+  if (outcome === "missing") return res.status(404).json({ error: "Group not found" });
+  if (outcome === "forbidden") return res.status(403).json({ error: "Only group owners and admins can delete groups" });
+  return res.json({ ok: true });
 });
 
 router.post("/:id/join", async (req, res) => {

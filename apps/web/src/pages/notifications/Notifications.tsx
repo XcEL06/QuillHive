@@ -63,6 +63,7 @@ export default function Notifications() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!window.confirm('Dismiss this notification?')) return;
     setDeletingIds(s => new Set([...s, id]));
     try {
       const res = await fetch(`/api/notifications/${id}`, {

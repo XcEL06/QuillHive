@@ -212,7 +212,7 @@ export function JobsPanel() {
 
           const handleDelete = async () => {
             if (!isOwner) return;
-            const confirmed = window.confirm('Delete this opportunity? It will no longer be visible to creators.');
+            const confirmed = window.confirm('Permanently delete this opportunity and its applications? This cannot be undone.');
             if (!confirmed) return;
             try {
               const token = getStoredToken();
@@ -227,6 +227,28 @@ export function JobsPanel() {
               await refetch();
             } catch (error) {
               alert(error instanceof Error ? error.message : 'Could not delete opportunity');
+            }
+          };
+
+          const handleToggleActive = async () => {
+            if (!isOwner) return;
+            try {
+              const token = getStoredToken();
+              const res = await fetch(apiUrl(`/api/jobs/${job.id}`), {
+                method: 'PATCH',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ isActive: !j.isActive }),
+              });
+              if (!res.ok) {
+                const error = await res.json().catch(() => ({ error: 'Could not update opportunity status' }));
+                throw new Error(error.error || 'Could not update opportunity status');
+              }
+              await refetch();
+            } catch (error) {
+              alert(error instanceof Error ? error.message : 'Could not update opportunity status');
             }
           };
 
@@ -248,7 +270,7 @@ export function JobsPanel() {
 
               <div className="flex-1 min-w-0">
                 <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                  {!j.isActive && <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">Inactive</Badge>}
+                  {!j.isActive && <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">Closed</Badge>}
                   {j.moderationStatus && j.moderationStatus !== 'published' && (
                     <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-300">
                       {j.moderationStatus.replace(/_/g, ' ')}
@@ -307,6 +329,10 @@ export function JobsPanel() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => void handleToggleActive()}>
+                            {j.isActive ? 'Close opportunity' : 'Reopen opportunity'}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem onSelect={() => setLocation(`/jobs/post?edit=${job.id}`)}>
                             <Pencil className="h-4 w-4" /> Edit
                           </DropdownMenuItem>

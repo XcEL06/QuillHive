@@ -18,6 +18,7 @@ import {
 import { and, desc, eq, gt, inArray, ne, sql } from "drizzle-orm";
 import { optionalAuth, requireAuth, requireSuperAdmin } from "../../middleware/admin";
 import { enrichPost } from "../profiles/profile.service";
+import { deletePostsPermanently } from "../posts/post.service";
 import { loadCurrentUser } from "../../lib/auth-types";
 
 interface AuthedRequest extends Request {
@@ -514,7 +515,7 @@ groupAdminRouter.patch("/:id/reports/:reportId", requireAuth, async (req, res: R
   const [post] = await db.select({ id: postsTable.id }).from(postsTable)
     .where(and(eq(postsTable.id, report.targetId), eq(postsTable.groupId, groupId)));
   if (!post) return res.status(404).json({ error: "Reported post not found in this group" });
-  if (decision === "remove_post") await db.update(postsTable).set({ isDeleted: true, deletedAt: new Date() }).where(eq(postsTable.id, post.id));
+  if (decision === "remove_post") await deletePostsPermanently([post.id]);
   await db.update(reportsTable).set({
     status: decision === "escalate" ? "pending" : "resolved",
     resolvedBy: decision === "escalate" ? null : actorId,
@@ -532,15 +533,6 @@ groupAdminRouter.post("/:id/archive", requireAuth, async (req, res: Response) =>
   if (!group) return res.status(404).json({ error: "Group not found" });
   await db.insert(groupActivityLogsTable).values({ groupId, actorId, action: "group_archived", details: {} });
   return res.json({ ok: true });
-});
-
-groupAdminRouter.delete("/:id", requireAuth, async (req, res: Response) => {
-  const actorId = (req as AuthedRequest).currentUser.id;
-  const groupId = Number(req.params.id);
-  const role = await getActorRole(groupId, actorId);
-  if (role !== "owner" && role !== "admin") return res.status(403).json({ error: "Only group owners and admins can delete groups" });
-  const [group] = await db.update(groupsTable).set({ isDeleted: true, isArchived: true }).where(eq(groupsTable.id, groupId)).returning({ id: groupsTable.id });
-  return group ? res.json({ ok: true }) : res.status(404).json({ error: "Group not found" });
 });
 
 groupAdminRouter.patch("/:id/join-requests/:requestId", requireAuth, async (req, res: Response) => {
@@ -584,8 +576,9 @@ groupAdminRouter.delete("/:id/members/:userId", requireAuth, async (req, res: Re
   const [group] = await db.select({ creatorId: groupsTable.creatorId }).from(groupsTable).where(eq(groupsTable.id, groupId));
   if (group?.creatorId === targetUserId) return res.status(400).json({ error: "The group creator cannot be removed" });
   if (req.body?.deletePosts === true) {
-    await db.update(postsTable).set({ isDeleted: true, deletedAt: new Date() })
-      .where(and(eq(postsTable.groupId, groupId), eq(postsTable.authorId, targetUserId), eq(postsTable.isDeleted, false)));
+    const posts = await db.select({ id: postsTable.id }).from(postsTable)
+      .where(and(eq(postsTable.groupId, groupId), eq(postsTable.authorId, targetUserId)));
+    await deletePostsPermanently(posts.map(({ id }) => id));
   }
   await db.delete(groupMembersTable).where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, targetUserId)));
   await db.insert(groupActivityLogsTable).values({ groupId, actorId, action: "member_removed", details: { userId: targetUserId } });
@@ -602,8 +595,9 @@ groupAdminRouter.post("/:id/bans", requireAuth, async (req, res: Response) => {
   const [group] = await db.select({ creatorId: groupsTable.creatorId }).from(groupsTable).where(eq(groupsTable.id, groupId));
   if (group?.creatorId === targetUserId) return res.status(400).json({ error: "The group creator cannot be banned" });
   if (req.body?.deletePosts === true) {
-    await db.update(postsTable).set({ isDeleted: true, deletedAt: new Date() })
-      .where(and(eq(postsTable.groupId, groupId), eq(postsTable.authorId, targetUserId), eq(postsTable.isDeleted, false)));
+    const posts = await db.select({ id: postsTable.id }).from(postsTable)
+      .where(and(eq(postsTable.groupId, groupId), eq(postsTable.authorId, targetUserId)));
+    await deletePostsPermanently(posts.map(({ id }) => id));
   }
   await db.insert(groupBansTable).values({ groupId, userId: targetUserId, bannedBy: actorId, reason: req.body?.reason || null }).onConflictDoNothing();
   await db.update(groupMembersTable).set({ status: "banned" })
@@ -649,9 +643,11 @@ groupAdminRouter.delete("/:id/posts/:postId", requireAuth, async (req, res: Resp
   const actorId = (req as AuthedRequest).currentUser.id;
   const groupId = Number(req.params.id);
   if (!canModerate(await getActorRole(groupId, actorId))) return res.status(403).json({ error: "Only group moderators can remove posts" });
-  const [post] = await db.update(postsTable).set({ isDeleted: true, deletedAt: new Date() })
-    .where(and(eq(postsTable.id, Number(req.params.postId)), eq(postsTable.groupId, groupId))).returning({ id: postsTable.id });
-  return post ? res.json({ ok: true }) : res.status(404).json({ error: "Post not found" });
+  const [post] = await db.select({ id: postsTable.id }).from(postsTable)
+    .where(and(eq(postsTable.id, Number(req.params.postId)), eq(postsTable.groupId, groupId)));
+  if (!post) return res.status(404).json({ error: "Post not found" });
+  await deletePostsPermanently([post.id]);
+  return res.json({ ok: true });
 });
 
 groupAdminRouter.get("/:id/my-role", requireAuth, async (req, res: Response) => {

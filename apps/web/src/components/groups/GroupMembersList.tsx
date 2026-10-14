@@ -126,6 +126,8 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
   };
 
   const removeMember = async (member: Member, ban: boolean) => {
+    const postsNotice = deletePosts ? " Their group posts will also be permanently deleted." : "";
+    if (!window.confirm(`${ban ? "Ban" : "Remove"} @${member.username} from this group?${postsNotice}`)) return;
     const response = await apiFetch(ban ? `/api/groups/${groupId}/bans` : `/api/groups/${groupId}/members/${member.userId}`, {
       method: ban ? "POST" : "DELETE",
       headers: { "Content-Type": "application/json" },
