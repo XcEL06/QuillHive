@@ -23,9 +23,19 @@ const reasons = [
   { value: 'other', label: 'Other' },
 ] as const;
 
-export function ReportDialog({ targetType, targetId, label = 'Report', className }: ReportDialogProps) {
+export function ReportDialog({
+  targetType,
+  targetId,
+  label = 'Report',
+  className,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
+}: ReportDialogProps & { open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean }) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
   const [reason, setReason] = useState<(typeof reasons)[number]['value']>('spam');
   const [details, setDetails] = useState('');
   const [sending, setSending] = useState(false);
@@ -54,9 +64,9 @@ export function ReportDialog({ targetType, targetId, label = 'Report', className
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className={className} onClick={() => setOpen(true)}>
+      {!hideTrigger && <Button type="button" variant="outline" size="sm" className={className} onClick={() => setOpen(true)}>
         <Flag className="mr-1.5 h-3.5 w-3.5" /> {label}
-      </Button>
+      </Button>}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

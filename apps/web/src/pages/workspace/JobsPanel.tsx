@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import {
   Briefcase, MapPin, DollarSign, Clock, Plus, Star, Pencil, Calendar,
-  Sparkles, Zap, ChevronRight, Target,
+  Sparkles, Zap, ChevronRight, Target, MoreHorizontal, Share2, Trash2, Flag,
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { Timestamp } from '@/lib/postTimestamp';
@@ -147,6 +148,8 @@ export function JobsPanel() {
   const { user } = useAuthStore();
   const token = getStoredToken();
   const [typeFilter, setTypeFilter] = useState<JobType>('all');
+  const [shareJobId, setShareJobId] = useState<number | null>(null);
+  const [reportJobId, setReportJobId] = useState<number | null>(null);
   const matchMap = new Map<number, { score: number; reasons: string[] }>();
 
   const { data, isLoading, isError, refetch } = useGetJobs(
@@ -267,22 +270,6 @@ export function JobsPanel() {
                 <h4 className="font-semibold text-sm mb-0.5 line-clamp-1">{job.title}</h4>
                 {j.companyName && <p className="text-xs text-muted-foreground">at {j.companyName}</p>}
 
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  {isOwner && (
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setLocation(`/jobs/post?edit=${job.id}`)}>
-                        <Pencil className="w-3.5 h-3.5" /> Edit
-                      </Button>
-                      <Button type="button" size="sm" variant="destructive" className="h-8 gap-1.5" onClick={handleDelete}>
-                        Delete
-                      </Button>
-                    </div>
-                  )}
-                  <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined)} />
-                  <OpportunityShareDialog opportunityId={job.id} title={job.title} />
-                  <ReportDialog targetType="job" targetId={job.id} label="Report" />
-                </div>
-
                 <p className="text-xs text-muted-foreground mt-1">
                   Posted by {job.author.displayName} · Member since {formatAccountAge(job.author.createdAt)} · Trust: {j.author.trustTier ?? 'new'}
                   {j.author.trustTier === 'new' && (
@@ -300,6 +287,57 @@ export function JobsPanel() {
                       <Calendar className="w-3 h-3" />Available until {expiresAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
                   )}
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
+                  {isOwner ? (
+                    <span className="text-xs font-medium text-muted-foreground">Your opportunity</span>
+                  ) : (
+                    <ApplyOpportunityActions jobId={job.id} title={job.title} compact externalHref={j.applyUrl || (j.applyEmail ? `mailto:${j.applyEmail}` : undefined)} />
+                  )}
+                  <div className="flex items-center gap-2">
+                    {!isOwner && <Button type="button" size="sm" variant="ghost" className="h-8 gap-1.5 text-muted-foreground" onClick={() => setReportJobId(job.id)}>
+                      <Flag className="h-3.5 w-3.5" /> Report
+                    </Button>}
+                    {isOwner && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" aria-label={`More actions for ${job.title}`}>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setLocation(`/jobs/post?edit=${job.id}`)}>
+                            <Pencil className="h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setShareJobId(job.id)}>
+                            <Share2 className="h-4 w-4" /> Share
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => setReportJobId(job.id)}>
+                            <Flag className="h-4 w-4" /> Report
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => void handleDelete()} className="text-destructive focus:text-destructive">
+                            <Trash2 className="h-4 w-4" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </div>
+                  <OpportunityShareDialog
+                    opportunityId={job.id}
+                    title={job.title}
+                    open={shareJobId === job.id}
+                    onOpenChange={open => setShareJobId(open ? job.id : null)}
+                    hideTrigger
+                  />
+                  <ReportDialog
+                    targetType="job"
+                    targetId={job.id}
+                    open={reportJobId === job.id}
+                    onOpenChange={open => setReportJobId(open ? job.id : null)}
+                    hideTrigger
+                  />
                 </div>
               </div>
             </div>

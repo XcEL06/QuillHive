@@ -197,7 +197,12 @@ export default function PostJob() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-7">
+        <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-6">
+          <section aria-labelledby="opportunity-basics-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
+            <div>
+              <h2 id="opportunity-basics-heading" className="text-base font-semibold">Opportunity basics</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Give your listing a clear title and choose the best fit.</p>
+            </div>
           {/* Role Title */}
           <div className="space-y-2">
             <Label htmlFor="title" className="flex items-center gap-1.5 text-sm font-semibold">
@@ -233,12 +238,16 @@ export default function PostJob() {
               ))}
             </div>
           </div>
+          </section>
 
           {/* Budget / Rate */}
-          <div className="space-y-3">
-            <Label className="flex items-center gap-1.5 text-sm font-semibold">
-              <DollarSign className="w-4 h-4" /> Budget / Rate
-            </Label>
+          <section aria-labelledby="opportunity-compensation-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
+            <div>
+              <h2 id="opportunity-compensation-heading" className="flex items-center gap-2 text-base font-semibold">
+                <DollarSign className="h-4 w-4 text-muted-foreground" /> Budget and rate
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">Add a range or leave the fields blank if compensation is negotiable.</p>
+            </div>
             <div className="flex gap-2 flex-wrap">
               <button
                 type="button"
@@ -267,7 +276,8 @@ export default function PostJob() {
               <Input
                 type="number"
                 min={0}
-                placeholder={rateType === 'hourly' ? 'Min $/hr' : 'Min $'}
+                aria-label={`Minimum ${rateType === 'hourly' ? 'hourly rate' : 'project budget'}`}
+                placeholder={rateType === 'hourly' ? 'Minimum /hr' : 'Minimum'}
                 value={budgetMin}
                 onChange={e => setBudgetMin(e.target.value)}
                 className="h-10 flex-1 rounded-xl"
@@ -276,14 +286,20 @@ export default function PostJob() {
               <Input
                 type="number"
                 min={0}
-                placeholder={rateType === 'hourly' ? 'Max $/hr' : 'Max $'}
+                aria-label={`Maximum ${rateType === 'hourly' ? 'hourly rate' : 'project budget'}`}
+                placeholder={rateType === 'hourly' ? 'Maximum /hr' : 'Maximum'}
                 value={budgetMax}
                 onChange={e => setBudgetMax(e.target.value)}
                 className="h-10 flex-1 rounded-xl"
               />
             </div>
-          </div>
+          </section>
 
+          <section aria-labelledby="opportunity-scope-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
+            <div>
+              <h2 id="opportunity-scope-heading" className="text-base font-semibold">Scope and requirements</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Explain the work and what applicants need to bring.</p>
+            </div>
           {/* Required Skills */}
           <div className="space-y-2">
             <Label className="flex items-center gap-1.5 text-sm font-semibold">
@@ -333,7 +349,7 @@ export default function PostJob() {
           {/* Description */}
           <div className="space-y-2">
             <Label htmlFor="description" className="text-sm font-semibold">
-              Full Description <span className="text-rose-500">*</span>
+              Full description <span className="text-rose-500">*</span>
             </Label>
             <Textarea
               id="description"
@@ -343,7 +359,13 @@ export default function PostJob() {
               className="rounded-xl min-h-[120px] text-sm"
             />
           </div>
+          </section>
 
+          <section aria-labelledby="opportunity-arrangement-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
+            <div>
+              <h2 id="opportunity-arrangement-heading" className="text-base font-semibold">Organization and work arrangement</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Add the organization and where the work will take place.</p>
+            </div>
           {/* Company */}
           <div className="space-y-2">
             <Label htmlFor="companyName" className="text-sm font-semibold">Company / Organization</Label>
@@ -380,9 +402,15 @@ export default function PostJob() {
             </div>
             <Switch checked={isActive} onCheckedChange={setIsActive} />
           </div>
+          </section>
 
           {/* Apply methods */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <section aria-labelledby="opportunity-application-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
+          <div>
+            <h2 id="opportunity-application-heading" className="text-base font-semibold">How to apply</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Add an external application link, an email address, or both.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="applyUrl" className="flex items-center gap-1.5 text-xs font-semibold">
                 <LinkIcon className="w-3.5 h-3.5" /> Apply URL
@@ -400,12 +428,13 @@ export default function PostJob() {
           <p className="text-xs text-muted-foreground border-t border-border pt-3 mt-3">
             QuillHive helps you discover and connect with opportunities. Any payment arrangement is made directly between you and the other party — QuillHive does not process, hold, or guarantee any payment made outside the platform. Always verify who you're working with before sending money or sensitive information.
           </p>
+          </section>
 
           {/* Submit */}
           <Button
             type="submit"
             size="lg"
-            className="w-full h-12 rounded-xl font-semibold text-base gap-2"
+            className="h-12 w-full rounded-xl font-semibold text-base gap-2 sm:w-auto sm:min-w-48"
             disabled={isSubmitting || isLoadingEdit}
           >
             {isSubmitting || isLoadingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}

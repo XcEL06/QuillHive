@@ -21,10 +21,24 @@ interface ShareUser {
   displayName?: string;
 }
 
-export function OpportunityShareDialog({ opportunityId, title }: { opportunityId: number; title: string }) {
+export function OpportunityShareDialog({
+  opportunityId,
+  title,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
+}: {
+  opportunityId: number;
+  title: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
+}) {
   const { token } = useAuthStore();
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = onOpenChange ?? setLocalOpen;
   const [destination, setDestination] = useState<ShareDestination>('group');
   const [groups, setGroups] = useState<ShareGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<number | null>(null);
@@ -116,9 +130,9 @@ export function OpportunityShareDialog({ opportunityId, title }: { opportunityId
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)} aria-label={`Share ${title}`}>
+      {!hideTrigger && <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)} aria-label={`Share ${title}`}>
         <Share2 className="h-4 w-4" /> Share
-      </Button>
+      </Button>}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>

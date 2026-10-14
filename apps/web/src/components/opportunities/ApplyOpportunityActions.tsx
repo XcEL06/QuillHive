@@ -4,9 +4,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { getStoredToken } from "@/lib/api";
-import { MessageSquare, Send } from "lucide-react";
+import { ChevronDown, MessageSquare, Send } from "lucide-react";
 
 export function ApplyOpportunityActions({ jobId, title, compact = false, externalHref }: { jobId: number; title: string; compact?: boolean; externalHref?: string }) {
   const { toast } = useToast();
@@ -39,13 +40,24 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
 
   return <>
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
-      <Button size={compact ? "sm" : "default"} className="gap-1 whitespace-normal text-center leading-tight" onClick={() => void submit("apply")} disabled={sending}>
+      <div className="flex items-center">
+      <Button size={compact ? "sm" : "default"} className="gap-1 whitespace-normal rounded-r-none text-center leading-tight" onClick={() => void submit("apply")} disabled={sending}>
         <Send className="h-3.5 w-3.5" /> Apply
       </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" size={compact ? "sm" : "default"} className="rounded-l-none border-l border-primary-foreground/20 px-2" disabled={sending} aria-label="More application options">
+            <ChevronDown className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setOpen(true)}>
+            <MessageSquare className="h-4 w-4" /> Apply + message
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      </div>
       {externalHref && <a href={externalHref} target={externalHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="text-[10px] text-muted-foreground underline">External application</a>}
-      <Button size={compact ? "sm" : "default"} variant="outline" className="gap-1 whitespace-normal text-center leading-tight" onClick={() => setOpen(true)} disabled={sending}>
-        <MessageSquare className="h-3.5 w-3.5" /> Apply + message
-      </Button>
     </div>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-lg">
