@@ -232,22 +232,6 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
 
           {/* Right: Messages + Theme + Avatar */}
           <div className="flex items-center gap-1 shrink-0">
-            {user && (
-              <Link
-                href="/notifications"
-                onClick={() => handleNavClick("/notifications")}
-                className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title="Alerts"
-                aria-label={unreadNotifCount > 0 ? `Alerts, ${unreadNotifCount} unread` : "Alerts"}
-              >
-                <Bell className="h-5 w-5" />
-                {unreadNotifCount > 0 && (
-                  <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white">
-                    {unreadNotifCount > 9 ? "9+" : unreadNotifCount}
-                  </span>
-                )}
-              </Link>
-            )}
             <Link
               href="/messages"
               onClick={() => { setLiveMessageCount(0); setBaseMessageCount(0); }}
