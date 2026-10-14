@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useGetConversations, useGetMessages, useSendMessage, getGetMessagesQueryKey } from '@workspace/api-client-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useSearch } from 'wouter';
 import { useAuthStore } from '@/store/auth';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -62,6 +62,18 @@ interface PaymentProposal {
   createdAt: string;
 }
 
+interface MessageRequest {
+  id: number;
+  requester: {
+    id: number;
+    username?: string;
+    displayName?: string;
+    avatarUrl?: string | null;
+  };
+  createdAt: string;
+  lastMessageAt: string;
+}
+
 export default function Messages() {
   usePageTitle('Messages');
   const [, setLocation] = useLocation();
@@ -72,6 +84,8 @@ export default function Messages() {
   const queryClient = useQueryClient();
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [conversationFilter, setConversationFilter] = useState<'all' | 'unread'>('all');
+  const [conversationFolder, setConversationFolder] = useState<'inbox' | 'requests'>('inbox');
+  const [respondingRequestId, setRespondingRequestId] = useState<number | null>(null);
   const [isNewConvOpen, setIsNewConvOpen] = useState(false);
   const [messageText, setMessageText] = useState('');
   const [messageAttachments, setMessageAttachments] = useState<Attachment[]>([]);
@@ -88,31 +102,53 @@ export default function Messages() {
 
   const { data: conversations, isLoading: isConvsLoading } = useGetConversations();
   const conversationList = Array.isArray(conversations) ? conversations : [];
+  const { data: messageRequests = [], isLoading: isRequestsLoading, isError: requestsFailed } = useQuery<MessageRequest[]>({
+    queryKey: ['/api/messages/requests'],
+    queryFn: async () => {
+      const response = await apiFetch('/api/messages/requests');
+      if (!response.ok) throw new Error('Could not load message requests.');
+      return response.json() as Promise<MessageRequest[]>;
+    },
+  });
   const visibleConversations = conversationList.filter((conversation) => (
     conversationFilter === 'all' || conversation.unreadCount > 0
   ));
 
-  const { data: messages, isLoading: isMsgsLoading } = useGetMessages(activeConvId ?? 0, {
+  const { data: messages, isLoading: isMsgsLoading, isError: isMsgsError } = useGetMessages(activeConvId ?? 0, {
     query: { enabled: !!activeConvId, queryKey: getGetMessagesQueryKey(activeConvId ?? 0) }
   });
+  const activeConvRequest = conversationList.find((conversation) => conversation.id === activeConvId) as
+    | { requestStatus?: string; requestRecipientId?: number | null }
+    | undefined;
+  const isOutgoingRequest = activeConvRequest?.requestStatus === 'pending_request'
+    && activeConvRequest.requestRecipientId !== currentUser?.id;
+  const isClosedOutgoingRequest = activeConvRequest?.requestStatus === 'declined'
+    && activeConvRequest.requestRecipientId !== currentUser?.id;
 
   useEffect(() => {
     setLocalMessages(Array.isArray(messages) ? messages as unknown as LocalMessage[] : []);
   }, [messages]);
 
   useEffect(() => {
-    if (!activeConvId) { setPaymentProposals([]); return; }
+    if (!activeConvId || activeConvRequest?.requestStatus !== 'accepted') {
+      setPaymentProposals([]);
+      return;
+    }
     const token = getStoredToken();
     void fetch(`/api/messages/conversations/${activeConvId}/payment-proposals`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     }).then((response) => response.ok ? response.json() : []).then((data) => setPaymentProposals(Array.isArray(data) ? data : [])).catch(() => setPaymentProposals([]));
-  }, [activeConvId]);
+  }, [activeConvId, activeConvRequest?.requestStatus]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [localMessages]);
 
-  useJoinConversation(activeConvId);
+  const canJoinActiveConversation = !!activeConvRequest && (
+    activeConvRequest.requestStatus === 'accepted'
+    || activeConvRequest.requestRecipientId !== currentUser?.id
+  );
+  useJoinConversation(canJoinActiveConversation ? activeConvId : null);
 
   useSocketEvent<PaymentProposal>('payment:proposal', useCallback((proposal) => {
     if (proposal && !paymentProposals.some((current) => current.id === proposal.id)) {
@@ -132,8 +168,18 @@ export default function Messages() {
     queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
   }, [activeConvId, queryClient]));
 
+  useSocketEvent<{ conversationId: number }>('message:request', useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['/api/messages/requests'] });
+    void queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+  }, [queryClient]));
+
+  useSocketEvent<{ conversationId: number; requestStatus: string }>('message:request-updated', useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['/api/messages/requests'] });
+    void queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+  }, [queryClient]));
+
   useEffect(() => {
-    if (!activeConvId || !currentUser?.id) return;
+    if (!activeConvId || !currentUser?.id || !conversationList.some(conversation => conversation.id === activeConvId)) return;
 
     const markSeen = async () => {
       try {
@@ -148,7 +194,7 @@ export default function Messages() {
     };
 
     void markSeen();
-  }, [activeConvId, currentUser?.id]);
+  }, [activeConvId, currentUser?.id, conversationList]);
 
   useSocketEvent<{ conversationId: number; seenAt: string; messageIds?: number[] }>('messages:seen', useCallback((data) => {
     if (!activeConvId || data.conversationId !== activeConvId) return;
@@ -225,6 +271,37 @@ export default function Messages() {
     sendMsg({ data: { conversationId: activeConvId, content } });
   };
 
+  const respondToRequest = async (conversationId: number, action: 'accept' | 'decline') => {
+    setRespondingRequestId(conversationId);
+    try {
+      const response = await apiFetch(`/api/messages/requests/${conversationId}/respond`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null);
+        throw new Error(result?.error || 'Could not update the message request.');
+      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['/api/messages/requests'] }),
+        queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] }),
+      ]);
+      if (action === 'accept') {
+        setConversationFolder('inbox');
+        handleSelectConv(conversationId);
+      }
+    } catch (error) {
+      toast({
+        title: action === 'accept' ? 'Could not accept request' : 'Could not decline request',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setRespondingRequestId(null);
+    }
+  };
+
   const proposePayment = async () => {
     if (!activeConvId || !proposalAmount || Number(proposalAmount) <= 0) return;
     try {
@@ -261,6 +338,7 @@ export default function Messages() {
   };
 
   const handleSelectConv = (convId: number) => {
+    setConversationFolder('inbox');
     setActiveConvId(convId);
     setLocalMessages([]);
     setTypingUsers(new Set());
@@ -268,6 +346,13 @@ export default function Messages() {
       setLocation(`/messages?conv=${convId}`);
     }
   };
+
+  useEffect(() => {
+    if (new URLSearchParams(search).get('requests') === '1') {
+      setConversationFolder('requests');
+      setActiveConvId(null);
+    }
+  }, [search]);
 
   useEffect(() => {
     const params = new URLSearchParams(search);
@@ -299,6 +384,12 @@ export default function Messages() {
           throw new Error(result?.error || 'Could not open this conversation.');
         }
         void queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+        void queryClient.invalidateQueries({ queryKey: ['/api/messages/requests'] });
+        if (result?.requestStatus === 'pending_request' && result?.requestRecipientId === currentUser.id) {
+          setConversationFolder('requests');
+          setLocation('/messages?requests=1');
+          return;
+        }
         setLocation(`/messages?conv=${conversationId}`);
       } catch (error) {
         requestedUserStartRef.current = null;
@@ -313,6 +404,18 @@ export default function Messages() {
 
   const handleConversationStart = (convId: number) => {
     queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/messages/requests'] });
+    const conversation = conversationList.find((item) => item.id === convId) as
+      | { requestStatus?: string; requestRecipientId?: number | null }
+      | undefined;
+    if (
+      (conversation?.requestStatus === 'pending_request' && conversation.requestRecipientId === currentUser?.id)
+      || messageRequests.some(request => request.id === convId)
+    ) {
+      setConversationFolder('requests');
+      setLocation('/messages?requests=1');
+      return;
+    }
     handleSelectConv(convId);
   };
 
@@ -342,24 +445,75 @@ export default function Messages() {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder={t('messages.searchPlaceholder')} className="pl-9 bg-background rounded-xl border-border/60" />
             </div>
-            <div className="flex gap-1 mt-3" role="tablist" aria-label="Conversation filter">
-              {(['all', 'unread'] as const).map((filter) => (
+            <div className="mt-3 flex gap-1" role="tablist" aria-label="Message folder">
+              {(['inbox', 'requests'] as const).map((folder) => (
                 <button
-                  key={filter}
+                  key={folder}
                   type="button"
                   role="tab"
-                  aria-selected={conversationFilter === filter}
-                  onClick={() => setConversationFilter(filter)}
-                  className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${conversationFilter === filter ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`}
+                  aria-selected={conversationFolder === folder}
+                  onClick={() => setConversationFolder(folder)}
+                  className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${conversationFolder === folder ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`}
                 >
-                  {filter === 'all' ? 'All' : 'Unread'}
+                  {folder === 'inbox' ? 'Inbox' : <>Requests{messageRequests.length > 0 && <span className="ml-1.5">{messageRequests.length}</span>}</>}
                 </button>
               ))}
             </div>
+            {conversationFolder === 'inbox' && (
+              <div className="mt-2 flex gap-1" role="tablist" aria-label="Conversation filter">
+                {(['all', 'unread'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    role="tab"
+                    aria-selected={conversationFilter === filter}
+                    onClick={() => setConversationFilter(filter)}
+                    className={`flex-1 rounded-lg px-3 py-1 text-xs font-medium transition-colors ${conversationFilter === filter ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'}`}
+                  >
+                    {filter === 'all' ? 'All' : 'Unread'}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <ScrollArea className="flex-1">
-            {isConvsLoading ? (
+            {conversationFolder === 'requests' ? (
+              isRequestsLoading ? (
+                <div className="p-6 text-center text-sm text-muted-foreground">Loading message requests...</div>
+              ) : requestsFailed ? (
+                <div className="p-6 text-center text-sm text-destructive">Could not load message requests. Please try again.</div>
+              ) : messageRequests.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center px-6 py-16 text-center text-muted-foreground">
+                  <MessageCircle className="mb-3 h-8 w-8 opacity-40" />
+                  <p className="text-sm font-medium">No message requests</p>
+                  <p className="mt-1 text-xs">Requests from people you do not follow will appear here.</p>
+                </div>
+              ) : messageRequests.map((request) => (
+                <div key={request.id} className="flex items-center gap-3 border-b border-border/30 p-4">
+                  {request.requester.username ? (
+                    <Link href={`/profile/${request.requester.username}`} className="shrink-0 rounded-full focus-visible:ring-2 focus-visible:ring-ring">
+                      <Avatar className="h-11 w-11 border border-border/50">
+                        <AvatarImage src={request.requester.avatarUrl || ''} />
+                        <AvatarFallback>{request.requester.displayName?.substring(0, 2)}</AvatarFallback>
+                      </Avatar>
+                    </Link>
+                  ) : (
+                    <Avatar className="h-11 w-11 border border-border/50">
+                      <AvatarFallback>{request.requester.displayName?.substring(0, 2)}</AvatarFallback>
+                    </Avatar>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold">{request.requester.displayName}</p>
+                    <p className="text-xs text-muted-foreground">Message request</p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button size="sm" className="h-8 px-3 text-xs" disabled={respondingRequestId === request.id} onClick={() => void respondToRequest(request.id, 'accept')}>Accept</Button>
+                    <Button size="sm" variant="outline" className="h-8 px-3 text-xs" disabled={respondingRequestId === request.id} onClick={() => void respondToRequest(request.id, 'decline')}>Decline</Button>
+                  </div>
+                </div>
+              ))
+            ) : isConvsLoading ? (
               <div className="p-4 space-y-3">
                 {[1,2,3].map(i => (
                   <div key={i} className="flex items-center gap-3 p-2">
@@ -442,6 +596,9 @@ export default function Messages() {
                     <p className="text-xs text-muted-foreground truncate">
                       {conv.lastMessage?.content || 'Say hi!'}
                     </p>
+                    {(conv as { requestStatus?: string }).requestStatus === 'pending_request' && (
+                      <p className="mt-1 text-[10px] font-medium text-primary">Message request sent</p>
+                    )}
                   </div>
                   {conv.unreadCount > 0 && (
                     <span className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
@@ -494,19 +651,34 @@ export default function Messages() {
                     <p className="text-xs text-muted-foreground">@{otherUser?.username}</p>
                   )}
                 </div>
+                {(isOutgoingRequest || isClosedOutgoingRequest) && (
+                  <p className="text-xs text-muted-foreground">
+                    {isOutgoingRequest ? 'Your message request is awaiting acceptance.' : 'This conversation is unavailable.'}
+                  </p>
+                )}
               </div>
 
-              <div className="border-b border-border/50 bg-muted/20 px-6 py-3">
+              {!isOutgoingRequest && !isClosedOutgoingRequest && <div className="border-b border-border/50 bg-muted/20 px-6 py-3">
                 <div className="flex items-center gap-2 mb-2"><DollarSign className="w-4 h-4 text-primary" /><p className="text-xs font-semibold">Payment terms</p><span className="text-[10px] text-muted-foreground">Propose or counter a budget/rate</span></div>
                 <div className="space-y-2">
                   {paymentProposals.map((proposal) => <div key={proposal.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs"><span className="font-semibold">{proposal.currency} {proposal.amount.toLocaleString()}</span><span className="text-muted-foreground">{proposal.note || 'No note'}</span><span className="ml-auto rounded-full bg-muted px-2 py-0.5 capitalize">{proposal.status}</span>{proposal.status === 'proposed' && proposal.proposerId !== currentUser?.id && <><Button size="sm" className="h-6 text-[10px]" onClick={() => void updatePaymentProposal(proposal.id, 'accepted')}>Accept</Button><Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => void updatePaymentProposal(proposal.id, 'rejected')}>Decline</Button></>}</div>)}
                   <div className="flex flex-wrap items-center gap-2"><Input className="h-8 w-24 text-xs" type="number" min="0" placeholder="Amount" value={proposalAmount} onChange={(event) => setProposalAmount(event.target.value)} /><Input className="h-8 w-16 text-xs uppercase" maxLength={3} value={proposalCurrency} onChange={(event) => setProposalCurrency(event.target.value.toUpperCase())} /><Input className="h-8 min-w-40 flex-1 text-xs" placeholder="Scope, timing, or counter terms" value={proposalNote} onChange={(event) => setProposalNote(event.target.value)} /><Button size="sm" className="h-8" onClick={() => void proposePayment()} disabled={!proposalAmount}><DollarSign className="mr-1 h-3.5 w-3.5" />Propose</Button></div>
                 </div>
-              </div>
+              </div>}
 
               {/* Messages */}
               <ScrollArea className="flex-1 p-6">
                 <div className="flex flex-col gap-4 justify-end min-h-full">
+                  {!activeConv && (
+                    <div className="my-auto text-center text-sm text-muted-foreground">
+                      This conversation is unavailable in your inbox. Check Requests to review a message request.
+                    </div>
+                  )}
+                  {isMsgsError && activeConv && (
+                    <div className="my-auto text-center text-sm text-destructive">
+                      Could not load this conversation. Please try again.
+                    </div>
+                  )}
                   {isMsgsLoading && localMessages.length === 0 && (
                     <div className="text-center text-muted-foreground">{t('messages.loadingMessages')}</div>
                   )}
@@ -592,7 +764,7 @@ export default function Messages() {
               </ScrollArea>
 
               {/* Input */}
-              <div className="p-4 border-t border-border/50 bg-card shrink-0">
+              {activeConv && !isClosedOutgoingRequest && !(isOutgoingRequest && localMessages.length > 0) ? <div className="p-4 border-t border-border/50 bg-card shrink-0">
                 <div className="mb-2 flex items-center gap-2">
                   <AttachmentPicker
                     attachments={messageAttachments}
@@ -605,7 +777,15 @@ export default function Messages() {
                   {messageAttachments.length > 0 && (
                     <span className="text-xs text-muted-foreground">{messageAttachments.length} file{messageAttachments.length === 1 ? '' : 's'} ready</span>
                   )}
-                </div>
+                </div> : isOutgoingRequest && localMessages.length > 0 ? (
+                  <div className="border-t border-border/50 bg-card px-4 py-3 text-center text-xs text-muted-foreground">
+                    You can send another message after this request is accepted.
+                  </div>
+                ) : isClosedOutgoingRequest ? (
+                  <div className="border-t border-border/50 bg-card px-4 py-3 text-center text-xs text-muted-foreground">
+                    This conversation is unavailable.
+                  </div>
+                ) : null}
                 <form
                   onSubmit={handleSend}
                   className="flex items-center gap-2 bg-muted/30 p-1.5 rounded-full border border-border/50 focus-within:border-primary/50 transition-colors"

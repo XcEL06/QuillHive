@@ -4,9 +4,10 @@ import {
   conversationParticipantsTable,
   messagesTable,
   usersTable,
+  followsTable,
   paymentProposalsTable,
 } from "@workspace/db/schema";
-import { eq, and, desc, ne, isNull } from "drizzle-orm";
+import { eq, and, desc, ne, isNull, inArray } from "drizzle-orm";
 import { getUserWithCounts } from "../profiles/profile.service";
 import { emitToConversation, emitToUser } from "../../lib/socket";
 import { getOfficialSystemAccountId } from "../../lib/officialSystemAccount";
@@ -24,6 +25,7 @@ export async function getConversations(viewerId: number) {
         .from(conversationsTable)
         .where(eq(conversationsTable.id, p.conversationId));
       if (!conv) return null;
+      if (conv.requestRecipientId === viewerId && conv.requestStatus !== "accepted") return null;
 
       const participants = await db
         .select()
@@ -61,6 +63,58 @@ export async function getConversations(viewerId: number) {
     .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
+export async function getMessageRequests(viewerId: number) {
+  const pending = await db
+    .select()
+    .from(conversationsTable)
+    .where(and(
+      eq(conversationsTable.requestRecipientId, viewerId),
+      eq(conversationsTable.requestStatus, "pending_request"),
+    ));
+
+  const requests = await Promise.all(pending.map(async conv => {
+    const participants = await db
+      .select()
+      .from(conversationParticipantsTable)
+      .where(eq(conversationParticipantsTable.conversationId, conv.id));
+    const requesterId = participants.find(participant => participant.userId !== viewerId)?.userId;
+    if (!requesterId) return null;
+    const requester = await getUserWithCounts(requesterId, viewerId);
+    const [lastMessage] = await db
+      .select({ createdAt: messagesTable.createdAt })
+      .from(messagesTable)
+      .where(eq(messagesTable.conversationId, conv.id))
+      .orderBy(desc(messagesTable.createdAt))
+      .limit(1);
+    return {
+      id: conv.id,
+      requester,
+      createdAt: conv.createdAt,
+      lastMessageAt: lastMessage?.createdAt ?? conv.createdAt,
+    };
+  }));
+  return requests
+    .filter((request): request is NonNullable<typeof request> => request !== null)
+    .sort((a, b) => new Date(b.lastMessageAt).getTime() - new Date(a.lastMessageAt).getTime());
+}
+
+async function getRequestRecipientId(senderId: number, recipientId: number) {
+  const [recipient] = await db
+    .select({ allowMessagesFromAnyone: usersTable.allowMessagesFromAnyone })
+    .from(usersTable)
+    .where(eq(usersTable.id, recipientId));
+  if (!recipient || recipient.allowMessagesFromAnyone) return null;
+
+  const [followsSender] = await db
+    .select({ id: followsTable.followerId })
+    .from(followsTable)
+    .where(and(
+      eq(followsTable.followerId, recipientId),
+      eq(followsTable.followingId, senderId),
+    ));
+  return followsSender ? null : recipientId;
+}
+
 export async function startConversation(viewerId: number, targetUserId: number) {
   const myParticipations = await db
     .select()
@@ -81,7 +135,12 @@ export async function startConversation(viewerId: number, targetUserId: number) 
 
     const ids = participants.map(p2 => p2.userId);
     if (ids.includes(viewerId) && ids.includes(targetUserId) && participants.length === 2) {
-      return { conversationId: conv.id, existing: true };
+      return {
+        conversationId: conv.id,
+        existing: true,
+        requestStatus: conv.requestStatus,
+        requestRecipientId: conv.requestRecipientId,
+      };
     }
   }
 
@@ -91,7 +150,12 @@ export async function startConversation(viewerId: number, targetUserId: number) 
     { conversationId: newConv.id, userId: targetUserId, unreadCount: 0 },
   ]);
 
-  return { conversationId: newConv.id, existing: false };
+  return {
+    conversationId: newConv.id,
+    existing: false,
+    requestStatus: newConv.requestStatus,
+    requestRecipientId: newConv.requestRecipientId,
+  };
 }
 
 export async function getConversationMessages(convId: number, viewerId: number) {
@@ -105,6 +169,15 @@ export async function getConversationMessages(convId: number, viewerId: number) 
       )
     );
   if (participation.length === 0) throw new Error("Forbidden");
+
+  const [conversation] = await db
+    .select()
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, convId));
+  if (
+    conversation?.requestRecipientId === viewerId
+    && conversation.requestStatus !== "accepted"
+  ) throw new Error("RequestPending");
 
   const messages = await db
     .select()
@@ -133,11 +206,25 @@ export async function getConversationMessages(convId: number, viewerId: number) 
 }
 
 export async function getUnreadMessageCount(userId: number): Promise<number> {
-  const rows = await db
-    .select({ unreadCount: conversationParticipantsTable.unreadCount })
+  const participations = await db
+    .select()
     .from(conversationParticipantsTable)
     .where(eq(conversationParticipantsTable.userId, userId));
-  return rows.reduce((sum, r) => sum + (Number(r.unreadCount) || 0), 0);
+  if (participations.length === 0) return 0;
+
+  const normalConversations = await db
+    .select({ id: conversationsTable.id })
+    .from(conversationsTable)
+    .where(and(
+      eq(conversationsTable.requestStatus, "accepted"),
+      inArray(conversationsTable.id, participations.map(participation => participation.conversationId)),
+    ));
+  const normalConversationIds = new Set(normalConversations.map(conversation => conversation.id));
+  return participations.reduce((sum, participation) => (
+    normalConversationIds.has(participation.conversationId)
+      ? sum + (Number(participation.unreadCount) || 0)
+      : sum
+  ), 0);
 }
 
 export async function markConversationSeen(convId: number, viewerId: number) {
@@ -152,6 +239,14 @@ export async function markConversationSeen(convId: number, viewerId: number) {
     );
 
   if (participation.length === 0) throw new Error("Forbidden");
+  const [conversation] = await db
+    .select()
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, convId));
+  if (
+    conversation?.requestRecipientId === viewerId
+    && conversation.requestStatus !== "accepted"
+  ) throw new Error("RequestPending");
 
   const now = new Date();
 
@@ -205,19 +300,59 @@ export async function sendMessage(
   let convId = data.conversationId;
 
   if (!convId && data.recipientId) {
-    const [newConv] = await db.insert(conversationsTable).values({ isGroup: false }).returning();
-    convId = newConv.id;
-    await db.insert(conversationParticipantsTable).values([
-      { conversationId: convId, userId: viewerId, unreadCount: 0 },
-      { conversationId: convId, userId: data.recipientId, unreadCount: 1 },
-    ]);
-  } else if (convId) {
+    const conversation = await startConversation(viewerId, data.recipientId);
+    convId = conversation.conversationId;
+  }
+
+  if (convId) {
     const participants = await db
       .select()
       .from(conversationParticipantsTable)
       .where(eq(conversationParticipantsTable.conversationId, convId));
     if (!participants.some((participant) => participant.userId === viewerId)) {
       throw new Error("Forbidden");
+    }
+
+    let [conversation] = await db
+      .select()
+      .from(conversationsTable)
+      .where(eq(conversationsTable.id, convId));
+    if (!conversation) throw new Error("Forbidden");
+
+    const [existingMessage] = await db
+      .select({ id: messagesTable.id })
+      .from(messagesTable)
+      .where(eq(messagesTable.conversationId, convId))
+      .limit(1);
+    if (
+      !conversation.isGroup
+      && conversation.requestStatus === "accepted"
+      && !existingMessage
+      && participants.length === 2
+    ) {
+      const recipientId = participants.find(participant => participant.userId !== viewerId)?.userId;
+      if (recipientId) {
+        const requestRecipientId = await getRequestRecipientId(viewerId, recipientId);
+        if (requestRecipientId) {
+          [conversation] = await db
+            .update(conversationsTable)
+            .set({ requestStatus: "pending_request", requestRecipientId, updatedAt: new Date() })
+            .where(eq(conversationsTable.id, convId))
+            .returning();
+        }
+      }
+    }
+
+    if (
+      conversation.requestStatus === "declined"
+      || (
+        conversation.requestStatus === "pending_request"
+        && conversation.requestRecipientId === viewerId
+      )
+    ) throw new Error("RequestPending");
+
+    if (conversation.requestStatus === "pending_request") {
+      if (existingMessage) throw new Error("RequestPending");
     }
 
     await Promise.all(
@@ -250,7 +385,19 @@ export async function sendMessage(
   const sender = await getUserWithCounts(viewerId, null);
   const enrichedMessage = { ...message, sender };
 
-  emitToConversation(convId!, "message:receive", enrichedMessage);
+  const [conversation] = await db
+    .select()
+    .from(conversationsTable)
+    .where(eq(conversationsTable.id, convId!));
+  const pendingRecipientId = conversation?.requestStatus === "pending_request"
+    ? conversation.requestRecipientId
+    : null;
+  if (pendingRecipientId) {
+    emitToUser(viewerId, "message:receive", enrichedMessage);
+    emitToUser(pendingRecipientId, "message:request", { conversationId: convId });
+  } else {
+    emitToConversation(convId!, "message:receive", enrichedMessage);
+  }
 
   const allParticipants = await db
     .select()
@@ -259,12 +406,14 @@ export async function sendMessage(
 
   for (const p of allParticipants) {
     if (p.userId !== viewerId) {
-      emitToUser(p.userId, "notification:new", {
-        type: "message",
-        conversationId: convId,
-        sender,
-        message: data.content.substring(0, 80),
-      });
+      if (p.userId !== pendingRecipientId) {
+        emitToUser(p.userId, "notification:new", {
+          type: "message",
+          conversationId: convId,
+          sender,
+          message: data.content.substring(0, 80),
+        });
+      }
     }
   }
 
@@ -291,7 +440,35 @@ async function requireConversationParticipant(conversationId: number, userId: nu
   const participants = await db.select().from(conversationParticipantsTable)
     .where(eq(conversationParticipantsTable.conversationId, conversationId));
   if (!participants.some((participant) => participant.userId === userId)) throw new Error("Forbidden");
+  const [conversation] = await db.select().from(conversationsTable)
+    .where(eq(conversationsTable.id, conversationId));
+  if (conversation?.requestStatus !== "accepted") throw new Error("RequestPending");
   return participants;
+}
+
+export async function respondToMessageRequest(conversationId: number, recipientId: number, action: "accept" | "decline") {
+  const nextStatus = action === "accept" ? "accepted" : "declined";
+  const [updated] = await db
+    .update(conversationsTable)
+    .set({ requestStatus: nextStatus, updatedAt: new Date() })
+    .where(and(
+      eq(conversationsTable.id, conversationId),
+      eq(conversationsTable.requestRecipientId, recipientId),
+      eq(conversationsTable.requestStatus, "pending_request"),
+    ))
+    .returning({ id: conversationsTable.id, requestStatus: conversationsTable.requestStatus });
+  if (!updated) throw new Error("Not found");
+
+  const participants = await db
+    .select({ userId: conversationParticipantsTable.userId })
+    .from(conversationParticipantsTable)
+    .where(eq(conversationParticipantsTable.conversationId, conversationId));
+  if (action === "accept") {
+    for (const participant of participants) {
+      emitToUser(participant.userId, "message:request-updated", { conversationId, requestStatus: nextStatus });
+    }
+  }
+  return updated;
 }
 
 export async function getPaymentProposals(conversationId: number, viewerId: number) {

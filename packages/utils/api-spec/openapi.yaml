@@ -476,6 +476,58 @@ paths:
                 items:
                   $ref: "#/components/schemas/Conversation"
 
+  /messages/requests:
+    get:
+      operationId: getMessageRequests
+      tags: [messages]
+      summary: Get pending message requests
+      responses:
+        "200":
+          description: Pending message requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MessageRequest"
+
+  /messages/requests/{conversationId}/respond:
+    post:
+      operationId: respondToMessageRequest
+      tags: [messages]
+      summary: Accept or decline a message request
+      parameters:
+        - name: conversationId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [accept, decline]
+              required: [action]
+      responses:
+        "200":
+          description: Updated message request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  requestStatus:
+                    type: string
+                    enum: [accepted, declined]
+                required: [id, requestStatus]
+
   /messages/conversations/{conversationId}:
     get:
       operationId: getMessages
@@ -1145,6 +1197,11 @@ components:
           type: boolean
         groupName:
           type: ["string", "null"]
+        requestStatus:
+          type: string
+          enum: [pending_request, accepted, declined]
+        requestRecipientId:
+          type: ["integer", "null"]
         unreadCount:
           type: integer
         updatedAt:
@@ -1154,8 +1211,25 @@ components:
         - id
         - participants
         - isGroup
+        - requestStatus
+        - requestRecipientId
         - unreadCount
         - updatedAt
+
+    MessageRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        requester:
+          $ref: "#/components/schemas/User"
+        createdAt:
+          type: string
+          format: date-time
+        lastMessageAt:
+          type: string
+          format: date-time
+      required: [id, requester, createdAt, lastMessageAt]
 
     SendMessageRequest:
       type: object

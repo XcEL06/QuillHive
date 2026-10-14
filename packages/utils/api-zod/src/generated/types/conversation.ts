@@ -15,6 +15,9 @@ export interface Conversation {
   isGroup: boolean;
   /** @nullable */
   groupName?: string | null;
+  requestStatus: "pending_request" | "accepted" | "declined";
+  /** @nullable */
+  requestRecipientId: number | null;
   unreadCount: number;
   updatedAt: Date;
 }

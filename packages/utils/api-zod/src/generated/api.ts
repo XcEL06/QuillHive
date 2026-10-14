@@ -614,6 +614,8 @@ export const GetConversationsResponseItem = zod.object({
     .optional(),
   isGroup: zod.boolean(),
   groupName: zod.string().nullish(),
+  requestStatus: zod.enum(["pending_request", "accepted", "declined"]),
+  requestRecipientId: zod.number().nullable(),
   unreadCount: zod.number(),
   updatedAt: zod.date(),
 });

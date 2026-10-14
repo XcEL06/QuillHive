@@ -6,6 +6,7 @@ import { requireAuth } from "../../middleware/admin";
 import { validateBody, validateParams } from "../../middleware/validate";
 
 const conversationParamsSchema = z.object({ conversationId: z.coerce.number().int().positive() });
+const messageRequestActionSchema = z.object({ action: z.enum(["accept", "decline"]) });
 const startConversationSchema = z.object({ userId: z.coerce.number().int().positive() });
 const sendMessageSchema = z.object({
   recipientId: z.coerce.number().int().positive().optional(),
@@ -16,6 +17,8 @@ const sendMessageSchema = z.object({
 export const messagesRouter = Router();
 messagesRouter.get("/unread-count", MessagingController.getUnreadCount);
 messagesRouter.get("/conversations", MessagingController.getConversations);
+messagesRouter.get("/requests", MessagingController.getMessageRequests);
+messagesRouter.post("/requests/:conversationId/respond", validateParams(conversationParamsSchema), validateBody(messageRequestActionSchema), MessagingController.respondToMessageRequest);
 messagesRouter.post("/start", preventSpam("conversation-start", { max: 10, windowMs: 60_000, contentField: "userId" }), validateBody(startConversationSchema), MessagingController.startConversation);
 messagesRouter.get("/conversations/:conversationId", validateParams(conversationParamsSchema), MessagingController.getConversationMessages);
 messagesRouter.post("/conversations/:conversationId/seen", requireAuth, validateParams(conversationParamsSchema), MessagingController.markConversationSeen);

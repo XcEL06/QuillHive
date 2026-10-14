@@ -1,9 +1,6 @@
 import { Request, Response } from "express";
 import { getSessionUserId } from "../../lib/auth";
 import * as MessagingService from "./messaging.service";
-import { db } from "@workspace/db";
-import { usersTable, followsTable } from "@workspace/db/schema";
-import { and, eq } from "drizzle-orm";
 
 function getViewerId(req: Request): number | null {
   const auth = req.headers.authorization;
@@ -18,6 +15,12 @@ export const getConversations = async (req: Request, res: Response) => {
   return res.json(conversations);
 };
 
+export const getMessageRequests = async (req: Request, res: Response) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  return res.json(await MessagingService.getMessageRequests(viewerId));
+};
+
 export const startConversation = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
@@ -25,24 +28,24 @@ export const startConversation = async (req: Request, res: Response) => {
   if (!targetUserId) return res.status(400).json({ error: "userId is required" });
   const targetId = Number(targetUserId);
 
-  // Enforce allowMessagesFromAnyone privacy setting
-  const [target] = await db
-    .select({ allowMessagesFromAnyone: usersTable.allowMessagesFromAnyone })
-    .from(usersTable)
-    .where(eq(usersTable.id, targetId));
-
-  if (target && !target.allowMessagesFromAnyone) {
-    const [isFollowing] = await db
-      .select({ id: followsTable.followerId })
-      .from(followsTable)
-      .where(and(eq(followsTable.followerId, targetId), eq(followsTable.followingId, viewerId)));
-    if (!isFollowing) {
-      return res.status(403).json({ error: "This creator only accepts messages from people they follow." });
-    }
-  }
-
   const result = await MessagingService.startConversation(viewerId, targetId);
   return res.json(result);
+};
+
+export const respondToMessageRequest = async (req: Request, res: Response) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  try {
+    const result = await MessagingService.respondToMessageRequest(
+      Number(req.params.conversationId),
+      viewerId,
+      req.body.action,
+    );
+    return res.json(result);
+  } catch (error: any) {
+    if (error?.message === "Not found") return res.status(404).json({ error: error.message });
+    throw error;
+  }
 };
 
 export const getConversationMessages = async (req: Request, res: Response) => {
@@ -54,6 +57,7 @@ export const getConversationMessages = async (req: Request, res: Response) => {
     return res.json(messages);
   } catch (e: any) {
     if (e.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
+    if (e.message === "RequestPending") return res.status(403).json({ error: "Accept this message request to view the conversation." });
     throw e;
   }
 };
@@ -75,6 +79,7 @@ export const sendMessage = async (req: Request, res: Response) => {
     return res.status(201).json(message);
   } catch (error: any) {
     if (error?.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
+    if (error?.message === "RequestPending") return res.status(403).json({ error: "This conversation is awaiting acceptance." });
     throw error;
   }
 };
@@ -89,6 +94,7 @@ export const markConversationSeen = async (req: Request, res: Response) => {
     return res.json(result);
   } catch (e: any) {
     if (e.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
+    if (e.message === "RequestPending") return res.status(403).json({ error: "Accept this message request first." });
     throw e;
   }
 };
@@ -100,6 +106,7 @@ export const getPaymentProposals = async (req: Request, res: Response) => {
     return res.json(await MessagingService.getPaymentProposals(Number(req.params.conversationId), viewerId));
   } catch (error: any) {
     if (error?.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
+    if (error?.message === "RequestPending") return res.status(403).json({ error: "Accept this message request first." });
     throw error;
   }
 };
@@ -118,6 +125,7 @@ export const createPaymentProposal = async (req: Request, res: Response) => {
     return res.status(201).json(result.proposal);
   } catch (error: any) {
     if (error?.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
+    if (error?.message === "RequestPending") return res.status(403).json({ error: "Accept this message request first." });
     throw error;
   }
 };
@@ -130,6 +138,7 @@ export const updatePaymentProposal = async (req: Request, res: Response) => {
   } catch (error: any) {
     if (error?.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
     if (error?.message === "Not found") return res.status(404).json({ error: error.message });
+    if (error?.message === "RequestPending") return res.status(403).json({ error: "Accept this message request first." });
     throw error;
   }
 };

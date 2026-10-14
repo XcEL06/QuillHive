@@ -8,6 +8,8 @@ export const conversationsTable = pgTable("conversations", {
   isGroup: boolean("is_group").notNull().default(false),
   groupName: text("group_name"),
   opportunityId: integer("opportunity_id"),
+  requestStatus: text("request_status").notNull().default("accepted"),
+  requestRecipientId: integer("request_recipient_id").references(() => usersTable.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
