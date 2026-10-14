@@ -52,7 +52,7 @@ function toPublicPostAuthor(user: any) {
 
 async function _getUserWithCounts(userId: number, viewerId: number | null) {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!user) return null;
+  if (!user || user.isDeleted) return null;
 
   const [followersResult] = await db
     .select({ count: sql<number>`count(*)::int` })

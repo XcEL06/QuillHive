@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, ChevronLeft, ChevronRight, Send, ShieldAlert, Ban, ChevronDown, ChevronUp, Eye } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Send, ShieldAlert, Ban, ChevronDown, ChevronUp, Eye, RotateCcw } from "lucide-react";
 import type { AdminProps } from "./types";
 import { useAdminFetch } from "../hooks/useAdminFetch";
 import { Link } from "wouter";
@@ -28,13 +28,16 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
   const [openCluster, setOpenCluster] = useState<string | null>(null);
   const [banningCluster, setBanningCluster] = useState<string | null>(null);
   const [changingBanId, setChangingBanId] = useState<number | null>(null);
+  const [revivingId, setRevivingId] = useState<number | null>(null);
+  const [showDeletedAccounts, setShowDeletedAccounts] = useState(false);
   useEffect(() => {
     let active = true;
     const timer = window.setTimeout(() => {
       setLoading(true);
       const query = search.trim();
       const queryParam = query.length >= 2 ? `&q=${encodeURIComponent(query)}` : "";
-      void fetchAdmin(`/api/admin/users?page=${page}&limit=25${queryParam}`)
+      const deletedParam = showDeletedAccounts ? "&deleted=true" : "";
+      void fetchAdmin(`/api/admin/users?page=${page}&limit=25${queryParam}${deletedParam}`)
         .then((data) => {
           if (!active) return;
           setUsers(data.users ?? data);
@@ -46,7 +49,7 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
         .finally(() => { if (active) setLoading(false); });
     }, 250);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [fetchAdmin, toast, page, search]);
+  }, [fetchAdmin, toast, page, search, showDeletedAccounts]);
   useEffect(() => { setClustersLoading(true); void fetchAdmin("/api/admin/suspicious-clusters").then((d) => setClusters(d.clusters ?? [])).catch((err) => toast({ title: "Could not load suspicious clusters", description: err.message, variant: "destructive" })).finally(() => setClustersLoading(false)); }, [fetchAdmin, toast]);
 
   const banAll = async (cluster: any) => {
@@ -82,6 +85,25 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
       setChangingBanId(null);
     }
   };
+  const reviveAccount = async (account: any) => {
+    if (currentUser.role !== "super_admin" || !account.isDeleted) return;
+    const confirmed = window.confirm(
+      `Revive @${account.username}? Their saved profile and follower relationships will return, and trust starts over. Permanently deleted posts, Sparks, polls, opportunities, and applications will not return. They will need to reset their password.`
+    );
+    if (!confirmed) return;
+    setRevivingId(account.id);
+    try {
+      await fetchAdmin(`/api/admin/users/${account.id}/revive`, { method: "POST" });
+      setUsers((current) => current.filter((user) => user.id !== account.id));
+      setTotalUsers((current) => Math.max(0, current - 1));
+      if (userDetail?.user?.id === account.id) setUserDetail(null);
+      toast({ title: "Account revived", description: `@${account.username} can reset their password using their original email.` });
+    } catch (error) {
+      toast({ title: "Could not revive account", description: error instanceof Error ? error.message : "Request failed", variant: "destructive" });
+    } finally {
+      setRevivingId(null);
+    }
+  };
   const sendNotice = async () => {
     if (!noticeUser || !notice.trim()) return;
     setSending(true);
@@ -112,7 +134,7 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
   const bannedVisible = users.filter((u) => u.isBanned).length;
   return <>
     <AdminOverviewStats items={[
-      { label: "Total accounts", value: totalUsers, detail: "All non-deleted accounts" },
+      { label: "Total accounts", value: totalUsers, detail: showDeletedAccounts ? "Deleted-account tombstones" : "All non-deleted accounts" },
       { label: "Banned on this page", value: bannedVisible, detail: `Page ${page} · ${users.length} records loaded` },
       { label: "Flagged signup clusters", value: clusters.length, detail: "Shared signup IP hash signals" },
       { label: "Matching accounts", value: totalUsers, detail: search.trim().length >= 2 ? "Across all accounts" : "Current directory" },
@@ -127,11 +149,18 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
     <section className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="relative w-full max-w-sm"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search username or email across accounts" className="pl-9" /></div>
-        <p className="text-xs text-muted-foreground">{totalUsers.toLocaleString()} matching accounts</p>
+        <div className="flex items-center gap-3">
+          {currentUser.role === "super_admin" && (
+            <Button variant="outline" size="sm" onClick={() => { setShowDeletedAccounts((value) => !value); setPage(1); }}>
+              {showDeletedAccounts ? "Show active accounts" : "Deleted accounts"}
+            </Button>
+          )}
+          <p className="text-xs text-muted-foreground">{totalUsers.toLocaleString()} {showDeletedAccounts ? "deleted accounts" : "matching accounts"}</p>
+        </div>
       </div>
       <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
         <div className="hidden grid-cols-[minmax(0,1fr)_130px_100px_100px_170px] gap-4 border-b border-border/70 bg-muted/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid"><span>User</span><span>Trust score</span><span>Role</span><span>Status</span><span>Actions</span></div>
-        {loading ? <div className="space-y-3 p-5">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div> : filtered.length === 0 ? <div className="p-12 text-center"><p className="text-sm font-medium">No users found</p><p className="mt-1 text-xs text-muted-foreground">Try a different search.</p></div> : <div className="divide-y divide-border/60">{filtered.map((u) => { const protectedAccount = u.id === currentUser.id || u.role === "super_admin" || (u.role === "admin" && currentUser.role !== "super_admin"); return <div key={u.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_130px_100px_100px_250px] sm:items-center"><Link href={`/profile/${encodeURIComponent(u.username)}`} target="_blank" rel="noreferrer" aria-label={`Open ${u.displayName || u.username}'s profile in a new tab`} className="flex min-w-0 items-center gap-3 hover:underline"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{u.displayName?.[0] ?? u.username?.[0] ?? "?"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{u.displayName || "Unnamed user"}{u.isOfficialAccount && <Badge variant="secondary" className="ml-2 text-[9px]">Official</Badge>}</p><p className="truncate text-xs text-muted-foreground">@{u.username} · {u.email}</p></div></Link><div><p className="text-sm font-semibold tabular-nums">{Math.round(Number(u.uti) || 0)} / 100</p><p className="text-[10px] capitalize text-muted-foreground">{String(u.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div><Badge variant="outline" className="w-fit text-[10px] capitalize">{u.role}</Badge><Badge variant={u.isBanned ? "destructive" : "secondary"} className="w-fit text-[10px]">{u.isBanned ? "Suspended" : "Active"}</Badge><div className="flex flex-wrap gap-1"><Button variant="outline" size="sm" className="h-8" onClick={() => void openUserDetail(u)}><Eye className="mr-1 h-3.5 w-3.5" />Details</Button>{!protectedAccount && <Button variant={u.isBanned ? "outline" : "destructive"} size="sm" className="h-8" disabled={changingBanId === u.id} onClick={() => void toggleBan(u)}><Ban className="mr-1 h-3.5 w-3.5" />{changingBanId === u.id ? "Working…" : u.isBanned ? "Restore" : "Suspend"}</Button>}{currentUser.role === "super_admin" && <Button variant="outline" size="sm" className="h-8" onClick={() => setNoticeUser(u)}><Send className="mr-1 h-3.5 w-3.5" />Notice</Button>}</div></div>; })}</div>}
+        {loading ? <div className="space-y-3 p-5">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div> : filtered.length === 0 ? <div className="p-12 text-center"><p className="text-sm font-medium">No users found</p><p className="mt-1 text-xs text-muted-foreground">Try a different search.</p></div> : <div className="divide-y divide-border/60">{filtered.map((u) => { const protectedAccount = u.id === currentUser.id || u.role === "super_admin" || (u.role === "admin" && currentUser.role !== "super_admin"); const userContent = <div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{u.displayName?.[0] ?? u.username?.[0] ?? "?"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{u.displayName || "Unnamed user"}{u.isOfficialAccount && <Badge variant="secondary" className="ml-2 text-[9px]">Official</Badge>}</p><p className="truncate text-xs text-muted-foreground">@{u.username} · {u.email}</p></div></div>; return <div key={u.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_130px_100px_100px_250px] sm:items-center">{u.isDeleted ? <div className="min-w-0">{userContent}<p className="mt-1 pl-12 text-[10px] text-muted-foreground">Deleted <Timestamp value={u.deletedAt} mode="datetime" /></p></div> : <Link href={`/profile/${encodeURIComponent(u.username)}`} target="_blank" rel="noreferrer" aria-label={`Open ${u.displayName || u.username}'s profile in a new tab`} className="hover:underline">{userContent}</Link>}<div><p className="text-sm font-semibold tabular-nums">{Math.round(Number(u.uti) || 0)} / 100</p><p className="text-[10px] capitalize text-muted-foreground">{String(u.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div><Badge variant="outline" className="w-fit text-[10px] capitalize">{u.role}</Badge><Badge variant={u.isDeleted ? "outline" : u.isBanned ? "destructive" : "secondary"} className="w-fit text-[10px]">{u.isDeleted ? "Deleted" : u.isBanned ? "Suspended" : "Active"}</Badge><div className="flex flex-wrap gap-1"><Button variant="outline" size="sm" className="h-8" onClick={() => void openUserDetail(u)}><Eye className="mr-1 h-3.5 w-3.5" />Details</Button>{u.isDeleted && currentUser.role === "super_admin" ? <Button variant="outline" size="sm" className="h-8" disabled={revivingId === u.id} onClick={() => void reviveAccount(u)}><RotateCcw className="mr-1 h-3.5 w-3.5" />{revivingId === u.id ? "Reviving..." : "Revive"}</Button> : !protectedAccount && <Button variant={u.isBanned ? "outline" : "destructive"} size="sm" className="h-8" disabled={changingBanId === u.id} onClick={() => void toggleBan(u)}><Ban className="mr-1 h-3.5 w-3.5" />{changingBanId === u.id ? "Working…" : u.isBanned ? "Restore" : "Suspend"}</Button>}{currentUser.role === "super_admin" && !u.isDeleted && <Button variant="outline" size="sm" className="h-8" onClick={() => setNoticeUser(u)}><Send className="mr-1 h-3.5 w-3.5" />Notice</Button>}</div></div>; })}</div>}
       </div>
       <div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={page === 1 || loading} onClick={() => setPage((current) => current - 1)}><ChevronLeft className="mr-1 h-4 w-4" />Previous</Button><span className="text-xs text-muted-foreground">Page {page} of {Math.max(1, Math.ceil(totalUsers / 25))}</span><Button variant="outline" size="sm" disabled={page * 25 >= totalUsers || loading} onClick={() => setPage((current) => current + 1)}>Next<ChevronRight className="ml-1 h-4 w-4" /></Button></div>
     </section>
@@ -147,13 +176,25 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{userDetail?.user?.displayName || userDetail?.user?.username || "User details"}</DialogTitle>
-          <DialogDescription>Trust and moderation record. Direct messages are not included.</DialogDescription>
+          <DialogDescription>{userDetail?.user?.isDeleted ? "Deleted-account tombstone. Profile and relationships are retained for account revival; deleted content and direct messages are not included here." : "Trust and moderation record. Direct messages are not included."}</DialogDescription>
         </DialogHeader>
         {detailLoading ? <p className="py-8 text-center text-sm text-muted-foreground">Loading account details…</p> : userDetail && <>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-4">
             <div><p className="text-xs text-muted-foreground">Trust score</p><p className="text-xl font-semibold tabular-nums">{Math.round(userDetail.trustScore?.uti ?? 0)} / 100</p><p className="text-xs capitalize text-muted-foreground">{String(userDetail.trustScore?.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div>
-            <a href={`/profile/${encodeURIComponent(userDetail.user.username)}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open profile</a>
+            {!userDetail.user.isDeleted && <a href={`/profile/${encodeURIComponent(userDetail.user.username)}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open profile</a>}
           </div>
+          <section className="space-y-2 rounded-lg border border-border p-4">
+            <h3 className="text-sm font-semibold">{userDetail.user.isDeleted ? "Profile retained on the tombstone" : "Profile"}</h3>
+            <p className="text-xs text-muted-foreground">@{userDetail.user.username} · {userDetail.user.email}</p>
+            {userDetail.user.headline && <p className="text-sm">{userDetail.user.headline}</p>}
+            {userDetail.user.bio && <p className="whitespace-pre-wrap text-sm text-muted-foreground">{userDetail.user.bio}</p>}
+            <p className="text-xs text-muted-foreground">
+              {userDetail.user.followersCount} followers · {userDetail.user.followingCount} following
+              {userDetail.user.isDeleted && userDetail.user.deletedAt && <> · Deleted <Timestamp value={userDetail.user.deletedAt} mode="datetime" /></>}
+            </p>
+            {userDetail.workHistory?.length > 0 && <p className="text-xs text-muted-foreground">Work history retained: {userDetail.workHistory.length} entries</p>}
+            {userDetail.educationHistory?.length > 0 && <p className="text-xs text-muted-foreground">Education history retained: {userDetail.educationHistory.length} entries</p>}
+          </section>
           <div className="grid gap-4 sm:grid-cols-2">
             <section><h3 className="mb-2 text-sm font-semibold">Reports ({userDetail.reports?.length ?? 0})</h3><div className="max-h-52 space-y-2 overflow-y-auto">{userDetail.reports?.map((report: any) => <article key={report.id} className="rounded-md bg-muted/30 p-3"><p className="text-sm">{report.reason}</p><p className="mt-1 text-xs capitalize text-muted-foreground">{report.targetType} · {report.status} · <Timestamp value={report.createdAt} mode="datetime" /></p>{report.targetType === "post" && <a href={`/post/${report.targetId}`} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs text-primary hover:underline">Open reported post</a>}</article>)}</div></section>
             <section><h3 className="mb-2 text-sm font-semibold">Strikes ({userDetail.strikes?.length ?? 0})</h3><div className="max-h-52 space-y-2 overflow-y-auto">{userDetail.strikes?.map((strike: any) => <article key={strike.id} className="rounded-md bg-muted/30 p-3"><p className="text-sm">{strike.reason}</p><p className="mt-1 text-xs text-muted-foreground">Severity {strike.severity}/10 · <Timestamp value={strike.createdAt} mode="datetime" /></p></article>)}</div></section>

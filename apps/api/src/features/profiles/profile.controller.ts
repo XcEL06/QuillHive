@@ -249,7 +249,7 @@ export const login = async (req: Request, res: Response) => {
   const failKey = `${rawIp}:${normalizedEmail}`;
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, normalizedEmail));
-  if (!user) {
+  if (!user || user.isDeleted) {
     const fails = trackLoginFailure(rawIp, email);
     if (fails >= LOGIN_FAILURE_LIMIT) {
       emitEvent({
@@ -404,14 +404,11 @@ export const searchUsers = async (req: Request, res: Response) => {
   if (!q && !country && !skillsParam && !category) return res.json([]);
 
   let query = db.select().from(usersTable).$dynamic();
-  const conditions: any[] = [];
-  if (q) conditions.push(or(ilike(usersTable.username, `%${q}%`), ilike(usersTable.displayName, `%${q}%`)));
+  const conditions = [eq(usersTable.isDeleted, false)];
+  if (q) conditions.push(or(ilike(usersTable.username, `%${q}%`), ilike(usersTable.displayName, `%${q}%`))!);
   if (country) conditions.push(ilike(usersTable.country, `%${country}%`));
 
-  if (conditions.length > 0) {
-    query = query.where(and(...conditions));
-  }
-
+  query = query.where(and(...conditions));
   const users = await query.limit(50);
 
   let filtered = users.filter(u => u.id !== viewerId);
@@ -652,7 +649,8 @@ export const getUserByUsername = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   const { username } = req.params;
 
-  const [profileUser] = await (db as any).select().from(usersTable).where(ilike(usersTable.username, username as string));
+  const [profileUser] = await (db as any).select().from(usersTable)
+    .where(and(ilike(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!profileUser) return res.status(404).json({ error: "User not found" });
 
   // Non-blocking profile view tracking (never fails the request)
@@ -753,7 +751,8 @@ export const getUserPosts = async (req: Request, res: Response) => {
   const page = Math.max(parseInt(req.query.page as string) || 1, 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 30, 1), 100);
 
-  const [user] = await (db as any).select().from(usersTable).where(eq(usersTable.username, username as string));
+  const [user] = await (db as any).select().from(usersTable)
+    .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
 
   const postFilter = and(
@@ -782,7 +781,8 @@ export const followUser = async (req: Request, res: Response) => {
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
 
   const { username } = req.params;
-  const [target] = await (db as any).select().from(usersTable).where(eq(usersTable.username, username as string));
+  const [target] = await (db as any).select().from(usersTable)
+    .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!target) return res.status(404).json({ error: "User not found" });
 
   const existing = await db
@@ -882,7 +882,8 @@ export const followUser = async (req: Request, res: Response) => {
 export const getFollowers = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   const { username } = req.params;
-  const [user] = await (db as any).select().from(usersTable).where(eq(usersTable.username, username as string));
+  const [user] = await (db as any).select().from(usersTable)
+    .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
 
   const followers = await db
@@ -897,7 +898,8 @@ export const getFollowers = async (req: Request, res: Response) => {
 export const getFollowing = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   const { username } = req.params;
-  const [user] = await (db as any).select().from(usersTable).where(eq(usersTable.username, username as string));
+  const [user] = await (db as any).select().from(usersTable)
+    .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
 
   const following = await db
@@ -1088,7 +1090,8 @@ export const updateMyCreatorProfile = async (req: Request, res: Response) => {
 
 export const getCreatorProfileByUsername = async (req: Request, res: Response) => {
   const { username } = req.params;
-  const [user] = await (db as any).select().from(usersTable).where(eq(usersTable.username, username as string));
+  const [user] = await (db as any).select().from(usersTable)
+    .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
 
   const profile = await getCreatorProfile(user.id);
@@ -1243,7 +1246,8 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
 
 export const getUserPortfolio = async (req: Request, res: Response) => {
   const { username } = req.params;
-  const [user] = await (db as any).select().from(usersTable).where(eq(usersTable.username, username as string));
+  const [user] = await (db as any).select().from(usersTable)
+    .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
 
   const featured = await db

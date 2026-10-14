@@ -26,7 +26,7 @@ export const forgotPassword = async (req: Request, res: Response) => {
   // Always respond OK to avoid user enumeration - but log and 500 in prod if email fails.
   if (!email) return res.json({ success: true });
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  const [user] = await db.select().from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.isDeleted, false)));
   if (user) {
     const rawToken = randomBytes(32).toString("hex");
     const tokenHash = hashToken(rawToken);
@@ -89,7 +89,7 @@ export const resetPassword = async (req: Request, res: Response) => {
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(and(eq(usersTable.passwordResetTokenHash, tokenHash), gt(usersTable.passwordResetExpires, new Date())));
+    .where(and(eq(usersTable.passwordResetTokenHash, tokenHash), gt(usersTable.passwordResetExpires, new Date()), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(400).json({ error: "Invalid or expired token" });
 
   await db.update(usersTable).set({
@@ -126,7 +126,7 @@ export const changePassword = async (req: Request, res: Response) => {
 export const resendVerification = async (req: Request, res: Response) => {
   const email = String(req.body?.email || "").toLowerCase().trim();
   if (!email) return res.json({ success: true });
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  const [user] = await db.select().from(usersTable).where(and(eq(usersTable.email, email), eq(usersTable.isDeleted, false)));
   if (user && !user.emailVerified) {
     const verificationToken = await createEmailVerification(user.id);
     const verificationUrl = `${getPublicAppUrl()}/verify-email?token=${encodeURIComponent(verificationToken)}`;

@@ -63,7 +63,7 @@ async function resolveUser(req: Request, res: Response): Promise<boolean> {
     return false;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!user || getSessionAuthVersion(token) !== user.authVersion) {
+  if (!user || user.isDeleted || getSessionAuthVersion(token) !== user.authVersion) {
     res.status(401).json({ error: "Unauthorized" });
     return false;
   }
@@ -100,8 +100,8 @@ export async function validateBearerTokenState(req: Request, res: Response, next
       next();
       return;
     }
-    const [user] = await db.select({ authVersion: usersTable.authVersion }).from(usersTable).where(eq(usersTable.id, userId));
-    if (!user || getSessionAuthVersion(token) !== user.authVersion) delete req.headers.authorization;
+    const [user] = await db.select({ authVersion: usersTable.authVersion, isDeleted: usersTable.isDeleted }).from(usersTable).where(eq(usersTable.id, userId));
+    if (!user || user.isDeleted || getSessionAuthVersion(token) !== user.authVersion) delete req.headers.authorization;
     next();
   } catch {
     res.status(503).json({ error: "Authentication state is temporarily unavailable" });
@@ -118,8 +118,8 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
     const token = auth.slice(7);
     const userId = getSessionUserId(token);
     if (userId && !(await isTokenBlacklisted(token))) {
-      const [user] = await db.select({ authVersion: usersTable.authVersion }).from(usersTable).where(eq(usersTable.id, userId));
-      if (!user || getSessionAuthVersion(token) !== user.authVersion) {
+      const [user] = await db.select({ authVersion: usersTable.authVersion, isDeleted: usersTable.isDeleted }).from(usersTable).where(eq(usersTable.id, userId));
+      if (!user || user.isDeleted || getSessionAuthVersion(token) !== user.authVersion) {
         next();
         return;
       }

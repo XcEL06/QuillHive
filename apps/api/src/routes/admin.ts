@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
-  usersTable, postsTable, reportsTable, moderationStrikesTable, adminLogsTable, systemSettingsTable,
+  usersTable, postsTable, reportsTable, moderationStrikesTable, adminLogsTable, systemSettingsTable, followsTable,
   userTrustScoresTable, topicsTable, moderationRulesTable, adminNotesTable,
   behaviorEventsTable, reputationEventsTable, blockedEmailAttemptsTable, translationCacheTable,
   boostRequestsTable, challengesTable,
-  inviteCodesTable,
+  inviteCodesTable, workHistoryTable, educationHistoryTable,
 } from "@workspace/db/schema";
 import { eq, desc, asc, and, count, ne, lt, sql, inArray, or, gt, gte, isNotNull, ilike } from "drizzle-orm";
 import { requireAdmin, requireSuperAdmin, requirePermission } from "../middleware/admin";
@@ -21,6 +21,7 @@ import { permanentlyDeleteAccountData } from "../features/profiles/accountDeleti
 import { getOfficialSystemAccountId } from "../lib/officialSystemAccount";
 import { addJob, getQueue } from "../lib/queue/queue";
 import { getUserTrustScore } from "../features/trust/trust.service";
+import { invalidateUserCache } from "../features/profiles/profile.service";
 
 const router = Router();
 router.use(requireAdmin);
@@ -99,9 +100,13 @@ router.get("/users", requirePermission("view_users"), async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 50));
   const query = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 100) : "";
+  const deletedOnly = req.query.deleted === "true";
+  if (deletedOnly && (req as any).currentUser.role !== "super_admin") {
+    return res.status(403).json({ error: "Only superusers can view deleted accounts" });
+  }
   const escapedQuery = query.replace(/[\\%_]/g, "\\$&");
   const userFilter = and(
-    eq(usersTable.isDeleted, false),
+    eq(usersTable.isDeleted, deletedOnly),
     ...(query.length >= 2 ? [or(
       ilike(usersTable.username, `%${escapedQuery}%`),
       ilike(usersTable.email, `%${escapedQuery}%`),
@@ -118,6 +123,8 @@ router.get("/users", requirePermission("view_users"), async (req, res) => {
       isOfficialAccount: usersTable.isOfficialAccount,
       isBanned: usersTable.isBanned,
       bannedAt: usersTable.bannedAt,
+      isDeleted: usersTable.isDeleted,
+      deletedAt: usersTable.deletedAt,
       avatarUrl: usersTable.avatarUrl,
       createdAt: usersTable.createdAt,
       uti: userTrustScoresTable.uti,
@@ -475,6 +482,57 @@ router.delete("/users/:id", requirePermission("delete_user"), async (req: any, r
   await permanentlyDeleteAccountData(id);
   await auditLog(req.currentUser.id, "user_deleted", "user", id, target.username);
   return res.json({ success: true });
+});
+
+router.post("/users/:id/revive", requireSuperAdmin, async (req: any, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid user id" });
+
+  const [target] = await db.select({ id: usersTable.id, username: usersTable.username })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, id), eq(usersTable.isDeleted, true)));
+  if (!target) return res.status(404).json({ error: "Deleted account not found" });
+
+  await db.transaction(async (tx) => {
+    await tx.update(usersTable).set({
+      isDeleted: false,
+      deletedAt: null,
+      authVersion: sql`${usersTable.authVersion} + 1`,
+      passwordResetTokenHash: null,
+      passwordResetExpires: null,
+      updatedAt: new Date(),
+    }).where(and(eq(usersTable.id, id), eq(usersTable.isDeleted, true)));
+    await tx.insert(userTrustScoresTable).values({
+      userId: id,
+      cvs: 0,
+      bcs: 0,
+      cts: 0,
+      avgCis: 0,
+      uti: 0,
+      visibilityMultiplier: 0.3,
+      tier: "restricted",
+      creatorLevel: "new_voice",
+      levelUpdatedAt: new Date(),
+      updatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: userTrustScoresTable.userId,
+      set: {
+        cvs: 0,
+        bcs: 0,
+        cts: 0,
+        avgCis: 0,
+        uti: 0,
+        visibilityMultiplier: 0.3,
+        tier: "restricted",
+        creatorLevel: "new_voice",
+        levelUpdatedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+  });
+  await invalidateUserCache(id);
+  await auditLog(req.currentUser.id, "user_revived", "user", id, target.username);
+  return res.json({ success: true, id, username: target.username });
 });
 
 router.get("/posts", async (req, res) => {
@@ -925,37 +983,61 @@ router.get("/users/:id/detail", requirePermission("view_users"), async (req, res
     isBanned: usersTable.isBanned,
     bannedAt: usersTable.bannedAt,
     isDeleted: usersTable.isDeleted,
+    deletedAt: usersTable.deletedAt,
     isCreatorMode: usersTable.isCreatorMode,
     isPremium: usersTable.isPremium,
     isOfficialAccount: usersTable.isOfficialAccount,
     createdAt: usersTable.createdAt,
   }).from(usersTable).where(eq(usersTable.id, id));
   if (!user) return res.status(404).json({ error: "User not found" });
+  if (user.isDeleted && (req as any).currentUser.role !== "super_admin") {
+    return res.status(404).json({ error: "User not found" });
+  }
 
-  const trustScore = await getUserTrustScore(id) ?? {
-    userId: id, uti: 0, cvs: 0, bcs: 0, cts: 0, avgCis: 0,
-    tier: "restricted", creatorLevel: "new_voice", visibilityMultiplier: 0.3,
-  };
-  const reports = await db.select().from(reportsTable)
-    .where(or(eq(reportsTable.reporterId, id), and(eq(reportsTable.targetType, "user"), eq(reportsTable.targetId, id))))
-    .orderBy(desc(reportsTable.createdAt))
-    .limit(50);
-  const strikes = await db.select().from(moderationStrikesTable)
-    .where(eq(moderationStrikesTable.userId, id))
-    .orderBy(desc(moderationStrikesTable.createdAt));
-  const recentPosts = await db
-    .select({ id: postsTable.id, title: postsTable.title, type: postsTable.type, isPublished: postsTable.isPublished, createdAt: postsTable.createdAt })
-    .from(postsTable)
-    .where(and(eq(postsTable.authorId, id), eq(postsTable.isDeleted, false)))
-    .orderBy(desc(postsTable.createdAt))
-    .limit(10);
-
-  return res.json({
-    user,
-    trustScore: trustScore ?? null,
+  const [
+    trustScore,
     reports,
     strikes,
     recentPosts,
+    workHistory,
+    educationHistory,
+    [followers],
+    [following],
+  ] = await Promise.all([
+    getUserTrustScore(id),
+    db.select().from(reportsTable)
+      .where(or(eq(reportsTable.reporterId, id), and(eq(reportsTable.targetType, "user"), eq(reportsTable.targetId, id))))
+      .orderBy(desc(reportsTable.createdAt))
+      .limit(50),
+    db.select().from(moderationStrikesTable)
+      .where(eq(moderationStrikesTable.userId, id))
+      .orderBy(desc(moderationStrikesTable.createdAt)),
+    db.select({ id: postsTable.id, title: postsTable.title, type: postsTable.type, isPublished: postsTable.isPublished, createdAt: postsTable.createdAt })
+      .from(postsTable)
+      .where(and(eq(postsTable.authorId, id), eq(postsTable.isDeleted, false)))
+      .orderBy(desc(postsTable.createdAt))
+      .limit(10),
+    db.select().from(workHistoryTable).where(eq(workHistoryTable.userId, id)).orderBy(desc(workHistoryTable.startYear)),
+    db.select().from(educationHistoryTable).where(eq(educationHistoryTable.userId, id)).orderBy(desc(educationHistoryTable.startYear)),
+    db.select({ count: count() }).from(followsTable).where(eq(followsTable.followingId, id)),
+    db.select({ count: count() }).from(followsTable).where(eq(followsTable.followerId, id)),
+  ]);
+
+  return res.json({
+    user: {
+      ...user,
+      followersCount: followers?.count ?? 0,
+      followingCount: following?.count ?? 0,
+    },
+    trustScore: trustScore ?? {
+      userId: id, uti: 0, cvs: 0, bcs: 0, cts: 0, avgCis: 0,
+      tier: "restricted", creatorLevel: "new_voice", visibilityMultiplier: 0.3,
+    },
+    reports,
+    strikes,
+    recentPosts,
+    workHistory,
+    educationHistory,
     loginActivity: [],
   });
 });

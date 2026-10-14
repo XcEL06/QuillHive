@@ -16,7 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { apiFetch, apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
+import { apiFetch, apiUrl, getApiErrorMessage, getStoredToken, mediaUrl } from '@/lib/api';
 import { uploadFile } from '@/lib/uploadFile';
 import { useI18n, useT, SUPPORTED_LANGS } from '@/lib/i18n';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
@@ -345,7 +345,7 @@ export default function Settings() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ confirm: 'DELETE' }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not delete your account. Please try again.'));
       localStorage.removeItem('qh_token');
       localStorage.removeItem('qh_refresh_token');
       window.location.href = '/login';

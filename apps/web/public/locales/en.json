@@ -478,7 +478,7 @@
     "exportMyData": "Export my data",
     "downloadYourData": "Download your data",
     "deleteAccountDesc": "Export a copy of your data, or permanently delete your account",
-    "deleteAccountWarning": "This anonymizes your profile and removes your personal data. Your posts may be retained in a deleted state. This cannot be undone.",
+    "deleteAccountWarning": "Your account will be signed out and hidden. Your original email, username, profile, work and education history, follower relationships, messages, and Library contributions are retained in a tombstone only a superuser can view and revive. Your posts, Sparks, polls, comments, opportunities, applications, service listings, chains, and series are permanently deleted and cannot be restored. If your account is revived, your retained profile and follower relationships return, but your trust score starts over and you must reset your password.",
     "typeDeleteToConfirm": "Type DELETE to confirm",
     "permanentlyDeleteAccount": "Permanently delete my account",
     "add": "Add",
