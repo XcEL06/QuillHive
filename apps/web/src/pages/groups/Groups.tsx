@@ -69,6 +69,7 @@ interface GroupView {
   hasPendingJoinRequest?: boolean;
   isMember?: boolean;
   memberRole?: 'owner' | 'admin' | 'moderator' | 'member' | null;
+  createdAt?: Date | string;
 }
 
 interface GroupMemberPreview {
@@ -368,6 +369,7 @@ function GroupDetail({ id }: { id: number }) {
   useEffect(() => {
     setPostsPage(1);
     setLoadedPosts([]);
+    setActiveTab('feed');
   }, [id]);
 
   useEffect(() => {
@@ -733,6 +735,8 @@ function GroupDetail({ id }: { id: number }) {
   const inviteCode = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('invite') : null;
   const allGroupPosts = loadedPosts;
   const questions = allGroupPosts.filter(post => post.groupDetails?.type === 'question');
+  const activePolls = allGroupPosts.filter(post => post.groupDetails?.type === 'poll' && (!post.groupDetails?.poll?.endsAt || Date.parse(post.groupDetails.poll.endsAt) > Date.now()));
+  const hasAnnouncements = allGroupPosts.some(post => post.groupDetails?.type === 'announcement');
   const featuredAnnouncements = allGroupPosts.filter(post => post.groupDetails?.type === 'announcement').slice(0, 3);
   const pendingGroupPosts = pendingPosts;
   const now = Date.now();
@@ -740,7 +744,7 @@ function GroupDetail({ id }: { id: number }) {
   if (activeTab === 'questions') {
     visiblePosts = questions.filter(post => questionFilter === 'all' || Boolean(post.groupDetails?.question?.isAnswered) === (questionFilter === 'answered'));
   } else if (activeTab === 'polls') {
-    visiblePosts = allGroupPosts.filter(post => post.groupDetails?.type === 'poll' && (!post.groupDetails?.poll?.endsAt || Date.parse(post.groupDetails.poll.endsAt) > now));
+    visiblePosts = activePolls;
   } else if (activeTab === 'announcements') {
     visiblePosts = allGroupPosts.filter(post => post.groupDetails?.type === 'announcement');
   } else if (activeTab === 'pending') {
@@ -827,6 +831,7 @@ function GroupDetail({ id }: { id: number }) {
               <span aria-hidden="true">·</span>
               <span>{groupView.postCount ?? group.postsCount} posts</span>
             </div>
+            <Button type="button" variant="link" size="sm" className="mt-1 h-auto p-0 text-xs" onClick={() => setActiveTab(activeTab === 'about' ? 'feed' : 'about')}>{activeTab === 'about' ? 'Back to feed' : 'About this group'}</Button>
           </div>
           <div className="mt-3 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto">
             {group.isMember && <Button variant="outline" size="sm" disabled className="h-8 shrink-0 px-3">Joined</Button>}
@@ -841,7 +846,8 @@ function GroupDetail({ id }: { id: number }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="More group actions" title="More group actions" className="h-8 w-8 shrink-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-              {canManageGroup && <DropdownMenuItem onSelect={() => setActiveTab('settings')}><Settings className="mr-2 h-4 w-4" />Group settings</DropdownMenuItem>}
+              {(myRole === 'owner' || myRole === 'admin' || user?.role === 'super_admin') && <DropdownMenuItem onSelect={() => setActiveTab('settings')}><Settings className="mr-2 h-4 w-4" />Group settings</DropdownMenuItem>}
+              {myRole === 'moderator' && <DropdownMenuItem onSelect={() => setActiveTab('pending')}><Settings className="mr-2 h-4 w-4" />Moderation tools</DropdownMenuItem>}
               {group.isMember && <DropdownMenuItem onSelect={() => toggleJoin({ id })}><LogOut className="mr-2 h-4 w-4" />Leave community</DropdownMenuItem>}
               {myRole === 'owner' && <DropdownMenuItem onSelect={() => setLifecycleAction('delete')} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" />Delete group</DropdownMenuItem>}
               <DropdownMenuSeparator />
@@ -854,14 +860,12 @@ function GroupDetail({ id }: { id: number }) {
         <div className="mt-5">
           <main className="min-w-0">
             <Tabs value={primaryTab} onValueChange={setActiveTab}>
-              <TabsList className="mb-4 w-full justify-start overflow-x-auto">
-                <TabsTrigger value="feed">Community feed</TabsTrigger>
-                <TabsTrigger value="questions">Q&amp;A</TabsTrigger>
-                <TabsTrigger value="polls">Polls</TabsTrigger>
-                <TabsTrigger value="announcements">Announcements</TabsTrigger>
-                <TabsTrigger value="about">About</TabsTrigger>
-                {canManageGroup && <TabsTrigger value="settings">Settings</TabsTrigger>}
-              </TabsList>
+              {activeTab !== 'about' && !isSettingsView && <TabsList className="mb-4 w-full justify-start overflow-x-auto">
+                <TabsTrigger value="feed">Feed</TabsTrigger>
+                {questions.length > 0 && <TabsTrigger value="questions">Q&amp;A</TabsTrigger>}
+                {activePolls.length > 0 && <TabsTrigger value="polls">Polls</TabsTrigger>}
+                {hasAnnouncements && <TabsTrigger value="announcements">Announcements</TabsTrigger>}
+              </TabsList>}
 
               {activeTab === 'feed' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <Select value={feedMode} onValueChange={setFeedMode}>
@@ -984,9 +988,9 @@ function GroupDetail({ id }: { id: number }) {
           </main>
           {activeTab === 'about' && <section className="mt-2 grid gap-6 md:grid-cols-2">
             <section className="space-y-3 border-b border-border/70 pb-4">
-              <h2 className="text-sm font-semibold">About</h2>
+              <h2 className="text-lg font-semibold">About {group.name}</h2>
               <p className="text-sm leading-relaxed text-muted-foreground">{group.description || 'A community for shared interests and useful conversations.'}</p>
-              <dl className="grid grid-cols-2 gap-2 text-xs"><div><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 font-medium">{group.category}</dd></div><div><dt className="text-muted-foreground">Access</dt><dd className="mt-0.5 font-medium">{groupView.privacy === 'private' ? 'Invite-only' : groupView.privacy === 'public' ? 'Request to join' : 'Open join'}</dd></div></dl>
+              <dl className="grid grid-cols-2 gap-2 text-xs"><div><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 font-medium">{group.category}</dd></div><div><dt className="text-muted-foreground">Access</dt><dd className="mt-0.5 font-medium">{groupView.privacy === 'private' ? 'Invite-only' : groupView.privacy === 'public' ? 'Request to join' : 'Open join'}</dd></div>{groupView.createdAt && <div><dt className="text-muted-foreground">Created</dt><dd className="mt-0.5 font-medium"><Timestamp value={groupView.createdAt} mode="date" /></dd></div>}</dl>
               {groupView.tags?.length ? <div className="flex flex-wrap gap-1">{groupView.tags.map(tag => <Badge variant="secondary" key={tag} className="text-[10px]">{tag}</Badge>)}</div> : null}
               <details className="group border-t border-border/60 pt-3">
                 <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium">Community rules <span className="text-muted-foreground group-open:rotate-180">⌄</span></summary>
