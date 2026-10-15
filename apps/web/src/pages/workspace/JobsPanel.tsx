@@ -20,6 +20,15 @@ import { OpportunityShareDialog } from '@/components/opportunities/OpportunitySh
 
 type JobType = 'all' | 'freelance' | 'micro_contract' | 'full_time' | 'collaboration' | 'syndicate_funding';
 
+const jobTypeLabels: Record<string, string> = {
+  freelance: 'Freelance',
+  micro_contract: 'Contract',
+  full_time: 'Full-time',
+  collaboration: 'Collab',
+  syndicate_funding: 'Funding',
+  commission: 'Commission',
+};
+
 interface MatchedJob {
   id: number;
   title: string;
@@ -271,12 +280,9 @@ export function JobsPanel() {
 
               <div className="flex-1 min-w-0">
                 <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                  {!j.isActive && <Badge variant="outline" className="text-[10px] border-muted-foreground/30 text-muted-foreground">Closed</Badge>}
-                  {j.moderationStatus && j.moderationStatus !== 'published' && (
-                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-700 dark:text-amber-300">
-                      {j.moderationStatus.replace(/_/g, ' ')}
-                    </Badge>
-                  )}
+                  <Badge variant="outline" className={`text-[10px] ${j.isActive ? 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'border-muted-foreground/30 text-muted-foreground'}`}>
+                    {j.isActive ? 'Active' : 'Closed'}
+                  </Badge>
                   {isFeatured && (
                     <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] gap-0.5">
                       <Star className="w-2.5 h-2.5 fill-current" /> Featured
@@ -286,7 +292,7 @@ export function JobsPanel() {
                     job.type === 'commission'    ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
                     job.type === 'collaboration' ? 'bg-violet-500/10 text-violet-600 border-violet-500/20' :
                                                    'bg-blue-500/10 text-blue-600 border-blue-500/20'
-                  }`}>{job.type}</Badge>
+                  }`}>{jobTypeLabels[job.type] ?? job.type.replace(/_/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase())}</Badge>
                   {matchData && <MatchBadge score={matchData.score} />}
                 </div>
 
