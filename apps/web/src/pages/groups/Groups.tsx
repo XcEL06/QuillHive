@@ -804,39 +804,42 @@ function GroupDetail({ id }: { id: number }) {
           <ArrowLeft className="h-4 w-4" /> {t('groups.backToGroups', 'Back to Groups')}
         </Link>
 
-        <div className="relative aspect-[16/5] w-full overflow-hidden rounded-xl bg-muted">
-          {(groupView.coverImage || group.coverUrl) ? <img src={groupView.coverImage || group.coverUrl || ''} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center bg-primary/10 text-6xl font-serif font-bold text-primary/35">{group.name[0]}</div>}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/35 to-transparent" />
-        </div>
-
-        <header className="relative z-10 -mt-8 flex flex-wrap items-end gap-4 border-b border-border/70 px-2 pb-5 sm:px-4">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-xl border-4 border-background bg-primary/10 text-3xl font-serif font-bold text-primary shadow-sm">
+        <div className="relative aspect-[16/5] w-full">
+          <div className="absolute inset-0 overflow-hidden rounded-xl bg-muted">
+            {(groupView.coverImage || group.coverUrl) ? <img src={groupView.coverImage || group.coverUrl || ''} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center bg-primary/10 text-6xl font-serif font-bold text-primary/35">{group.name[0]}</div>}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/35 to-transparent" />
+            {groupView.isPromoted && <Badge variant="secondary" className="absolute right-3 top-3">Featured community</Badge>}
+          </div>
+          <div className="absolute -bottom-8 left-4 z-10 flex h-20 w-20 items-center justify-center overflow-hidden rounded-xl border-4 border-background bg-primary/10 text-3xl font-serif font-bold text-primary shadow-sm">
             {(groupView.iconImage || group.avatarUrl) ? <img src={groupView.iconImage || group.avatarUrl || ''} alt="" className="h-full w-full object-cover" /> : group.name[0]}
           </div>
-          <div className="min-w-0 flex-1 pb-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-serif font-bold">{group.name}</h1>
-              {(groupView.isVerified) && <BadgeCheck className="h-5 w-5 text-blue-500" aria-label="Verified community" />}
-              <Badge variant="outline">{groupView.privacy === 'private' ? 'Private · invite-only' : groupView.privacy === 'public' ? 'Public · approval required' : 'Open'}</Badge>
+        </div>
+
+        <header className="border-b border-border/70 px-4 pb-4 pt-12">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-nowrap items-center gap-2">
+              <h1 className="min-w-0 flex-1 truncate text-xl font-serif font-bold sm:text-2xl">{group.name}</h1>
+              {groupView.isVerified && <BadgeCheck className="h-5 w-5 shrink-0 text-blue-500" aria-label="Verified community" />}
+              <Badge variant="outline" className="shrink-0">{groupView.privacy === 'private' ? 'Private' : groupView.privacy === 'public' ? 'Public' : 'Open'}</Badge>
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            <div className="mt-1 flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
               <span>{groupView.memberCount ?? group.membersCount} members</span>
+              <span aria-hidden="true">·</span>
               <span>{groupView.postCount ?? group.postsCount} posts</span>
-              {group.isMember && <Badge variant="secondary">Joined</Badge>}
-              {groupView.isPromoted && <Badge variant="secondary">Featured community</Badge>}
             </div>
           </div>
-          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5 pb-1">
+          <div className="mt-3 flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto">
+            {group.isMember && <Button variant="outline" size="sm" disabled className="h-8 shrink-0 px-3">Joined</Button>}
             {!group.isMember && (groupView.hasPendingJoinRequest
-              ? <Button size="sm" variant="outline" disabled>Request pending</Button>
+              ? <Button size="sm" variant="outline" disabled className="h-8 shrink-0 px-3"><span className="sm:hidden">Pending</span><span className="hidden sm:inline">Request pending</span></Button>
               : groupView.privacy === 'private' || groupView.type === 'secret'
-                ? inviteCode ? <Button size="sm" onClick={() => void acceptGroupInvite(inviteCode)}>Accept invite</Button> : <Badge variant="outline">Invite-only</Badge>
-                : !user ? <Link href="/login"><Button size="sm">{groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button></Link>
-                : <Button size="sm" onClick={() => toggleJoin({ id })} disabled={isJoining}>{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button>)}
-            {group.isMember && <Button variant="outline" size="sm" aria-label="Invite members" onClick={() => setInviteOpen(true)} className="gap-1.5"><UserPlus className="h-4 w-4" />Invite</Button>}
-            <Button variant="outline" size="sm" aria-label="Share group" title="Share group" onClick={() => void shareGroup()} className="gap-1.5"><Share2 className="h-4 w-4" /><span className="hidden sm:inline">Share</span></Button>
+                ? inviteCode ? <Button size="sm" onClick={() => void acceptGroupInvite(inviteCode)} className="h-8 shrink-0 px-3">Accept invite</Button> : <Badge variant="outline" className="flex h-8 shrink-0 items-center">Invite-only</Badge>
+                : !user ? <Link href="/login"><Button size="sm" className="h-8 shrink-0 px-3"><span className="sm:hidden">Join</span><span className="hidden sm:inline">{groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</span></Button></Link>
+                : <Button size="sm" onClick={() => toggleJoin({ id })} disabled={isJoining} className="h-8 shrink-0 px-3">{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : <><span className="sm:hidden">Join</span><span className="hidden sm:inline">{groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</span></>}</Button>)}
+            {group.isMember && <Button variant="outline" size="sm" aria-label="Invite members" onClick={() => setInviteOpen(true)} className="h-8 shrink-0 gap-1.5 px-2.5"><UserPlus className="h-4 w-4" /><span>Invite</span></Button>}
+            <Button variant="outline" size="sm" aria-label="Share group" title="Share group" onClick={() => void shareGroup()} className="h-8 w-8 shrink-0 gap-1.5 px-0 sm:w-auto sm:px-2.5"><Share2 className="h-4 w-4" /><span className="hidden sm:inline">Share</span></Button>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="More group actions" title="More group actions" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+              <DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="More group actions" title="More group actions" className="h-8 w-8 shrink-0"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
               {canManageGroup && <DropdownMenuItem onSelect={() => setActiveTab('settings')}><Settings className="mr-2 h-4 w-4" />Group settings</DropdownMenuItem>}
               {group.isMember && <DropdownMenuItem onSelect={() => toggleJoin({ id })}><LogOut className="mr-2 h-4 w-4" />Leave community</DropdownMenuItem>}
