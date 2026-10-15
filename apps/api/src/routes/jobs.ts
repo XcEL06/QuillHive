@@ -380,6 +380,13 @@ router.post("/:id/apply", async (req, res) => {
 router.get("/applications", async (req, res) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const requestedJobId = req.query.jobId === undefined ? undefined : Number(req.query.jobId);
+  if (requestedJobId !== undefined && (!Number.isInteger(requestedJobId) || requestedJobId <= 0)) {
+    return res.status(400).json({ error: "Invalid opportunity id" });
+  }
+  const conditions = [or(eq(opportunityApplicationsTable.applicantId, viewerId), eq(jobsTable.authorId, viewerId))!];
+  if (requestedJobId !== undefined) conditions.push(eq(opportunityApplicationsTable.jobId, requestedJobId));
+
   const applications = await db.select({
     id: opportunityApplicationsTable.id,
     jobId: opportunityApplicationsTable.jobId,
@@ -392,11 +399,22 @@ router.get("/applications", async (req, res) => {
     createdAt: opportunityApplicationsTable.createdAt,
     jobTitle: jobsTable.title,
     jobAuthorId: jobsTable.authorId,
+    applicant: {
+      id: usersTable.id,
+      username: usersTable.username,
+      displayName: usersTable.displayName,
+      avatarUrl: usersTable.avatarUrl,
+    },
   }).from(opportunityApplicationsTable)
     .innerJoin(jobsTable, eq(jobsTable.id, opportunityApplicationsTable.jobId))
-    .where(or(eq(opportunityApplicationsTable.applicantId, viewerId), eq(jobsTable.authorId, viewerId)))
+    .innerJoin(usersTable, eq(usersTable.id, opportunityApplicationsTable.applicantId))
+    .where(and(...conditions))
     .orderBy(desc(opportunityApplicationsTable.createdAt));
-  return res.json({ applications });
+  return res.json({ applications: applications.map(application => ({
+    ...application,
+    isMine: application.applicantId === viewerId,
+    isOwner: application.jobAuthorId === viewerId,
+  })) });
 });
 
 // ── GET /my-matches - top matched opportunities for the logged-in creator ──────

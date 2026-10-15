@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,16 +11,32 @@ import { useToast } from "@/hooks/use-toast";
 import { getStoredToken } from "@/lib/api";
 import { ChevronDown, MessageSquare, Send } from "lucide-react";
 
-export function ApplyOpportunityActions({ jobId, title, compact = false, externalHref }: { jobId: number; title: string; compact?: boolean; externalHref?: string }) {
+export function ApplyOpportunityActions({ jobId, title, compact = false, externalHref, closed = false }: { jobId: number; title: string; compact?: boolean; externalHref?: string; closed?: boolean }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [budget, setBudget] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [sending, setSending] = useState(false);
+  const [appliedLocally, setAppliedLocally] = useState(false);
+  const { data: applications = [] } = useQuery({
+    queryKey: ["/api/jobs/applications"],
+    queryFn: async () => {
+      const token = getStoredToken();
+      const response = await fetch("/api/jobs/applications", { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!response.ok) throw new Error("Could not load application status");
+      const data = await response.json();
+      return Array.isArray(data?.applications) ? data.applications : [];
+    },
+    enabled: Boolean(getStoredToken()),
+    staleTime: 30_000,
+  });
+  const hasApplied = appliedLocally || applications.some((application: any) => application.jobId === jobId && application.isMine);
 
   const submit = async (mode: "apply" | "apply_and_message") => {
     const token = getStoredToken();
+    if (closed || hasApplied) return;
     if (!token) { toast({ title: "Sign in to apply", variant: "destructive" }); return; }
     setSending(true);
     try {
@@ -29,6 +47,8 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not apply");
+      setAppliedLocally(true);
+      void queryClient.invalidateQueries({ queryKey: ["/api/jobs/applications"] });
       toast({ title: mode === "apply" ? "Application sent" : "Application and message sent" });
       setOpen(false);
       setMessage("");
@@ -40,6 +60,7 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
 
   return <>
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
+      {hasApplied ? <Badge variant="secondary">Applied</Badge> : closed ? <Badge variant="outline">Closed</Badge> : <>
       <div className="flex items-center">
       <Button size={compact ? "sm" : "default"} className="gap-1 whitespace-normal rounded-r-none text-center leading-tight" onClick={() => void submit("apply")} disabled={sending}>
         <Send className="h-3.5 w-3.5" /> Apply
@@ -57,7 +78,8 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
         </DropdownMenuContent>
       </DropdownMenu>
       </div>
-      {externalHref && <a href={externalHref} target={externalHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="text-[10px] text-muted-foreground underline">External application</a>}
+      </>}
+      {externalHref && !closed && <a href={externalHref} target={externalHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="text-[10px] text-muted-foreground underline">External application</a>}
     </div>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-lg">
