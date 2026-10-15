@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"password_hash" text NOT NULL,
 	"auth_version" integer DEFAULT 0 NOT NULL,
 	"display_name" text NOT NULL,
+	"date_of_birth" date,
 	"bio" text,
 	"headline" text,
 	"avatar_url" text,
@@ -451,16 +452,15 @@ CREATE TABLE IF NOT EXISTS "notifications" (
 	"actor_id" integer NOT NULL,
 	"post_id" integer,
 	"group_id" integer,
+	"url" text,
 	"message" text NOT NULL,
 	"title" text,
 	"group_count" integer DEFAULT 1,
 	"is_read" boolean DEFAULT false NOT NULL,
 	"category" text DEFAULT 'social' NOT NULL,
 	"digest_group" text,
-  "url" text,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
-ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "url" text;
 
 CREATE TABLE IF NOT EXISTS "appreciations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -2138,6 +2138,21 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column display_name on users: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('users') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "date_of_birth" date;
+  ELSE
+    RAISE NOTICE 'Skipped column date_of_birth: users is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column date_of_birth on users: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -6548,6 +6563,21 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column group_id on notifications: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('notifications') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "url" text;
+  ELSE
+    RAISE NOTICE 'Skipped column url: notifications is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column url on notifications: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -21328,6 +21358,17 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped index idx_notifications_created_at: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS "idx_birthday_notifications_user_year" ON "notifications" USING btree ("user_id","digest_group") WHERE "notifications"."type" = 'birthday';
+EXCEPTION
+  WHEN unique_violation THEN
+    RAISE NOTICE 'Skipped unique index idx_birthday_notifications_user_year: existing rows contain duplicate values';
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped unique index idx_birthday_notifications_user_year: %', SQLERRM;
 END
 $schema_sync$;
 
