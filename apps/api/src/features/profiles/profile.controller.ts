@@ -105,9 +105,6 @@ const DISPOSABLE_DOMAINS = new Set([
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 export const register = async (req: Request, res: Response) => {
-  if (!(await isFeatureEnabled("registration_open"))) {
-    return res.status(403).json({ error: "registration_closed", message: "New account registration is currently closed." });
-  }
   const { username, email, password, displayName } = req.body;
   const normalizedEmail = String(email ?? "").trim().toLowerCase();
   const refRaw = (req.body?.ref ?? req.query?.ref ?? "") as string;
@@ -122,6 +119,9 @@ export const register = async (req: Request, res: Response) => {
     return res.status(400).json({
       error: "Please use a permanent email address to register.",
     });
+  }
+  if (!(await isFeatureEnabled("registration_open"))) {
+    return res.status(403).json({ error: "registration_closed", message: "New account registration is currently closed." });
   }
   // Only enforce Turnstile when the browser supplied a token. This makes a
   // partially configured deployment (secret present, widget/site key missing,
