@@ -13,6 +13,16 @@ interface State {
   componentStack?: string;
 }
 
+const CHUNK_RELOAD_KEY = "qh_chunk_reload_attempted";
+
+function isChunkLoadError(error: Error): boolean {
+  const message = error.message.toLowerCase();
+  return message.includes("failed to fetch dynamically imported module")
+    || message.includes("importing a module script failed")
+    || message.includes("loading chunk")
+    || message.includes("error loading dynamically imported module");
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { hasError: false, error: null };
 
@@ -29,6 +39,17 @@ export class ErrorBoundary extends Component<Props, State> {
       componentStack: info.componentStack,
     });
     this.setState({ error, componentStack: info.componentStack });
+
+    if (isChunkLoadError(error)) {
+      try {
+        if (window.sessionStorage.getItem(CHUNK_RELOAD_KEY) !== "1") {
+          window.sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+          window.location.reload();
+        }
+      } catch {
+        // Keep the manual recovery UI available when session storage is blocked.
+      }
+    }
   }
 
   handleReset = () => {
@@ -40,6 +61,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (!this.state.hasError) return this.props.children;
     if (this.props.fallback) return this.props.fallback;
     const t = useI18n.getState().t;
+    const chunkLoadFailed = this.state.error && isChunkLoadError(this.state.error);
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-8">
         <div className="max-w-md w-full text-center space-y-4">
@@ -49,12 +71,16 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
           </div>
           <div>
-            <h2 className="text-lg font-bold">{t("common.somethingWentWrong", "Something went wrong")}</h2>
+            <h2 className="text-lg font-bold">
+              {chunkLoadFailed ? "Update available — reload" : t("common.somethingWentWrong", "Something went wrong")}
+            </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              {t("common.pageErrorSafe", "This page hit an error. Your data is safe.")}
+              {chunkLoadFailed
+                ? "QuillHive was updated while this page was open. Reload to get the latest version."
+                : t("common.pageErrorSafe", "This page hit an error. Your data is safe.")}
             </p>
           </div>
-          {this.state.error && (
+          {this.state.error && !chunkLoadFailed && (
             <div className="text-left">
               <pre className="text-xs bg-muted p-3 rounded-lg overflow-auto max-h-40 text-destructive whitespace-pre-wrap break-words">
                 {this.state.error.name}: {this.state.error.message}
@@ -75,7 +101,7 @@ export class ErrorBoundary extends Component<Props, State> {
             onClick={this.handleReset}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition">
             <RotateCcw className="w-4 h-4" />
-            {t("common.reloadPage", "Reload page")}
+            {chunkLoadFailed ? "Reload" : t("common.reloadPage", "Reload page")}
           </button>
         </div>
       </div>

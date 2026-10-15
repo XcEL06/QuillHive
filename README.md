@@ -37,6 +37,10 @@ educators, students, and everyone in between.
 - Payments: Flutterwave
 - AI: Anthropic Claude
 
+## Cloudflare Pages deployments
+
+After deploying a new web build to Cloudflare Pages, a browser or CDN may still hold an older `index.html` that references JavaScript chunks from the previous build. If a lazy-loaded page fails to load, reload QuillHive; if the error persists, do a hard refresh to fetch the current app shell and chunk references.
+
 ## License
 
 Proprietary. See LICENSE file for details.
