@@ -701,7 +701,7 @@ function AuthenticatedHome() {
 
           {displayPosts.map((post) => (
             <Fragment key={post.id}>
-              <PostCard post={post} />
+              <PostCard post={post} feedStyle />
               {adPlacementPostIds.has(post.id) && (
                 <AdSlot key={`home-explore-${post.id}`} placementId={`home-explore-${post.id}`} />
               )}

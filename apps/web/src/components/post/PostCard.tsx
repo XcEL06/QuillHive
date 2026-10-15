@@ -352,7 +352,7 @@ function TrustBadge({ tier, isAdmin }: { tier?: string; isAdmin?: boolean }) {
   return null;
 }
 
-export function PostCard({ post: initialPost, compact = false, hideAnalytics = false, hideBoost = false, hideReputation = false }: { post: EnrichedPost; compact?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean }) {
+export function PostCard({ post: initialPost, compact = false, feedStyle = false, hideAnalytics = false, hideBoost = false, hideReputation = false }: { post: EnrichedPost; compact?: boolean; feedStyle?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean }) {
   const [, setLocation] = useLocation();
   const { user: currentUser } = useAuthStore();
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
@@ -810,11 +810,11 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         data-card
-        className={`rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors duration-200 hover:border-border ${
-          post.isOfficialPost
-            ? 'border-l-2 border-l-blue-500/50 bg-blue-500/[0.025]'
-            : ''
-        }`}
+        className={feedStyle
+          ? `border-b border-border/70 pb-4 ${post.isOfficialPost ? 'border-l-2 border-l-blue-500/50 pl-3' : ''}`
+          : `rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors duration-200 hover:border-border ${
+              post.isOfficialPost ? 'border-l-2 border-l-blue-500/50 bg-blue-500/[0.025]' : ''
+            }`}
       >
         {/* Official Post Banner */}
         {post.isOfficialPost && <OfficialPostBanner category={post.postCategory} />}
@@ -822,7 +822,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
         {post.groupId != null && <GroupPostAttribution groupId={post.groupId} />}
 
         {/* Header */}
-        <div className="mb-4 flex items-center gap-3 min-w-0">
+        <div className={`flex min-w-0 items-center gap-3 ${feedStyle ? 'mb-3' : 'mb-4'}`}>
           <Link href={`/profile/${post.author.username}`} className="shrink-0">
             <Avatar className="h-10 w-10 border border-border transition-colors group-hover:border-primary">
               <AvatarImage src={post.author.avatarUrl || ''} />
@@ -1089,7 +1089,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
         )}
 
         {/* Actions */}
-        <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/40 pt-3 text-sm text-muted-foreground">
+        <div className={`${feedStyle ? 'mt-3 pt-2' : 'mt-4 pt-3'} flex items-center justify-between gap-2 border-t border-border/40 text-sm text-muted-foreground`}>
           <div className="flex items-center gap-1">
             <button
               onClick={() => {
@@ -1125,7 +1125,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
               disabled={isLiking}
               title={optimisticLiked ? 'Unlike post' : 'Like post'}
               aria-pressed={optimisticLiked}
-              className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-all ${
+              className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-all ${
                 optimisticLiked
                   ? 'text-rose-500 bg-rose-500/10'
                   : 'hover:text-rose-500 hover:bg-rose-500/10'
@@ -1133,7 +1133,20 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
               data-testid={`button-like-${post.id}`}
             >
               <Heart className={`h-4 w-4 ${optimisticLiked ? 'fill-current' : ''}`} />
+              {feedStyle && <span>Like</span>}
               {optimisticLikes > 0 && <span>{optimisticLikes}</span>}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowComments(s => !s)}
+              title="Comment"
+              aria-label={`Comment${post.commentsCount > 0 ? ` (${post.commentsCount})` : ''}`}
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-all hover:text-primary hover:bg-primary/10"
+            >
+              <MessageCircle className={`h-4 w-4 ${showComments ? 'fill-primary/20 text-primary' : ''}`} />
+              {feedStyle && <span>Comment</span>}
+              {post.commentsCount > 0 && <span>{post.commentsCount}</span>}
             </button>
 
             <button
@@ -1142,7 +1155,7 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
               disabled={isReposting}
               title={post.isReposted ? 'Undo repost' : 'Repost'}
               aria-pressed={Boolean(post.isReposted)}
-              className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-all ${
+              className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-all ${
                 post.isReposted
                   ? 'text-primary bg-primary/10'
                   : 'hover:text-primary hover:bg-primary/10'
@@ -1150,32 +1163,27 @@ export function PostCard({ post: initialPost, compact = false, hideAnalytics = f
               data-testid={`button-repost-${post.id}`}
             >
               <Repeat2 className={`h-4 w-4 ${post.isReposted ? 'stroke-[2.5]' : ''}`} />
+              {feedStyle && <span>Repost</span>}
               {(post.repostsCount ?? 0) > 0 && <span>{post.repostsCount}</span>}
-            </button>
-
-            <button
-              onClick={() => setShowComments(s => !s)}
-              className="flex items-center gap-1.5 rounded-xl px-2 py-1.5 hover:text-primary hover:bg-primary/10 transition-all"
-            >
-              <MessageCircle className={`h-4 w-4 ${showComments ? 'fill-primary/20 text-primary' : ''}`} />
-              {post.commentsCount > 0 && <span>{post.commentsCount}</span>}
             </button>
 
             <button
               onClick={handleSave}
               disabled={isSaving}
               title={post.isSaved ? 'Remove from saved' : 'Save post'}
-              className={`flex items-center gap-1.5 rounded-xl px-2 py-1.5 transition-all ${
+              aria-label={post.isSaved ? 'Remove bookmark' : 'Bookmark'}
+              className={`flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-all ${
                 post.isSaved
                   ? 'text-primary bg-primary/10'
                   : 'hover:text-primary hover:bg-primary/10'
               }`}
             >
               <Bookmark className={`h-4 w-4 ${post.isSaved ? 'fill-current' : ''}`} />
+              {feedStyle && <span>Bookmark</span>}
             </button>
           </div>
 
-          <span className="text-[11px] text-muted-foreground">
+          <span className={`text-muted-foreground ${feedStyle ? 'hidden text-[11px] sm:inline' : 'text-[11px]'}`}>
             {readingTimeLabel(post.content || post.excerpt || '') || '1 min'} read
           </span>
         </div>
