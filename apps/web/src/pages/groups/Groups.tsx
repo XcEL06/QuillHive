@@ -317,6 +317,7 @@ function GroupDetail({ id }: { id: number }) {
   const [myRole, setMyRole] = useState<GroupView['memberRole']>(null);
   const [settings, setSettings] = useState({ name: '', description: '', privacy: 'open', rules: '', coverUrl: '', iconUrl: '', isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false, announcementPolicy: 'admins' });
   const [composerType, setComposerType] = useState('discussion');
+  const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [postContent, setPostContent] = useState('');
   const [postTitle, setPostTitle] = useState('');
   const [pollQuestion, setPollQuestion] = useState('');
@@ -370,7 +371,16 @@ function GroupDetail({ id }: { id: number }) {
     setPostsPage(1);
     setLoadedPosts([]);
     setActiveTab('feed');
+    setComposerType('discussion');
+    setIsComposerExpanded(false);
   }, [id]);
+
+  useEffect(() => {
+    if (composerType !== 'announcement') return;
+    const current = group as GroupView | undefined;
+    const allowed = myRole === 'owner' || (myRole === 'admin' && current?.announcementPolicy !== 'owner');
+    if (!allowed) setComposerType('discussion');
+  }, [composerType, group, myRole]);
 
   useEffect(() => {
     if (!postsData) return;
@@ -632,7 +642,9 @@ function GroupDetail({ id }: { id: number }) {
       setPollOptions(['', '']);
       setPollDuration('1d');
       setPostsPage(1);
-      setLoadedPosts([]);
+      setLoadedPosts(current => [result, ...current.filter(post => post.id !== result.id)]);
+      setComposerType('discussion');
+      setIsComposerExpanded(false);
       setPinnedRefreshKey(value => value + 1);
       void queryClient.invalidateQueries({ queryKey: [`/api/groups/${id}/posts`] });
       void refetch();
@@ -718,6 +730,7 @@ function GroupDetail({ id }: { id: number }) {
   if (!group) return <AppLayout publicPage={!user}><div className="py-20 text-center text-muted-foreground">{t('groups.notFound', 'Group not found')}</div></AppLayout>;
 
   const groupView = group as GroupView;
+  const canPostAnnouncement = myRole === 'owner' || (myRole === 'admin' && groupView.announcementPolicy !== 'owner');
   const canReviewJoinRequests = myRole === 'owner' || myRole === 'admin';
   const canManageGroup = myRole === 'owner' || myRole === 'admin' || myRole === 'moderator' || user?.role === 'super_admin';
   const isSettingsView = ['settings', 'pending', 'join-requests', 'reports'].includes(activeTab);
@@ -921,14 +934,20 @@ function GroupDetail({ id }: { id: number }) {
 
               {activeTab === 'feed' && <PinnedPosts groupId={id} myRole={myRole ?? null} refreshKey={pinnedRefreshKey} />}
 
-              {activeTab === 'feed' && group.isMember && <section className="mb-5 space-y-3 rounded-lg border border-border/70 bg-card p-4">
-                <h2 className="text-sm font-semibold">Write something…</h2>
+              {activeTab === 'feed' && group.isMember && <section className="mb-5 space-y-3 rounded-lg border border-border/70 bg-card p-3 sm:p-4">
+                {!isComposerExpanded ? <button type="button" onClick={() => setIsComposerExpanded(true)} className="flex min-h-11 w-full items-center rounded-md bg-muted/60 px-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  Write something…
+                </button> : <>
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="text-sm font-semibold">Create a post</h2>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setIsComposerExpanded(false)}>Cancel</Button>
+                </div>
                 <Tabs value={composerType} onValueChange={setComposerType}>
                   <TabsList className="w-full justify-start overflow-x-auto">
                     <TabsTrigger value="discussion">Discussion</TabsTrigger>
                     <TabsTrigger value="poll">Poll</TabsTrigger>
                     <TabsTrigger value="question">Question</TabsTrigger>
-                    {(myRole === 'owner' || myRole === 'admin') && <TabsTrigger value="announcement">Announcement</TabsTrigger>}
+                    {canPostAnnouncement && <TabsTrigger value="announcement">Announcement</TabsTrigger>}
                   </TabsList>
                   <TabsContent value="discussion" className="mt-3 space-y-3">
                     {richEditor}
@@ -961,6 +980,7 @@ function GroupDetail({ id }: { id: number }) {
                   </TabsContent>
                 </Tabs>
                 <Button onClick={() => void submitGroupPost()} disabled={isPosting || isUploadingImages || (composerType === 'poll' ? !pollQuestion.trim() || pollOptions.filter(option => option.trim()).length < 2 : composerType === 'question' ? !postTitle.trim() : !editor?.getText().trim())} className="gap-2"><Send className="h-4 w-4" />{isPosting ? 'Publishing...' : 'Publish'}</Button>
+                </>}
               </section>}
 
               {activeTab === 'settings' || activeTab === 'about' ? null : activeTab === 'join-requests' ? joinRequestsLoading ? <div className="space-y-3">{Array.from({ length: 2 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-lg" />)}</div> : <div className="divide-y divide-border border-y">
