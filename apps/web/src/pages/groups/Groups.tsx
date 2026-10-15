@@ -676,11 +676,17 @@ function GroupDetail({ id }: { id: number }) {
   };
 
   const shareGroup = async () => {
+    const url = `${window.location.origin}/g/${groupView.slug || id}`;
     try {
-      await copyTextToClipboard(`${window.location.origin}/groups/${id}`);
+      if (navigator.share) {
+        await navigator.share({ title: group?.name, url });
+        return;
+      }
+      await copyTextToClipboard(url);
       toast({ title: 'Group link copied', description: 'Anyone can open this link to view the group.' });
-    } catch {
-      toast({ title: 'Could not copy group link', variant: 'destructive' });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      toast({ title: 'Could not share group link', variant: 'destructive' });
     }
   };
 
@@ -816,15 +822,21 @@ function GroupDetail({ id }: { id: number }) {
             <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span>{groupView.memberCount ?? group.membersCount} members</span>
               <span>{groupView.postCount ?? group.postsCount} posts</span>
+              {group.isMember && <Badge variant="secondary">Joined</Badge>}
               {groupView.isPromoted && <Badge variant="secondary">Featured community</Badge>}
             </div>
           </div>
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5 pb-1">
-            {group.isMember ? <Button variant="secondary" disabled>Joined</Button> : groupView.hasPendingJoinRequest ? <Button variant="outline" disabled>Request pending</Button> : groupView.privacy === 'private' || groupView.type === 'secret' ? inviteCode ? <Button onClick={() => void acceptGroupInvite(inviteCode)}>Accept invite</Button> : <Badge variant="outline">Invite-only</Badge> : !user ? <Link href="/login"><Button>{groupView.privacy === 'public' ? 'Sign in to request to join' : 'Sign in to join'}</Button></Link> : <Button onClick={() => toggleJoin({ id })} disabled={isJoining}>{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button>}
-            {groupView.privacy !== 'private' && groupView.type !== 'secret' && <Button variant="outline" size="sm" aria-label="Copy group link" onClick={() => void shareGroup()} className="gap-1.5"><Copy className="h-4 w-4" />Copy link</Button>}
-            <Button aria-label="Invite members" onClick={() => setInviteOpen(true)} disabled={!group.isMember} className="gap-1.5"><UserPlus className="h-4 w-4" />Invite</Button>
+            {!group.isMember && (groupView.hasPendingJoinRequest
+              ? <Button size="sm" variant="outline" disabled>Request pending</Button>
+              : groupView.privacy === 'private' || groupView.type === 'secret'
+                ? inviteCode ? <Button size="sm" onClick={() => void acceptGroupInvite(inviteCode)}>Accept invite</Button> : <Badge variant="outline">Invite-only</Badge>
+                : !user ? <Link href="/login"><Button size="sm">{groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button></Link>
+                : <Button size="sm" onClick={() => toggleJoin({ id })} disabled={isJoining}>{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button>)}
+            {group.isMember && <Button variant="outline" size="sm" aria-label="Invite members" onClick={() => setInviteOpen(true)} className="gap-1.5"><UserPlus className="h-4 w-4" />Invite</Button>}
+            <Button variant="outline" size="sm" aria-label="Share group" title="Share group" onClick={() => void shareGroup()} className="gap-1.5"><Share2 className="h-4 w-4" /><span className="hidden sm:inline">Share</span></Button>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Community actions"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
+              <DropdownMenuTrigger asChild><Button variant="outline" size="icon" aria-label="More group actions" title="More group actions" className="h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
               {canManageGroup && <DropdownMenuItem onSelect={() => setActiveTab('settings')}><Settings className="mr-2 h-4 w-4" />Group settings</DropdownMenuItem>}
               {group.isMember && <DropdownMenuItem onSelect={() => toggleJoin({ id })}><LogOut className="mr-2 h-4 w-4" />Leave community</DropdownMenuItem>}
@@ -885,7 +897,7 @@ function GroupDetail({ id }: { id: number }) {
                   <label className="flex items-center justify-between gap-3 text-xs"><span>Who can post announcements</span><Select value={settings.announcementPolicy} onValueChange={announcementPolicy => setSettings(s => ({ ...s, announcementPolicy }))}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="owner">Owner only</SelectItem><SelectItem value="admins">Admins</SelectItem></SelectContent></Select></label>
                   <ImageUploadField value={settings.iconUrl} onChange={iconUrl => setSettings(s => ({ ...s, iconUrl }))} category="group" label="Change group icon" previewClassName="h-20 w-20" />
                   <ImageUploadField value={settings.coverUrl} onChange={coverUrl => setSettings(s => ({ ...s, coverUrl }))} category="group" label="Change cover image" />
-                  <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void saveSettings()}>Save settings</Button><Button size="sm" variant="outline" onClick={() => setLifecycleAction('archive')}>Archive group</Button><Button size="sm" variant="destructive" onClick={() => setLifecycleAction('delete')}>Delete group</Button></div>
+                  <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void saveSettings()}>Save settings</Button><Button size="sm" variant="outline" onClick={() => setLifecycleAction('archive')}>Archive group</Button></div>
                 </div>}
                 {activeTab === 'settings' && user?.role === 'super_admin' && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(groupView.features?.eventsEnabled)} onChange={e => void toggleEvents(e.target.checked)} />Enable group events</label>}
               </section>}
@@ -982,7 +994,7 @@ function GroupDetail({ id }: { id: number }) {
             <section className="space-y-3 border-b border-border/70 pb-4"><h2 className="text-sm font-semibold">Recent activity</h2><GroupActivityTimeline groupId={id} /></section>
 
             <section className="space-y-3 border-b border-border/70 pb-4">
-              <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Members</h2><span className="text-xs text-muted-foreground">{groupView.type === 'public' || groupView.type == null || group.isMember ? `${onlineCount} online now` : ''}</span></div>
+              <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Members</h2>{onlineCount > 0 && (groupView.type === 'public' || groupView.type == null || group.isMember) && <span className="text-xs text-muted-foreground">{onlineCount} online now</span>}</div>
               <div className="flex items-center">
                 {membersPreview.slice(0, 6).map((member, index) => <Avatar key={member.userId} className={`h-8 w-8 border-2 border-background ${index ? '-ml-2' : ''}`}>
                   <AvatarImage src={member.avatarUrl ?? undefined} /><AvatarFallback className="text-[10px]">{(member.displayName || member.username).slice(0, 1).toUpperCase()}</AvatarFallback>
@@ -1018,11 +1030,14 @@ function GroupDetail({ id }: { id: number }) {
       </Dialog>
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
         <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Invite to {group.name}</DialogTitle></DialogHeader>
-          {groupView.privacy === 'private' ? <div className="space-y-3"><p className="text-sm text-muted-foreground">Create a single-use link that expires in seven days.</p><Button onClick={() => void createGroupInvite()}><Copy className="mr-2 h-4 w-4" />Create invite link</Button></div> : <><Input value={inviteSearch} onChange={event => setInviteSearch(event.target.value)} placeholder="Find someone by name or username" />
+          <div className="space-y-3">
+            <Input value={inviteSearch} onChange={event => setInviteSearch(event.target.value)} placeholder="Find someone by name or username" aria-label="Find someone to invite" />
             <div className="max-h-64 space-y-1 overflow-y-auto">
               {inviteUsers.map(candidate => <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-muted/60"><div className="min-w-0"><p className="truncate text-sm font-medium">{candidate.displayName || candidate.username}</p><p className="truncate text-xs text-muted-foreground">@{candidate.username}</p></div><Button size="sm" disabled={isInviting} onClick={() => void inviteMember(candidate.id)}>Invite</Button></div>)}
               {inviteSearch.trim().length >= 2 && inviteUsers.length === 0 && <p className="py-5 text-center text-sm text-muted-foreground">No matching members.</p>}
-            </div></>}
+            </div>
+            {groupView.privacy === 'private' && <div className="border-t border-border pt-3"><p className="mb-2 text-sm text-muted-foreground">Or create a single-use invite link that expires in seven days.</p><Button variant="outline" size="sm" onClick={() => void createGroupInvite()}><Copy className="mr-2 h-4 w-4" />Create invite link</Button></div>}
+          </div>
         </DialogContent>
       </Dialog>
       <Dialog open={reportOpen} onOpenChange={setReportOpen}>
