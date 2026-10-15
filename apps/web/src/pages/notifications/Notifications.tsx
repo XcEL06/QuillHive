@@ -97,7 +97,7 @@ export default function Notifications() {
 
   const getLink = (notif: any) => {
     if (notif.type === 'official_notice') return '/notifications';
-    if (notif.type === 'follow' && notif.actor?.username) return `/profile/${encodeURIComponent(notif.actor.username)}`;
+    if (notif.type === 'follow' && notif.actor?.username) return `/u/${encodeURIComponent(notif.actor.username)}`;
     if ((notif.type === 'group_invite' || notif.type.startsWith('group_')) && notif.groupId) return `/groups/${notif.groupId}`;
     if (['comment', 'comment_like', 'reply'].includes(notif.type) && notif.postId) {
       return typeof notif.url === 'string' && notif.url.startsWith(`/post/${notif.postId}#comment-`)
@@ -173,10 +173,15 @@ export default function Notifications() {
             >
               <div className="flex-1 flex items-start gap-4 min-w-0">
                 <div className="relative shrink-0">
-                  <Avatar className="w-12 h-12 border border-border">
+                  {notif.actor?.username ? <Link href={`/u/${encodeURIComponent(notif.actor.username)}`} onClick={() => markNotificationRead(notif)} aria-label={`View ${notif.actor.displayName || notif.actor.username}'s profile`}>
+                    <Avatar className="w-12 h-12 border border-border">
+                      <AvatarImage src={notif.actor?.avatarUrl || ''} />
+                      <AvatarFallback>{notif.actor?.displayName?.substring(0, 2) ?? 'S'}</AvatarFallback>
+                    </Avatar>
+                  </Link> : <Avatar className="w-12 h-12 border border-border">
                     <AvatarImage src={notif.actor?.avatarUrl || ''} />
                     <AvatarFallback>{notif.actor?.displayName?.substring(0, 2) ?? 'S'}</AvatarFallback>
-                  </Avatar>
+                  </Avatar>}
                   {getIcon(notif.type)}
                 </div>
 
@@ -185,12 +190,12 @@ export default function Notifications() {
                     {notif.type === 'like' && notif.groupCount > 1
                       ? <Link href={getLink(notif)} onClick={() => markNotificationRead(notif)} className="hover:text-primary hover:underline">{notif.title || `${notif.groupCount} people liked your post`}</Link>
                       : <>
-                          {notif.type === 'follow' && notif.actor?.username ? (
-                            <Link href={`/profile/${encodeURIComponent(notif.actor.username)}`} onClick={() => markNotificationRead(notif)} className="font-bold text-foreground hover:text-primary hover:underline">
-                              {notif.actor.displayName ?? 'User'}
+                          {notif.actor?.username ? (
+                            <Link href={`/u/${encodeURIComponent(notif.actor.username)}`} onClick={() => markNotificationRead(notif)} className="font-bold text-foreground hover:text-primary hover:underline">
+                              {notif.actor.displayName ?? notif.actor.username}
                             </Link>
-                          ) : notif.actor?.displayName || notif.actor?.username ? (
-                            <span className="font-bold text-foreground">{notif.actor.displayName ?? notif.actor.username}</span>
+                          ) : notif.actor?.displayName ? (
+                            <span className="font-bold text-foreground">{notif.actor.displayName}</span>
                           ) : (
                             <span className="font-bold text-foreground">{notif.type === 'birthday' ? 'QuillHive' : 'System'}</span>
                           )}{' '}<Link href={getLink(notif)} onClick={() => markNotificationRead(notif)} className="hover:text-primary hover:underline">{notif.message}</Link>

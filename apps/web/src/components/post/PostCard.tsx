@@ -360,7 +360,6 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
   const queryClient = useQueryClient();
 
   const [post, setPost] = useState<EnrichedPost>(initialPost);
-  const [isPostBodyExpanded, setIsPostBodyExpanded] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -895,7 +894,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className={isPostBodyExpanded ? 'whitespace-pre-wrap' : 'line-clamp-3'}
+                    className="line-clamp-3"
                   >
                     {renderHashtags(translatedContent)}
                   </motion.p>
@@ -905,9 +904,9 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className={isPostBodyExpanded ? 'whitespace-pre-wrap' : 'line-clamp-3'}
+                    className="line-clamp-3"
                   >
-                    {post.excerpt && !isPostBodyExpanded
+                    {post.excerpt
                       ? renderHashtags(post.excerpt)
                       : <span dangerouslySetInnerHTML={{ __html: linkifyHashtags(safeHtml(post.content ?? '')) }} />}
                   </motion.div>
@@ -944,7 +943,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
             >
               <div className="flex items-center gap-2 mb-2">
                 {post.quotedPost.author?.username ? (
-                  <Link href={`/profile/${post.quotedPost.author.username}`} onClick={(event) => event.stopPropagation()} className="flex items-center gap-2 min-w-0 hover:text-primary transition-colors">
+                  <Link href={`/u/${encodeURIComponent(post.quotedPost.author.username)}`} onClick={(event) => event.stopPropagation()} className="flex items-center gap-2 min-w-0 hover:text-primary transition-colors">
                     <Avatar className="h-6 w-6">
                       <AvatarImage src={post.quotedPost.author?.avatarUrl || ''} />
                       <AvatarFallback className="text-[10px]">{post.quotedPost.author?.displayName?.slice(0, 2)}</AvatarFallback>
@@ -978,16 +977,16 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
         {canExpandPostBody && (
           <button
             type="button"
-            aria-expanded={isPostBodyExpanded}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              setIsPostBodyExpanded(expanded => !expanded);
+              handleAbClickTrack();
+              setLocation(`/post/${post.id}`);
             }}
             className="-mt-2 mb-3 text-sm font-semibold text-primary hover:text-primary/80 hover:underline"
-            data-testid={`button-post-body-${isPostBodyExpanded ? 'collapse' : 'expand'}-${post.id}`}
+            data-testid={`button-post-body-expand-${post.id}`}
           >
-            {isPostBodyExpanded ? 'See less' : 'See more'}
+            See more
           </button>
         )}
 

@@ -51,7 +51,7 @@ function getNotifIcon(type: string): React.ReactNode {
 
 function getNotifLink(notif: NotificationPayload): string {
   if (notif.type === "follow" && notif.actor?.username) {
-    return `/profile/${encodeURIComponent(notif.actor.username)}`;
+    return `/u/${encodeURIComponent(notif.actor.username)}`;
   }
   if ((notif.type === "group_invite" || notif.type.startsWith("group_")) && notif.groupId) return `/groups/${notif.groupId}`;
   if (["comment", "comment_like", "reply"].includes(notif.type) && notif.postId) {

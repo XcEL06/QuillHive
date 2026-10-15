@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Eye, Heart, MessageCircle, Send, X } from "lucide-react";
 import { apiRequest, apiUrl, getStoredToken, mediaUrl } from "@/lib/api";
 import { formatPostTimestamp } from "@/lib/postTimestamp";
@@ -342,12 +343,17 @@ export function StoryViewer({
               <p className="py-4 text-center text-sm text-muted-foreground">Be the first to comment.</p>
             ) : comments.map((comment) => (
               <article key={comment.id} className="flex gap-2.5">
-                <Avatar className="h-8 w-8">
+                {comment.author?.username ? <Link href={`/u/${encodeURIComponent(comment.author.username)}`} aria-label={`View ${comment.author.displayName || comment.author.username}'s profile`} className="shrink-0">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={comment.author.avatarUrl || undefined} alt="" />
+                    <AvatarFallback>{(comment.author.displayName || comment.author.username || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                </Link> : <Avatar className="h-8 w-8">
                   <AvatarImage src={comment.author?.avatarUrl || undefined} alt="" />
-                  <AvatarFallback>{(comment.author?.displayName || comment.author?.username || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
-                </Avatar>
+                  <AvatarFallback>{(comment.author?.displayName || "?").slice(0, 2).toUpperCase()}</AvatarFallback>
+                </Avatar>}
                 <div className="min-w-0 flex-1 rounded-xl bg-muted/60 px-3 py-2">
-                  <p className="text-xs font-semibold">{comment.author?.displayName || comment.author?.username || "Member"}</p>
+                  {comment.author?.username ? <Link href={`/u/${encodeURIComponent(comment.author.username)}`} className="text-xs font-semibold hover:text-primary hover:underline">{comment.author.displayName || comment.author.username}</Link> : <p className="text-xs font-semibold">{comment.author?.displayName || "Member"}</p>}
                   <p className="whitespace-pre-wrap break-words text-sm">{comment.content}</p>
                 </div>
               </article>

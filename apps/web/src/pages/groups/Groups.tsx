@@ -192,7 +192,7 @@ function GroupActivityTimeline({ groupId }: { groupId: number }) {
     const ago = minutes < 60 ? `${minutes}m ago` : minutes < 1440 ? `${Math.floor(minutes / 60)}h ago` : `${Math.floor(minutes / 1440)}d ago`;
     return <li key={item.id} className="flex items-start justify-between gap-3 text-xs"><span>{item.action === 'poll_ended' ? labels[item.action] : <>
       {item.actorUsername ? (
-        <Link href={`/profile/${encodeURIComponent(item.actorUsername)}`} className="font-semibold text-foreground hover:text-primary hover:underline">
+        <Link href={`/u/${encodeURIComponent(item.actorUsername)}`} className="font-semibold text-foreground hover:text-primary hover:underline">
           {item.actorName || `@${item.actorUsername}`}
         </Link>
       ) : (
@@ -852,7 +852,7 @@ function GroupDetail({ id }: { id: number }) {
               <Badge variant="outline" className="shrink-0">{groupView.privacy === 'private' ? 'Private' : groupView.privacy === 'public' ? 'Public' : 'Open'}</Badge>
             </div>
             <div className="mt-1 flex items-center gap-2 whitespace-nowrap text-sm text-muted-foreground">
-              <span>{groupView.memberCount ?? group.membersCount} members</span>
+              <Link href={`/g/${groupView.slug || id}/members`} className="hover:text-foreground hover:underline">{groupView.memberCount ?? group.membersCount} members</Link>
               <span aria-hidden="true">·</span>
               <span>{groupView.postCount ?? group.postsCount} posts</span>
             </div>
@@ -998,8 +998,8 @@ function GroupDetail({ id }: { id: number }) {
               {activeTab === 'settings' || activeTab === 'about' ? null : activeTab === 'join-requests' ? joinRequestsLoading ? <div className="space-y-3">{Array.from({ length: 2 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-lg" />)}</div> : <div className="divide-y divide-border border-y">
                 {joinRequests.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No pending join requests.</p> : joinRequests.map(request => <article key={request.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
                   <div className="flex min-w-0 items-center gap-3">
-                    <Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
-                    <div className="min-w-0"><p className="truncate text-sm font-semibold">{request.displayName || request.username}</p><p className="truncate text-xs text-muted-foreground">@{request.username} · requested <Timestamp value={request.createdAt} mode="date" /></p>{request.trustScore != null && <p className="mt-0.5 text-xs text-muted-foreground">Trust score {request.trustScore}</p>}</div>
+                    <Link href={`/u/${encodeURIComponent(request.username)}`} aria-label={`View ${request.displayName || request.username}'s profile`} className="shrink-0"><Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1).toUpperCase()}</AvatarFallback></Avatar></Link>
+                    <div className="min-w-0"><Link href={`/u/${encodeURIComponent(request.username)}`} className="block truncate text-sm font-semibold hover:underline">{request.displayName || request.username}</Link><p className="truncate text-xs text-muted-foreground"><Link href={`/u/${encodeURIComponent(request.username)}`} className="hover:underline">@{request.username}</Link> · requested <Timestamp value={request.createdAt} mode="date" /></p>{request.trustScore != null && <p className="mt-0.5 text-xs text-muted-foreground">Trust score {request.trustScore}</p>}</div>
                   </div>
                   <div className="flex gap-2"><Button size="sm" onClick={() => void reviewJoinRequest(request.id, 'approve')}><Check className="mr-1.5 h-4 w-4" />Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewJoinRequest(request.id, 'deny')}><X className="mr-1.5 h-4 w-4" />Deny</Button></div>
                 </article>)}
@@ -1035,9 +1035,9 @@ function GroupDetail({ id }: { id: number }) {
             <section className="space-y-3 border-b border-border/70 pb-4">
               <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Members</h2>{onlineCount > 0 && (groupView.type === 'public' || groupView.type == null || group.isMember) && <span className="text-xs text-muted-foreground">{onlineCount} online now</span>}</div>
               <div className="flex items-center">
-                {membersPreview.slice(0, 6).map((member, index) => <Avatar key={member.userId} className={`h-8 w-8 border-2 border-background ${index ? '-ml-2' : ''}`}>
-                  <AvatarImage src={member.avatarUrl ?? undefined} /><AvatarFallback className="text-[10px]">{(member.displayName || member.username).slice(0, 1).toUpperCase()}</AvatarFallback>
-                </Avatar>)}
+                {membersPreview.slice(0, 6).map((member, index) => <Link key={member.userId} href={`/u/${encodeURIComponent(member.username)}`} aria-label={`View ${member.displayName || member.username}'s profile`} className={`rounded-full border-2 border-background ${index ? '-ml-2' : ''}`}>
+                  <Avatar className="h-8 w-8"><AvatarImage src={member.avatarUrl ?? undefined} /><AvatarFallback className="text-[10px]">{(member.displayName || member.username).slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
+                </Link>)}
                 {membersPreview.length === 0 && <span className="text-xs text-muted-foreground">Members will appear here.</span>}
               </div>
               <Link href={`/g/${groupView.slug || id}/members`}><Button variant="ghost" size="sm" className="px-0">View all members</Button></Link>
@@ -1072,7 +1072,7 @@ function GroupDetail({ id }: { id: number }) {
           <div className="space-y-3">
             <Input value={inviteSearch} onChange={event => setInviteSearch(event.target.value)} placeholder="Find someone by name or username" aria-label="Find someone to invite" />
             <div className="max-h-64 space-y-1 overflow-y-auto">
-              {inviteUsers.map(candidate => <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-muted/60"><div className="min-w-0"><p className="truncate text-sm font-medium">{candidate.displayName || candidate.username}</p><p className="truncate text-xs text-muted-foreground">@{candidate.username}</p></div><Button size="sm" disabled={isInviting} onClick={() => void inviteMember(candidate.id)}>Invite</Button></div>)}
+              {inviteUsers.map(candidate => <div key={candidate.id} className="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-muted/60"><div className="min-w-0"><Link href={`/u/${encodeURIComponent(candidate.username)}`} className="block truncate text-sm font-medium hover:underline">{candidate.displayName || candidate.username}</Link><Link href={`/u/${encodeURIComponent(candidate.username)}`} className="block truncate text-xs text-muted-foreground hover:underline">@{candidate.username}</Link></div><Button size="sm" disabled={isInviting} onClick={() => void inviteMember(candidate.id)}>Invite</Button></div>)}
               {inviteSearch.trim().length >= 2 && inviteUsers.length === 0 && <p className="py-5 text-center text-sm text-muted-foreground">No matching members.</p>}
             </div>
             {groupView.privacy === 'private' && <div className="border-t border-border pt-3"><p className="mb-2 text-sm text-muted-foreground">Or create a single-use invite link that expires in seven days.</p><Button variant="outline" size="sm" onClick={() => void createGroupInvite()}><Copy className="mr-2 h-4 w-4" />Create invite link</Button></div>}

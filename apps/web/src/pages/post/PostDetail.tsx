@@ -87,7 +87,7 @@ function CuratingExperts({ postId }: { postId: number }) {
         {curators.map(c => (
           <Link
             key={c.id}
-            href={`/profile/${c.username}`}
+            href={`/u/${encodeURIComponent(c.username)}`}
             className="flex items-center gap-2 rounded-xl bg-card border border-border/60 px-3 py-2 hover:border-primary/40 transition-colors group"
           >
             <Avatar className="h-7 w-7 shrink-0">
@@ -234,7 +234,7 @@ function CommentNode({
   return (
     <div id={`comment-${comment.id}`} className={clsx(indentClass, depth > 0 && 'border-l-2 border-border/40 pl-4 mt-3')}>
       <div className="flex gap-3">
-        <Link href={`/profile/${comment.author.username}`}>
+        <Link href={`/u/${encodeURIComponent(comment.author.username)}`}>
           <Avatar className="h-8 w-8 shrink-0">
             <AvatarImage src={comment.author.avatarUrl || ''} />
             <AvatarFallback className="text-xs">{comment.author.displayName.substring(0, 2)}</AvatarFallback>
@@ -244,7 +244,7 @@ function CommentNode({
           <div className="bg-muted/30 border border-border/30 rounded-2xl rounded-tl-none p-3">
             <div className="flex items-baseline justify-between mb-1">
               <span className="flex items-center gap-1">
-                <Link href={`/profile/${comment.author.username}`} className="font-semibold text-xs hover:underline">
+                <Link href={`/u/${encodeURIComponent(comment.author.username)}`} className="font-semibold text-xs hover:underline">
                   {comment.author.displayName}
                 </Link>
                 {(comment.trustTier === 'trusted' || comment.author?.trustTier === 'trusted') && (
@@ -493,7 +493,7 @@ export default function PostDetail() {
           {post.title && <h1 className="text-4xl md:text-5xl font-serif font-bold text-foreground mb-6 leading-tight">{post.title}</h1>}
 
           <div className="flex items-center justify-between">
-            <Link href={`/profile/${post.author.username}`} className="flex items-center gap-4 group">
+            <Link href={`/u/${encodeURIComponent(post.author.username)}`} className="flex items-center gap-4 group">
               <Avatar className="h-12 w-12 border-2 border-transparent group-hover:border-primary transition-colors">
                 <AvatarImage src={post.author.avatarUrl || ''} />
                 <AvatarFallback>{post.author.displayName.substring(0, 2)}</AvatarFallback>
