@@ -57,6 +57,22 @@ describe("notify() - deduplication", () => {
     await notify({ userId: 5, actorId: 5, type: "like", message: "liked", postId: 10 });
     expect(mockDb.insert).not.toHaveBeenCalled();
   });
+
+  it("persists custom entity deep links", async () => {
+    const { notify } = await import("../features/notifications/notification.service");
+    const dbMod = await import("@workspace/db");
+    const mockDb = dbMod.db as unknown as { values: ReturnType<typeof vi.fn> };
+
+    await notify({
+      userId: 9,
+      type: "system",
+      title: "New opportunity application",
+      message: "Someone applied to your opportunity.",
+      url: "/opportunities/42",
+    });
+
+    expect(mockDb.values).toHaveBeenCalledWith(expect.objectContaining({ url: "/opportunities/42" }));
+  });
 });
 
 describe("official notices", () => {

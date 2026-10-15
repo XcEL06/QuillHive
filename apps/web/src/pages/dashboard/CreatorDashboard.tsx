@@ -321,11 +321,6 @@ export default function CreatorDashboard() {
               const nextIdx = MILESTONES.findIndex(m => metricValue(m.metric) < m.threshold);
               const nextMilestone = nextIdx >= 0 ? MILESTONES[nextIdx] : null;
 
-              const joinedAt = user?.createdAt ? new Date(user.createdAt) : null;
-              const dayNumber = joinedAt
-                ? Math.max(1, Math.floor((Date.now() - joinedAt.getTime()) / 86400000) + 1)
-                : null;
-
               const motivationalMsg = completedCount === 0
                 ? "Post your first piece and start your journey."
                 : completedCount < 4
@@ -354,11 +349,6 @@ export default function CreatorDashboard() {
                         <Flag className="w-4 h-4" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        {dayNumber && (
-                          <p className="text-xs font-semibold text-foreground">
-                            {t("dashboard.dayOfJourney", "Day {{n}} of your journey").replace("{{n}}", String(dayNumber))}
-                          </p>
-                        )}
                         <p className="text-xs text-muted-foreground">{motivationalMsg}</p>
                       </div>
                       <div className="shrink-0 text-right">

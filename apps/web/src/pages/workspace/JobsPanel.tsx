@@ -294,7 +294,7 @@ export function JobsPanel() {
                 <p className="text-xs text-muted-foreground mt-1">
                   Posted by {job.author.displayName} · Trust: {j.author.trustTier ?? 'new'}
                   {j.author.trustTier === 'new' && (
-                    <span className="ml-2 font-medium text-amber-500">· New account — verify before paying anything</span>
+                    <span className="ml-2 font-medium text-amber-500">· New trust profile — verify before paying anything</span>
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{job.description}</p>

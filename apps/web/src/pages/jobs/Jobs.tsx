@@ -368,7 +368,7 @@ export default function Jobs() {
                       <p className="text-xs text-muted-foreground mt-1">
                         Posted by <Link href={`/profile/${job.author.username}`} className="text-foreground hover:underline font-medium">{job.author.displayName}</Link> · Trust: {j.author.trustTier ?? 'new'}
                         {j.author.trustTier === 'new' && (
-                          <span className="ml-2 font-medium text-amber-500">· New account — verify before paying anything</span>
+                          <span className="ml-2 font-medium text-amber-500">· New trust profile — verify before paying anything</span>
                         )}
                       </p>
                     </div>

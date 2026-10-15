@@ -78,7 +78,7 @@ export function OpportunityShareDialog({
     try {
       let response: Response;
       if (destination === 'link') {
-        await copyTextToClipboard(`${window.location.origin}/jobs?opportunity=${opportunityId}`);
+        await copyTextToClipboard(`${window.location.origin}/opportunities/${opportunityId}`);
         toast({ title: 'Opportunity link copied' });
         setOpen(false);
         return;
@@ -100,11 +100,11 @@ export function OpportunityShareDialog({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             conversationId: started.conversationId,
-            content: `${title}\n${window.location.origin}/jobs?opportunity=${opportunityId}`,
+            content: `${title}\n${window.location.origin}/opportunities/${opportunityId}`,
           }),
         });
       } else {
-        const shareUrl = `${window.location.origin}/jobs?opportunity=${opportunityId}`;
+        const shareUrl = `${window.location.origin}/opportunities/${opportunityId}`;
         const prefix = caption.trim() ? `${caption.trim()} ` : '';
         const sparkContent = `${prefix}${title.slice(0, Math.max(0, 280 - prefix.length - shareUrl.length - 1))} ${shareUrl}`.slice(0, 280);
         response = await apiFetch('/api/posts', {
