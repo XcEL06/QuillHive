@@ -314,7 +314,6 @@ function GroupDetail({ id }: { id: number }) {
   const { data: postsData, isLoading: postsLoading, isError: postsError, refetch: refetchPosts } = useGetGroupPosts(id, { page: postsPage });
   const { token } = useAuthStore();
   const [myRole, setMyRole] = useState<GroupView['memberRole']>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState({ name: '', description: '', privacy: 'open', rules: '', coverUrl: '', iconUrl: '', isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false, announcementPolicy: 'admins' });
   const [composerType, setComposerType] = useState('discussion');
   const [postContent, setPostContent] = useState('');
@@ -353,7 +352,7 @@ function GroupDetail({ id }: { id: number }) {
   const { toast } = useToast();
 
   const editor = useEditor({
-    extensions: [StarterKit, Underline, Placeholder.configure({ placeholder: composerType === 'question' ? 'Add details (optional)...' : 'Start a useful conversation...' })],
+    extensions: [StarterKit, Underline, Placeholder.configure({ placeholder: composerType === 'question' ? 'Add details (optional)...' : 'Write something…' })],
     content: '',
     onUpdate: ({ editor: updatedEditor }) => setPostContent(updatedEditor.getHTML()),
     editorProps: { attributes: { class: 'min-h-32 px-3 py-2 text-sm focus:outline-none' } },
@@ -557,7 +556,6 @@ function GroupDetail({ id }: { id: number }) {
     const res = await apiFetch(`/api/groups/${id}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, rules: settings.rules.split('\n').map(rule => rule.trim()).filter(Boolean).slice(0, 5) }) });
     if (!res.ok) return toast({ title: 'Could not update group settings', variant: 'destructive' });
     toast({ title: 'Group settings updated' });
-    setSettingsOpen(false);
     void refetch();
   };
 
@@ -713,6 +711,9 @@ function GroupDetail({ id }: { id: number }) {
 
   const groupView = group as GroupView;
   const canReviewJoinRequests = myRole === 'owner' || myRole === 'admin';
+  const canManageGroup = myRole === 'owner' || myRole === 'admin' || myRole === 'moderator' || user?.role === 'super_admin';
+  const isSettingsView = ['settings', 'pending', 'join-requests', 'reports'].includes(activeTab);
+  const primaryTab = isSettingsView ? 'settings' : activeTab;
   const hasMorePosts = (postsPage * (postsData?.limit ?? 20)) < (postsData?.total ?? 0);
   if (!user && (groupView.privacy === 'private' || groupView.type === 'secret')) {
     return <AppLayout publicPage>
@@ -825,29 +826,29 @@ function GroupDetail({ id }: { id: number }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Community actions"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {group.isMember && <DropdownMenuItem onSelect={() => toggleJoin({ id })}><LogOut className="mr-2 h-4 w-4" />Leave community</DropdownMenuItem>}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => setReportOpen(true)}>Report community</DropdownMenuItem>
+              {canManageGroup && <DropdownMenuItem onSelect={() => setActiveTab('settings')}><Settings className="mr-2 h-4 w-4" />Group settings</DropdownMenuItem>}
+              {group.isMember && <DropdownMenuItem onSelect={() => toggleJoin({ id })}><LogOut className="mr-2 h-4 w-4" />Leave community</DropdownMenuItem>}
+              {myRole === 'owner' && <DropdownMenuItem onSelect={() => setLifecycleAction('delete')} className="text-destructive focus:text-destructive"><Trash2 className="mr-2 h-4 w-4" />Delete group</DropdownMenuItem>}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setReportOpen(true)}>Report community</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         </header>
 
-        <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,7fr)_minmax(260px,3fr)]">
+        <div className="mt-5">
           <main className="min-w-0">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={primaryTab} onValueChange={setActiveTab}>
               <TabsList className="mb-4 w-full justify-start overflow-x-auto">
-                <TabsTrigger value="feed">Feed</TabsTrigger>
+                <TabsTrigger value="feed">Community feed</TabsTrigger>
                 <TabsTrigger value="questions">Q&amp;A</TabsTrigger>
                 <TabsTrigger value="polls">Polls</TabsTrigger>
                 <TabsTrigger value="announcements">Announcements</TabsTrigger>
-                {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="pending">Pending{pendingPosts.length ? ` (${pendingPosts.length})` : ''}</TabsTrigger>}
-                {canReviewJoinRequests && <TabsTrigger value="join-requests">Join requests{joinRequests.length ? ` (${joinRequests.length})` : ''}</TabsTrigger>}
-                {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <TabsTrigger value="reports">Reports{moderationReports.length ? ` (${moderationReports.length})` : ''}</TabsTrigger>}
+                <TabsTrigger value="about">About</TabsTrigger>
+                {canManageGroup && <TabsTrigger value="settings">Settings</TabsTrigger>}
               </TabsList>
 
               {activeTab === 'feed' && <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">Community feed</h2>
                 <Select value={feedMode} onValueChange={setFeedMode}>
                   <SelectTrigger className="h-9 w-48"><SelectValue /></SelectTrigger>
                   <SelectContent><SelectItem value="recent">Recent</SelectItem><SelectItem value="top">Top · 7 days</SelectItem><SelectItem value="unanswered">Unanswered questions</SelectItem></SelectContent>
@@ -862,9 +863,32 @@ function GroupDetail({ id }: { id: number }) {
               </div>}
               {activeTab === 'polls' && <h2 className="mb-4 text-sm font-semibold">Active polls</h2>}
               {activeTab === 'announcements' && <h2 className="mb-4 text-sm font-semibold">Announcements</h2>}
-              {activeTab === 'pending' && <h2 className="mb-4 text-sm font-semibold">Posts awaiting review</h2>}
-              {activeTab === 'join-requests' && <h2 className="mb-4 text-sm font-semibold">People requesting to join</h2>}
-              {activeTab === 'reports' && <h2 className="mb-4 text-sm font-semibold">Reports for group moderators</h2>}
+              {isSettingsView && <section className="mb-5 space-y-4 rounded-lg border border-border/70 bg-card p-4">
+                <div>
+                  <h2 className="text-sm font-semibold">Group settings and moderation</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">Manage group details, membership, and community posts.</p>
+                </div>
+                <div className="flex flex-wrap gap-2 border-b border-border/70 pb-3">
+                  {myRole === 'owner' || myRole === 'admin' ? <Button size="sm" variant={activeTab === 'settings' ? 'secondary' : 'ghost'} onClick={() => setActiveTab('settings')}>Group settings</Button> : null}
+                  {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <Button size="sm" variant={activeTab === 'pending' ? 'secondary' : 'ghost'} onClick={() => setActiveTab('pending')}>Pending posts{pendingPosts.length ? ` (${pendingPosts.length})` : ''}</Button>}
+                  {canReviewJoinRequests && <Button size="sm" variant={activeTab === 'join-requests' ? 'secondary' : 'ghost'} onClick={() => setActiveTab('join-requests')}>Join requests{joinRequests.length ? ` (${joinRequests.length})` : ''}</Button>}
+                  {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <Button size="sm" variant={activeTab === 'reports' ? 'secondary' : 'ghost'} onClick={() => setActiveTab('reports')}>Reports{moderationReports.length ? ` (${moderationReports.length})` : ''}</Button>}
+                </div>
+                {activeTab === 'settings' && (myRole === 'admin' || myRole === 'owner') && <div className="space-y-3">
+                  <Input value={settings.name} onChange={e => setSettings(s => ({ ...s, name: e.target.value }))} placeholder="Group name" />
+                  <Textarea maxLength={280} value={settings.description} onChange={e => setSettings(s => ({ ...s, description: e.target.value }))} placeholder="Description, up to 280 characters" />
+                  <div><Label>Group privacy</Label><Select value={settings.privacy} onValueChange={privacy => setSettings(s => ({ ...s, privacy }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="private">Private</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-muted-foreground">{settings.privacy === 'open' ? 'Anyone can find and join immediately.' : settings.privacy === 'public' ? 'Anyone can find the group and request to join; moderators approve requests.' : 'Only people with a valid invite can join.'}</p></div>
+                  <Textarea value={settings.rules} onChange={e => setSettings(s => ({ ...s, rules: e.target.value }))} placeholder="Up to five rules, one per line" />
+                  <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.isAnnouncementOnly} onChange={e => setSettings(s => ({ ...s, isAnnouncementOnly: e.target.checked }))} />Announcement-only</label>
+                  <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalFirstThree} onChange={e => setSettings(s => ({ ...s, requireApprovalFirstThree: e.target.checked, requireApprovalAll: false }))} />Require approval for each member's first 3 posts</label>
+                  <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalAll} onChange={e => setSettings(s => ({ ...s, requireApprovalAll: e.target.checked, requireApprovalFirstThree: false }))} />Require approval for all posts</label>
+                  <label className="flex items-center justify-between gap-3 text-xs"><span>Who can post announcements</span><Select value={settings.announcementPolicy} onValueChange={announcementPolicy => setSettings(s => ({ ...s, announcementPolicy }))}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="owner">Owner only</SelectItem><SelectItem value="admins">Admins</SelectItem></SelectContent></Select></label>
+                  <ImageUploadField value={settings.iconUrl} onChange={iconUrl => setSettings(s => ({ ...s, iconUrl }))} category="group" label="Change group icon" previewClassName="h-20 w-20" />
+                  <ImageUploadField value={settings.coverUrl} onChange={coverUrl => setSettings(s => ({ ...s, coverUrl }))} category="group" label="Change cover image" />
+                  <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void saveSettings()}>Save settings</Button><Button size="sm" variant="outline" onClick={() => setLifecycleAction('archive')}>Archive group</Button><Button size="sm" variant="destructive" onClick={() => setLifecycleAction('delete')}>Delete group</Button></div>
+                </div>}
+                {activeTab === 'settings' && user?.role === 'super_admin' && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(groupView.features?.eventsEnabled)} onChange={e => void toggleEvents(e.target.checked)} />Enable group events</label>}
+              </section>}
 
               {activeTab === 'feed' && featuredAnnouncements.length > 0 && <section aria-label="Featured announcements" className="mb-5 border-y border-amber-500/40 bg-amber-500/5 py-3">
                 <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-amber-700 dark:text-amber-300"><Megaphone className="h-4 w-4" />Featured</div>
@@ -879,7 +903,7 @@ function GroupDetail({ id }: { id: number }) {
               {activeTab === 'feed' && <PinnedPosts groupId={id} myRole={myRole ?? null} refreshKey={pinnedRefreshKey} />}
 
               {activeTab === 'feed' && group.isMember && <section className="mb-5 space-y-3 rounded-lg border border-border/70 bg-card p-4">
-                <h2 className="text-sm font-semibold">Add to the conversation</h2>
+                <h2 className="text-sm font-semibold">Write something…</h2>
                 <Tabs value={composerType} onValueChange={setComposerType}>
                   <TabsList className="w-full justify-start overflow-x-auto">
                     <TabsTrigger value="discussion">Discussion</TabsTrigger>
@@ -920,7 +944,7 @@ function GroupDetail({ id }: { id: number }) {
                 <Button onClick={() => void submitGroupPost()} disabled={isPosting || isUploadingImages || (composerType === 'poll' ? !pollQuestion.trim() || pollOptions.filter(option => option.trim()).length < 2 : composerType === 'question' ? !postTitle.trim() : !editor?.getText().trim())} className="gap-2"><Send className="h-4 w-4" />{isPosting ? 'Publishing...' : 'Publish'}</Button>
               </section>}
 
-              {activeTab === 'join-requests' ? joinRequestsLoading ? <div className="space-y-3">{Array.from({ length: 2 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-lg" />)}</div> : <div className="divide-y divide-border border-y">
+              {activeTab === 'settings' || activeTab === 'about' ? null : activeTab === 'join-requests' ? joinRequestsLoading ? <div className="space-y-3">{Array.from({ length: 2 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-lg" />)}</div> : <div className="divide-y divide-border border-y">
                 {joinRequests.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No pending join requests.</p> : joinRequests.map(request => <article key={request.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
                   <div className="flex min-w-0 items-center gap-3">
                     <Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
@@ -943,8 +967,7 @@ function GroupDetail({ id }: { id: number }) {
               </>}
             </Tabs>
           </main>
-
-          <aside className="min-w-0 space-y-4 lg:sticky lg:top-4 lg:self-start">
+          {activeTab === 'about' && <section className="mt-2 grid gap-6 md:grid-cols-2">
             <section className="space-y-3 border-b border-border/70 pb-4">
               <h2 className="text-sm font-semibold">About</h2>
               <p className="text-sm leading-relaxed text-muted-foreground">{group.description || 'A community for shared interests and useful conversations.'}</p>
@@ -977,25 +1000,7 @@ function GroupDetail({ id }: { id: number }) {
               </div>)}
               {allGroupPosts.every(post => post.groupDetails?.type !== 'opportunity_reshare') && <p className="text-xs text-muted-foreground">No opportunities reshared yet.</p>}
             </section>
-
-            {(myRole === 'admin' || myRole === 'owner') && <details open={settingsOpen} onToggle={event => setSettingsOpen((event.currentTarget as HTMLDetailsElement).open)} className="border-b border-border/70 pb-4">
-              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold"><Settings className="h-4 w-4" />Group settings</summary>
-              <div className="mt-3 space-y-3">
-                <Input value={settings.name} onChange={e => setSettings(s => ({ ...s, name: e.target.value }))} placeholder="Group name" />
-                <Textarea maxLength={280} value={settings.description} onChange={e => setSettings(s => ({ ...s, description: e.target.value }))} placeholder="Description, up to 280 characters" />
-                <div><Label>Group privacy</Label><Select value={settings.privacy} onValueChange={privacy => setSettings(s => ({ ...s, privacy }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="private">Private</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-muted-foreground">{settings.privacy === 'open' ? 'Anyone can find and join immediately.' : settings.privacy === 'public' ? 'Anyone can find the group and request to join; moderators approve requests.' : 'Only people with a valid invite can join.'}</p></div>
-                <Textarea value={settings.rules} onChange={e => setSettings(s => ({ ...s, rules: e.target.value }))} placeholder="Up to five rules, one per line" />
-                <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.isAnnouncementOnly} onChange={e => setSettings(s => ({ ...s, isAnnouncementOnly: e.target.checked }))} />Announcement-only</label>
-                <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalFirstThree} onChange={e => setSettings(s => ({ ...s, requireApprovalFirstThree: e.target.checked, requireApprovalAll: false }))} />Require approval for each member's first 3 posts</label>
-                <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalAll} onChange={e => setSettings(s => ({ ...s, requireApprovalAll: e.target.checked, requireApprovalFirstThree: false }))} />Require approval for all posts</label>
-                <label className="flex items-center justify-between gap-3 text-xs"><span>Who can post announcements</span><Select value={settings.announcementPolicy} onValueChange={announcementPolicy => setSettings(s => ({ ...s, announcementPolicy }))}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="owner">Owner only</SelectItem><SelectItem value="admins">Admins</SelectItem></SelectContent></Select></label>
-                <ImageUploadField value={settings.iconUrl} onChange={iconUrl => setSettings(s => ({ ...s, iconUrl }))} category="group" label="Change group icon" previewClassName="h-20 w-20" />
-                <ImageUploadField value={settings.coverUrl} onChange={coverUrl => setSettings(s => ({ ...s, coverUrl }))} category="group" label="Change cover image" />
-                <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void saveSettings()}>Save settings</Button><Button size="sm" variant="outline" onClick={() => setLifecycleAction('archive')}>Archive group</Button><Button size="sm" variant="destructive" onClick={() => setLifecycleAction('delete')}>Delete group</Button></div>
-              </div>
-            </details>}
-            {user?.role === 'super_admin' && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={Boolean(groupView.features?.eventsEnabled)} onChange={e => void toggleEvents(e.target.checked)} />Enable group events</label>}
-          </aside>
+          </section>}
         </div>
       </div>
 
