@@ -11,7 +11,7 @@ import {
   groupPostDetailsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, notInArray, sql, isNull, gte, lte, gt, or, ne } from "drizzle-orm";
-import { enrichPost } from "../profiles/profile.service";
+import { enrichPost, getUserWithCounts } from "../profiles/profile.service";
 import { recordPostView } from "../analytics/analytics.service";
 import { updateUserTrustScoreSafe } from "../trust/trust.service";
 import { getCache, setCache, deleteCachePattern } from "../../lib/cache";
@@ -856,12 +856,14 @@ export const replyToComment = async (req: Request, res: Response) => {
     type: "reply",
     message: "replied to your comment",
     postId: parent.postId,
+    url: `/post/${parent.postId}#comment-${commentId}`,
     digestGroup: `reply:${commentId}`,
   });
   return res.status(201).json(reply);
 };
 
 export const getCommentReplies = async (req: Request, res: Response) => {
+  const viewerId = getViewerId(req);
   const commentId = parseInt(req.params.id);
   if (isNaN(commentId)) return res.status(400).json({ error: "Invalid comment id" });
 
@@ -872,7 +874,11 @@ export const getCommentReplies = async (req: Request, res: Response) => {
     .orderBy(desc(commentsTable.createdAt))
     .limit(50);
 
-  return res.json(replies);
+  const enriched = await Promise.all(replies.map(async reply => ({
+    ...reply,
+    author: await getUserWithCounts(reply.authorId, viewerId),
+  })));
+  return res.json(enriched);
 };
 
 export const likeComment = async (req: Request, res: Response) => {
@@ -913,6 +919,7 @@ export const likeComment = async (req: Request, res: Response) => {
       type: "comment_like",
       message: "liked your comment",
       postId: comment.postId,
+      url: `/post/${comment.postId}#comment-${commentId}`,
       digestGroup: `clike:${commentId}`,
     });
   }

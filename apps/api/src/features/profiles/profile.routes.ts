@@ -39,6 +39,13 @@ const verifyEmailSchema = z.object({
 const profileSchema = z.object({
   username: z.string().min(3).max(32).regex(/^[a-zA-Z0-9_]+$/).optional(),
   displayName: z.string().min(1).max(120).optional(),
+  dateOfBirth: z.string().refine((value) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return Number.isFinite(parsed.getTime())
+      && parsed.toISOString().slice(0, 10) === value
+      && parsed <= new Date(new Date().toISOString().slice(0, 10));
+  }, "Enter a valid date of birth that is not in the future").nullable().optional(),
   bio: z.string().max(1000).nullable().optional(),
   headline: z.string().max(200).nullable().optional(),
   avatarUrl: z.string().nullable().optional(),

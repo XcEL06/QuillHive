@@ -31,6 +31,7 @@ const DEFAULT_PREFS: Record<string, { inApp: boolean; push: boolean; email: bool
   share: { inApp: true, push: false, email: false },
   highlight: { inApp: true, push: true, email: false },
   system: { inApp: true, push: true, email: true },
+  birthday: { inApp: true, push: false, email: false },
   admin_action: { inApp: true, push: true, email: true },
   group_invite: { inApp: true, push: true, email: true },
   milestone: { inApp: true, push: true, email: true },

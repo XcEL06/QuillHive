@@ -89,6 +89,7 @@ async function _getUserWithCounts(userId: number, viewerId: number | null) {
     "lastKnownIPHash",
     "lastKnownCountry",
     "lastKnownTimezone",
+    "dateOfBirth",
   ] as const) {
     delete (safeUser as Partial<typeof user>)[field];
   }
@@ -99,6 +100,7 @@ async function _getUserWithCounts(userId: number, viewerId: number | null) {
   }
   return {
     ...safeUser,
+    ...(viewerId === userId ? { dateOfBirth: user.dateOfBirth } : {}),
     followersCount: followersResult?.count ?? 0,
     followingCount: followingResult?.count ?? 0,
     postsCount: postsResult?.count ?? 0,

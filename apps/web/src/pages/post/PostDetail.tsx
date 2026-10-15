@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useRoute, Link } from 'wouter';
 import { useGetPost, useGetPostComments, useCreateComment, useLikePost } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -126,11 +126,15 @@ function CommentNode({
   postId,
   depth = 0,
   onReplyPosted,
+  targetCommentId,
+  targetAncestors,
 }: {
   comment: CommentWithReplies;
   postId: number;
   depth?: number;
   onReplyPosted: () => void;
+  targetCommentId: number | null;
+  targetAncestors: ReadonlySet<number>;
 }) {
   const { user } = useAuthStore();
   const { toast } = useToast();
@@ -140,12 +144,13 @@ function CommentNode({
   const [isReplying, setIsReplying] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(comment.likeCount ?? 0);
-  const [showReplies, setShowReplies] = useState(depth < 2);
+  const [showReplies, setShowReplies] = useState(depth < 2 || targetAncestors.has(comment.id));
   const [replies, setReplies] = useState<CommentWithReplies[]>(
     Array.isArray(comment.replies) ? comment.replies : []
   );
   const [loadingReplies, setLoadingReplies] = useState(false);
   const [repliesLoaded, setRepliesLoaded] = useState(Array.isArray(comment.replies));
+  const targetLoadStarted = useRef(false);
 
   const loadReplies = async () => {
     if (repliesLoaded) { setShowReplies(true); return; }
@@ -154,16 +159,31 @@ function CommentNode({
       const res = await fetch(`/api/comments/${comment.id}/replies`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
+      if (!res.ok) throw new Error('Could not load replies');
       const data = await res.json();
       setReplies(Array.isArray(data) ? data : []);
       setRepliesLoaded(true);
       setShowReplies(true);
     } catch {
+      targetLoadStarted.current = false;
+      setShowReplies(false);
       toast({ title: 'Failed to load replies', variant: 'destructive' });
     } finally {
       setLoadingReplies(false);
     }
   };
+
+  useEffect(() => {
+    if (targetAncestors.has(comment.id) && !repliesLoaded && !targetLoadStarted.current) {
+      targetLoadStarted.current = true;
+      void loadReplies();
+    }
+  }, [comment.id, repliesLoaded, targetAncestors]);
+
+  useEffect(() => {
+    if (comment.id !== targetCommentId) return;
+    document.getElementById(`comment-${comment.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [comment.id, targetCommentId]);
 
   const handleLike = async () => {
     try {
@@ -212,7 +232,7 @@ function CommentNode({
   const hasReplies = (comment.replyCount ?? 0) > 0 || replies.length > 0;
 
   return (
-    <div className={clsx(indentClass, depth > 0 && 'border-l-2 border-border/40 pl-4 mt-3')}>
+    <div id={`comment-${comment.id}`} className={clsx(indentClass, depth > 0 && 'border-l-2 border-border/40 pl-4 mt-3')}>
       <div className="flex gap-3">
         <Link href={`/profile/${comment.author.username}`}>
           <Avatar className="h-8 w-8 shrink-0">
@@ -305,6 +325,8 @@ function CommentNode({
               postId={postId}
               depth={depth + 1}
               onReplyPosted={onReplyPosted}
+              targetCommentId={targetCommentId}
+              targetAncestors={targetAncestors}
             />
           ))}
         </div>
@@ -336,6 +358,19 @@ export default function PostDetail() {
   const progress = useReadingProgress(postId, { enabled: !!post });
   useRecordRead(post ? postId : null, !!user && !!post);
   const { data: comments, isLoading: isLoadingComments } = useGetPostComments(postId);
+  const commentTarget = /^#comment-(\d+)$/.exec(window.location.hash);
+  const targetCommentId = commentTarget ? Number(commentTarget[1]) : null;
+  const targetAncestors = useMemo(() => {
+    const allComments = Array.isArray(comments) ? comments as CommentWithReplies[] : [];
+    const ancestors = new Set<number>();
+    let current = allComments.find(comment => comment.id === targetCommentId);
+    while (current?.parentCommentId) {
+      const parentId = current.parentCommentId;
+      ancestors.add(parentId);
+      current = allComments.find(comment => comment.id === parentId);
+    }
+    return ancestors;
+  }, [comments, targetCommentId]);
 
   useEffect(() => {
     const sessionId = new URLSearchParams(window.location.search).get('stripe_session_id');
@@ -679,6 +714,8 @@ export default function PostDetail() {
                   postId={postId}
                   depth={0}
                   onReplyPosted={handleReplyPosted}
+                  targetCommentId={targetCommentId}
+                  targetAncestors={targetAncestors}
                 />
               ))
             )}

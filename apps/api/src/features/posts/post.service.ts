@@ -872,6 +872,7 @@ export async function createComment(postId: number, authorId: number, content: s
         type: "comment",
         actorId: authorId,
         postId,
+        url: `/post/${postId}#comment-${comment.id}`,
         message: `${author?.displayName} commented on your ${post.type === "spark" ? "spark" : "post"}`,
         isRead: false,
       })

@@ -387,7 +387,7 @@ export const me = async (req: Request, res: Response) => {
   if (!auth?.startsWith("Bearer ")) return res.status(401).json({ error: "Unauthorized" });
   const userId = getSessionUserId(auth.slice(7));
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
-  const userWithCounts = await getUserWithCounts(userId, null);
+  const userWithCounts = await getUserWithCounts(userId, userId);
   if (!userWithCounts) return res.status(404).json({ error: "User not found" });
   return res.json(userWithCounts);
 };
@@ -967,7 +967,7 @@ export const updateMyProfile = async (req: Request, res: Response) => {
     "username", "displayName", "bio", "headline", "avatarUrl", "coverUrl", "website", "location",
     "country", "facebook", "linkedin", "twitter", "instagram",
     "profileVisibility", "showEmail", "showWebsite", "showLocation",
-    "identityType",
+    "identityType", "dateOfBirth",
   ];
   const updates: Record<string, unknown> = { updatedAt: new Date() };
   for (const field of fields) {
@@ -1000,7 +1000,7 @@ export const updateMyProfile = async (req: Request, res: Response) => {
       count: Object.keys(updates).filter((key) => key !== "updatedAt").length,
     },
   });
-  const user = await getUserWithCounts(viewerId, null);
+  const user = await getUserWithCounts(viewerId, viewerId);
   return res.json(user);
 };
 

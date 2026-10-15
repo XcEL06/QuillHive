@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { postsTable, usersTable, boostRequestsTable } from "@workspace/db/schema";
-import { and, eq, lte, isNotNull, lt, isNull, or } from "drizzle-orm";
+import { and, eq, lte, isNotNull, lt, isNull, or, inArray, sql } from "drizzle-orm";
 import { logger } from "../../lib/logger";
 import { runScheduledJob } from "./scheduledJobRunner";
 import { addJob } from "../../lib/queue/queue";
@@ -111,6 +111,74 @@ export async function expireOldSparks(): Promise<void> {
   }
 }
 
+export async function sendBirthdayNotifications(now = new Date()): Promise<void> {
+  try {
+    const monthDays = [-1, 0, 1].map((offset) => {
+      const date = new Date(now);
+      date.setUTCDate(date.getUTCDate() + offset);
+      return date.toISOString().slice(5, 10);
+    });
+    const celebrants = await db
+      .select({
+        id: usersTable.id,
+        displayName: usersTable.displayName,
+        username: usersTable.username,
+        dateOfBirth: usersTable.dateOfBirth,
+        timezone: usersTable.lastKnownTimezone,
+      })
+      .from(usersTable)
+      .where(and(
+        eq(usersTable.isDeleted, false),
+        eq(usersTable.isBanned, false),
+        isNotNull(usersTable.dateOfBirth),
+        inArray(sql<string>`to_char(${usersTable.dateOfBirth}, 'MM-DD')`, monthDays),
+      ));
+
+    const dateParts = (date: Date, timezone: string) => {
+      const parts = new Intl.DateTimeFormat("en", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(date);
+      return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    };
+
+    for (const celebrant of celebrants) {
+      if (!celebrant.dateOfBirth) continue;
+      let localDate: Record<string, string>;
+      try {
+        localDate = dateParts(now, celebrant.timezone || "UTC");
+      } catch (err) {
+        logger.warn({ err, userId: celebrant.id, timezone: celebrant.timezone }, "Invalid timezone for birthday notification; using UTC");
+        localDate = dateParts(now, "UTC");
+      }
+      if (`${localDate.month}-${localDate.day}` !== celebrant.dateOfBirth.slice(5, 10)) continue;
+
+      const name = celebrant.displayName || celebrant.username;
+      const year = localDate.year;
+      await notifyBirthday(celebrant.id, name, year);
+    }
+    logger.info({ count: celebrants.length }, "Birthday notifications processed");
+  } catch (err) {
+    logger.warn({ err }, "sendBirthdayNotifications attempt failed");
+    throw err;
+  }
+}
+
+async function notifyBirthday(userId: number, name: string, year: string): Promise<void> {
+  const { notifyStrict } = await import("../notifications/notification.service");
+  await notifyStrict({
+    userId,
+    actorId: 0,
+    type: "birthday",
+    title: `Happy birthday, ${name}!`,
+    message: `Happy birthday, ${name}!`,
+    url: "/notifications",
+    digestGroup: `birthday:${year}`,
+  });
+}
+
 export async function sendWeeklyDigests(): Promise<void> {
   try {
     const cooldownMs = (await import("../email/emailSendGuard")).getWeeklyDigestIntervalMs();
@@ -147,6 +215,7 @@ let lastDormantNudge = 0;
 let lastChallengeReminder = 0;
 let lastProfileViewNotif = 0;
 let lastSparkExpiry = 0;
+let lastBirthdayRunHour = -1;
 
 async function sendDraftReminders(): Promise<void> {
   try {
@@ -837,6 +906,11 @@ export function startScheduling(): void {
     if (now - lastProfileViewNotif > 7 * 24 * 60 * 60 * 1000) {
       lastProfileViewNotif = now;
       scheduleJob("sendProfileViewNotifications", sendProfileViewNotifications);
+    }
+    const birthdayRunHour = Math.floor(now / (60 * 60 * 1000));
+    if (birthdayRunHour !== lastBirthdayRunHour) {
+      lastBirthdayRunHour = birthdayRunHour;
+      scheduleJob("sendBirthdayNotifications", sendBirthdayNotifications);
     }
   }, 60_000);
   scheduleJob("publishDuePosts", publishDuePosts);

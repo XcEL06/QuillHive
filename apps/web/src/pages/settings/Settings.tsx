@@ -77,6 +77,7 @@ export default function Settings() {
   const [profileForm, setProfileForm] = useState({
     username: user?.username || '',
     displayName: user?.displayName || '',
+    dateOfBirth: (user as any)?.dateOfBirth || '',
     bio: user?.bio || '',
     headline: (user as any)?.headline || '',
     identityType: (user as any)?.identityType || null,
@@ -746,6 +747,18 @@ export default function Settings() {
                   {/* Basic info */}
                   <div className="space-y-4">
                     <h3 className="font-medium text-sm text-muted-foreground uppercase tracking-wider">{t('settings.basicInformation')}</h3>
+                    <div>
+                      <Label htmlFor="profile-date-of-birth">Birthday</Label>
+                      <Input
+                        id="profile-date-of-birth"
+                        type="date"
+                        value={profileForm.dateOfBirth}
+                        max={new Date().toISOString().slice(0, 10)}
+                        onChange={event => setProfileForm(form => ({ ...form, dateOfBirth: event.target.value }))}
+                        className="mt-1.5 max-w-xs rounded-xl"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">Optional. Used only to send you a private QuillHive birthday notification; it is never shown on your public profile.</p>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div><Label>{t('settings.displayNameLabel')}</Label><Input value={profileForm.displayName} onChange={e => setProfileForm(f => ({ ...f, displayName: e.target.value }))} className="mt-1.5 rounded-xl" placeholder={t('settings.displayNamePlaceholder')} /></div>
                       <div>
@@ -804,7 +817,7 @@ export default function Settings() {
 
                   <Separator />
 
-                  <Button onClick={() => updateProfile({ data: profileForm as any })} disabled={isSaving} className="rounded-xl">
+                  <Button onClick={() => updateProfile({ data: { ...profileForm, dateOfBirth: profileForm.dateOfBirth || null } as any })} disabled={isSaving} className="rounded-xl">
                     {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} {t('settings.saveProfile')}
                   </Button>
                 </div>

@@ -18,6 +18,7 @@ export type NotificationType =
   | "share"
   | "highlight"
   | "system"
+  | "birthday"
   | "admin_action"
   | "admin_alert"
   | "official_notice"
@@ -72,6 +73,7 @@ const NOTIFICATION_CATEGORY_MAP: Record<NotificationType, string> = {
   admin_alert: "admin",
   official_notice: "admin",
   system: "system",
+  birthday: "system",
   group_invite: "social",
   group_announcement: "social",
   milestone: "growth",
@@ -103,6 +105,7 @@ const NOTIFICATION_TITLE_MAP: Partial<Record<NotificationType, string>> = {
   digest: "Your QuillHive recap",
   group_announcement: "A new group announcement",
   system: "A QuillHive update",
+  birthday: "A QuillHive birthday",
   official_notice: "A message from the QuillHive team",
   admin_alert: "Job listing needs review",
 };
@@ -187,22 +190,35 @@ async function createNotification(
     }
 
     if (!notif) {
-      [notif] = await db
-        .insert(notificationsTable)
-        .values({
-          userId: opts.userId,
-          actorId,
-          type: opts.type,
-          message: opts.message,
-          title: opts.title ?? null,
-          postId: opts.postId ?? null,
-          groupId: opts.groupId ?? null,
-          url: opts.url ?? null,
-          category,
-          digestGroup: opts.digestGroup ?? null,
-          isRead: false,
-        })
-        .returning();
+      const values = {
+        userId: opts.userId,
+        actorId,
+        type: opts.type,
+        message: opts.message,
+        title: opts.title ?? null,
+        postId: opts.postId ?? null,
+        groupId: opts.groupId ?? null,
+        url: opts.url ?? null,
+        category,
+        digestGroup: opts.digestGroup ?? null,
+        isRead: false,
+      };
+      if (opts.type === "birthday") {
+        [notif] = await db
+          .insert(notificationsTable)
+          .values(values)
+          .onConflictDoNothing({
+            target: [notificationsTable.userId, notificationsTable.digestGroup],
+            where: eq(notificationsTable.type, "birthday"),
+          })
+          .returning();
+        if (!notif) return;
+      } else {
+        [notif] = await db
+          .insert(notificationsTable)
+          .values(values)
+          .returning();
+      }
     }
 
     // Check per-type user preferences before delivering
@@ -245,6 +261,13 @@ export async function notify(opts: NotifyOpts): Promise<void> {
     return;
   }
   return createNotification(opts);
+}
+
+export async function notifyStrict(opts: NotifyOpts): Promise<void> {
+  if ((opts as { type: string }).type === "official_notice") {
+    throw new Error("Official notices must use notifyOfficialNotice");
+  }
+  return createNotification(opts, { throwOnError: true });
 }
 
 /**
