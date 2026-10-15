@@ -99,7 +99,7 @@ export default function AdminOpportunities({ token, toast }: AdminProps) {
                   <p className="mt-1 text-xs text-muted-foreground">#{opportunity.id} · Creator #{opportunity.authorId} · <Timestamp value={opportunity.createdAt} mode="date" /></p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button asChild size="sm" variant="outline"><a href="/jobs" target="_blank" rel="noreferrer"><ExternalLink className="mr-1.5 h-3.5 w-3.5" />Open board</a></Button>
+                  <Button asChild size="sm" variant="outline"><a href={`/opportunities/${opportunity.id}`} target="_blank" rel="noreferrer" aria-label={`View ${opportunity.title} in a new tab`}><ExternalLink className="mr-1.5 h-3.5 w-3.5" />View</a></Button>
                   {!opportunity.isApproved && <Button size="sm" disabled={actingId === opportunity.id} onClick={() => void updateOpportunity(opportunity, "approve")}>Approve</Button>}
                   {(opportunity.isApproved || opportunity.isActive) && <Button size="sm" variant="destructive" disabled={actingId === opportunity.id} onClick={() => void updateOpportunity(opportunity, "reject")}>Reject</Button>}
                   {!opportunity.isFeatured && opportunity.isApproved && <Button size="sm" variant="outline" disabled={actingId === opportunity.id} onClick={() => void updateOpportunity(opportunity, "feature")}><Star className="mr-1.5 h-3.5 w-3.5" />Feature</Button>}
