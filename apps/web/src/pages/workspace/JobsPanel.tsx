@@ -181,10 +181,10 @@ export function JobsPanel() {
         </Tabs>
         {user && (
           <Link href="/jobs/post">
-            <Button aria-label="Post Opportunity" title="Post Opportunity" className="h-9 shrink-0 gap-1.5 px-3 text-sm">
+            <Button aria-label="Post a need" title="Post a need" className="h-9 shrink-0 gap-1.5 px-3 text-sm">
               <Plus className="w-4 h-4" />
-              <span className="sm:hidden">Post</span>
-              <span className="hidden sm:inline">Post Opportunity</span>
+              <span className="sm:hidden">Post a need</span>
+              <span className="hidden sm:inline">Post a need</span>
             </Button>
           </Link>
         )}

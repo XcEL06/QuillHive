@@ -62,7 +62,7 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
     <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
       {hasApplied ? <Badge variant="secondary">Applied</Badge> : closed ? <Badge variant="outline">Closed</Badge> : <>
       <div className="flex items-center">
-      <Button size={compact ? "sm" : "default"} className="gap-1 whitespace-normal rounded-r-none text-center leading-tight" onClick={() => void submit("apply")} disabled={sending}>
+      <Button size={compact ? "sm" : "default"} title="Apply if you can do this work." aria-label="Apply if you can do this work" className="gap-1 whitespace-normal rounded-r-none text-center leading-tight" onClick={() => void submit("apply")} disabled={sending}>
         <Send className="h-3.5 w-3.5" /> Apply
       </Button>
       <DropdownMenu>
@@ -78,6 +78,7 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
         </DropdownMenuContent>
       </DropdownMenu>
       </div>
+      <span className="basis-full text-[11px] text-muted-foreground">Apply if you can do this work.</span>
       </>}
       {externalHref && !closed && <a href={externalHref} target={externalHref.startsWith('http') ? '_blank' : undefined} rel="noopener noreferrer" className="text-[10px] text-muted-foreground underline">External application</a>}
     </div>

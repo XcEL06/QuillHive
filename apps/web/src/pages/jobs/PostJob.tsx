@@ -190,7 +190,7 @@ export default function PostJob() {
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
               <Briefcase className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-2xl font-bold font-serif">{editId ? 'Edit Opportunity' : 'Post Opportunity'}</h1>
+            <h1 className="text-2xl font-bold font-serif">{editId ? 'Edit Opportunity' : 'Post a need'}</h1>
           </div>
           <p className="text-muted-foreground ml-11 text-sm">
             Reach verified creators - ranked by skill endorsements, creator level, and published proof-of-work.
@@ -438,7 +438,7 @@ export default function PostJob() {
             disabled={isSubmitting || isLoadingEdit}
           >
             {isSubmitting || isLoadingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-            {isLoadingEdit ? 'Loading…' : isSubmitting ? 'Saving…' : editId ? 'Save Changes' : 'Post Opportunity'}
+            {isLoadingEdit ? 'Loading…' : isSubmitting ? 'Saving…' : editId ? 'Save Changes' : 'Post a need'}
           </Button>
         </form>
       </div>

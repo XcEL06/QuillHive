@@ -55,7 +55,7 @@ export default function Workspace() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight">Workspace</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Post an opportunity when you need help, find creators open to opportunities, or collaborate.
+            Post when you need someone. Open to opportunities when you want to be found. Apply when you can help.
           </p>
         </div>
 
