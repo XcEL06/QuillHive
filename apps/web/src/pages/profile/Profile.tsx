@@ -15,12 +15,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ToastAction } from '@/components/ui/toast';
 import { useToast } from '@/hooks/use-toast';
 import {
   MapPin, Link as LinkIcon, Calendar, UserPlus, UserCheck, Plus, Loader2, Handshake,
   Pencil, X, ExternalLink, Sparkles, Globe, Facebook, Linkedin, Twitter, Instagram,
-  MessageCircle, Zap, Camera, Share2,
+  MessageCircle, Zap, Camera, Share2, MoreHorizontal,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { apiFetch, apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
@@ -201,6 +202,7 @@ export default function Profile() {
 
   // Collaboration state
   const [isCollaborateOpen, setIsCollaborateOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [collaborateMsg, setCollaborateMsg] = useState('');
   const [isSendingCollab, setIsSendingCollab] = useState(false);
   const [isOpeningMessage, setIsOpeningMessage] = useState(false);
@@ -656,25 +658,37 @@ export default function Profile() {
             <div className="flex flex-col"><span className="text-xl font-bold text-foreground">{user.followingCount}</span><span className="text-sm text-muted-foreground">{t('profile.following', 'Following')}</span></div>
           </div>
         </div>
-        <div className="mb-6 flex flex-wrap items-center gap-2">
+        <div className="mb-6 flex w-full max-w-md items-center gap-2">
           {isMe ? (
-            <>
-              <Link href="/settings"><Button variant="outline" size="sm" className="rounded-lg border-border/80"><Pencil className="h-4 w-4" />{t('profile.editProfile', 'Edit Profile')}</Button></Link>
-              {creatorIncomeEnabled && <Button variant="outline" size="sm" onClick={openEditCreator} className="rounded-lg gap-1.5"><Sparkles className="h-4 w-4" />{t('profile.creatorProfile', 'Creator Profile')}</Button>}
-              <Link href="/inbox"><Button variant="outline" size="sm" className="rounded-lg gap-1.5"><Handshake className="h-4 w-4" />{t('profile.collabInbox', 'Collab Inbox')}</Button></Link>
-            </>
+            <Link href="/settings" className="min-w-0 flex-1">
+              <Button variant="outline" className="h-9 w-full rounded-lg border-border/80 px-3 text-sm"><Pencil className="h-4 w-4" />{t('profile.editProfile', 'Edit Profile')}</Button>
+            </Link>
           ) : (
             <>
-              {creatorIncomeEnabled && creatorProfile.isAvailableForHire && <Button onClick={handleHireMe} disabled={isOpeningMessage} aria-label={t('profile.inviteToCollaborate', 'Message about a project')} className="max-w-full rounded-lg gap-1.5"><Zap className="h-4 w-4" /><span className="max-w-[10rem] truncate sm:max-w-none">{t('profile.inviteToCollaborate', 'Message about a project')}</span></Button>}
-              {currentUser && <Button onClick={() => void openDirectMessage()} disabled={isOpeningMessage} variant="outline" size="sm" className="rounded-lg gap-1.5"><MessageCircle className="h-4 w-4" />{isOpeningMessage ? 'Opening…' : t('profile.message', 'Message')}</Button>}
-              <Button onClick={() => toggleFollow({ username })} disabled={isFollowing} aria-label={user.isFollowing ? t('profile.following', 'Following') : t('profile.follow', 'Follow')} className={`rounded-lg ${user.isFollowing ? 'bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground' : 'bg-primary text-primary-foreground'}`}>
+              <Button onClick={() => toggleFollow({ username })} disabled={isFollowing} aria-label={user.isFollowing ? t('profile.following', 'Following') : t('profile.follow', 'Follow')} className={`h-9 min-w-0 flex-1 rounded-lg px-3 text-sm ${user.isFollowing ? 'bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground' : 'bg-primary text-primary-foreground'}`}>
                 {user.isFollowing ? <><UserCheck className="mr-2 h-4 w-4" />{t('profile.following', 'Following')}</> : <><UserPlus className="mr-2 h-4 w-4" />{t('profile.follow', 'Follow')}</>}
               </Button>
-              <Button onClick={() => setIsCollaborateOpen(true)} variant="outline" size="sm" aria-label={t('profile.collaborate', 'Request collaboration')} className="rounded-lg gap-1.5"><Handshake className="h-4 w-4" /><span className="max-w-[9rem] truncate sm:max-w-none">{t('profile.collaborate', 'Request collaboration')}</span></Button>
-              <ReportDialog targetType="user" targetId={user.id} label="Report" />
+              {currentUser && <Button onClick={() => void openDirectMessage()} disabled={isOpeningMessage} variant="outline" className="h-9 min-w-0 flex-1 rounded-lg px-3 text-sm">
+                <MessageCircle className="h-4 w-4 shrink-0" /><span className="truncate">{isOpeningMessage ? 'Opening…' : t('profile.message', 'Message')}</span>
+              </Button>}
             </>
           )}
-          <Button variant="outline" size="sm" onClick={() => void shareProfile()} aria-label="Share profile" className="rounded-lg gap-1.5"><Share2 className="h-4 w-4" />Share profile</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button type="button" variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-lg" aria-label="More profile actions" title="More profile actions">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {!isMe && creatorIncomeEnabled && creatorProfile.isAvailableForHire && <DropdownMenuItem onSelect={handleHireMe}><Zap className="mr-2 h-4 w-4" />{t('profile.inviteToCollaborate', 'Message about a project')}</DropdownMenuItem>}
+              {!isMe && <DropdownMenuItem onSelect={() => setIsCollaborateOpen(true)}><Handshake className="mr-2 h-4 w-4" />{t('profile.collaborate', 'Request collaboration')}</DropdownMenuItem>}
+              {isMe && creatorIncomeEnabled && <DropdownMenuItem onSelect={openEditCreator}><Sparkles className="mr-2 h-4 w-4" />{t('profile.creatorProfile', 'Creator Profile')}</DropdownMenuItem>}
+              {isMe && <DropdownMenuItem asChild><Link href="/inbox"><Handshake className="mr-2 h-4 w-4" />{t('profile.collabInbox', 'Collab Inbox')}</Link></DropdownMenuItem>}
+              <DropdownMenuItem onSelect={() => void shareProfile()}><Share2 className="mr-2 h-4 w-4" />Share profile</DropdownMenuItem>
+              {!isMe && <><DropdownMenuSeparator /><DropdownMenuItem onSelect={() => setIsReportOpen(true)} className="text-destructive focus:text-destructive">Report</DropdownMenuItem></>}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {!isMe && <ReportDialog targetType="user" targetId={user.id} hideTrigger open={isReportOpen} onOpenChange={setIsReportOpen} />}
         </div>
 
         {/* Profile Tabs */}
