@@ -35,6 +35,40 @@ type Section = 'profile' | 'account' | 'security' | 'privacy' | 'experience' | '
 
 interface WorkEntry { id: number; title: string; organization: string; startYear: number; endYear?: number | null; description?: string | null; }
 interface EduEntry { id: number; school: string; degree: string; field?: string | null; startYear: number; endYear?: number | null; description?: string | null; }
+type NotifPrefs = Record<string, { inApp: boolean; push: boolean; email: boolean }>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isWorkEntries(value: unknown): value is WorkEntry[] {
+  return Array.isArray(value) && value.every((entry: unknown) =>
+    isRecord(entry)
+    && typeof entry.id === 'number'
+    && typeof entry.title === 'string'
+    && typeof entry.organization === 'string'
+    && typeof entry.startYear === 'number');
+}
+
+function isEducationEntries(value: unknown): value is EduEntry[] {
+  return Array.isArray(value) && value.every((entry: unknown) =>
+    isRecord(entry)
+    && typeof entry.id === 'number'
+    && typeof entry.school === 'string'
+    && typeof entry.degree === 'string'
+    && typeof entry.startYear === 'number');
+}
+
+function isNotifPrefs(value: unknown): value is NotifPrefs {
+  return isRecord(value)
+    && Object.values(value).every((preference) => {
+      if (!isRecord(preference)) return false;
+      const channels = preference;
+      return typeof channels.inApp === 'boolean'
+        && typeof channels.push === 'boolean'
+        && typeof channels.email === 'boolean';
+    });
+}
 
 const COUNTRIES = [
   'Afghanistan','Albania','Algeria','Andorra','Angola','Argentina','Armenia','Australia','Austria',
@@ -92,7 +126,6 @@ export default function Settings() {
     instagram: (user as any)?.instagram || '',
   });
 
-  type NotifPrefs = Record<string, { inApp: boolean; push: boolean; email: boolean }>;
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefs | null>(null);
   const [isLoadingNotifPrefs, setIsLoadingNotifPrefs] = useState(false);
   const [notifPrefsLoadFailed, setNotifPrefsLoadFailed] = useState(false);
@@ -117,9 +150,15 @@ export default function Settings() {
   const [educationHistory, setEducationHistory] = useState<EduEntry[]>([]);
   const [isLoadingWork, setIsLoadingWork] = useState(false);
   const [isLoadingEdu, setIsLoadingEdu] = useState(false);
+  const [workHistoryLoaded, setWorkHistoryLoaded] = useState(false);
+  const [educationLoaded, setEducationLoaded] = useState(false);
+  const [workHistoryLoadError, setWorkHistoryLoadError] = useState<string | null>(null);
+  const [educationLoadError, setEducationLoadError] = useState<string | null>(null);
 
   // Security / 2FA state
   const [twofaStatus, setTwofaStatus] = useState<{ enabled: boolean } | null>(null);
+  const [twofaStatusLoading, setTwofaStatusLoading] = useState(true);
+  const [twofaStatusLoadError, setTwofaStatusLoadError] = useState<string | null>(null);
   const [twofaSecret, setTwofaSecret] = useState<string | null>(null);
   const [twofaCode, setTwofaCode] = useState('');
   const [twofaBusy, setTwofaBusy] = useState(false);
@@ -157,13 +196,26 @@ export default function Settings() {
   type Passkey = { id: number; deviceName: string | null; createdAt: string; lastUsedAt: string | null };
   const [passkeys, setPasskeys] = useState<Passkey[]>([]);
   const [passkeysLoading, setPasskeysLoading] = useState(false);
+  const [passkeysLoadError, setPasskeysLoadError] = useState<string | null>(null);
   const [passkeyAdding, setPasskeyAdding] = useState(false);
 
   const fetch2faStatus = async () => {
+    setTwofaStatusLoading(true);
+    setTwofaStatusLoadError(null);
     try {
       const res = await fetch('/api/auth/2fa/status', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (res.ok) setTwofaStatus(await res.json());
-    } catch {}
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load two-factor authentication status.'));
+      const data = await res.json() as { enabled?: unknown };
+      if (typeof data.enabled !== 'boolean') throw new Error('The two-factor status response was invalid.');
+      setTwofaStatus({ enabled: data.enabled });
+    } catch (error) {
+      setTwofaStatus(null);
+      const message = error instanceof Error ? error.message : 'Could not load two-factor authentication status.';
+      setTwofaStatusLoadError(message);
+      toast({ title: message, variant: 'destructive' });
+    } finally {
+      setTwofaStatusLoading(false);
+    }
   };
 
   const fetchPrivacy = async () => {
@@ -171,8 +223,15 @@ export default function Settings() {
     setPrivacyLoadFailed(false);
     try {
       const res = await fetch('/api/users/me/privacy', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (!res.ok) throw new Error('Could not load your privacy settings.');
-      const data = await res.json();
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load your privacy settings.'));
+      const data = await res.json() as Partial<PrivacyPrefs>;
+      if (
+        !data
+        || typeof data.profileVisibility !== 'string'
+        || !['public', 'private', 'followers'].includes(data.profileVisibility)
+        || !['showEmail', 'showWebsite', 'showLocation', 'showPostsToEveryone', 'allowMessagesFromAnyone', 'showInSearch']
+          .every((key) => typeof data[key as keyof PrivacyPrefs] === 'boolean')
+      ) throw new Error('The privacy settings response was invalid.');
       setPrivacy((p) => ({ ...p, ...data }));
       setPrivacyLoaded(true);
     } catch (error) {
@@ -193,13 +252,13 @@ export default function Settings() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ [key]: value }),
       });
-      if (!res.ok) throw new Error('Save failed');
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not save your privacy settings.'));
       const data = await res.json();
       setPrivacy((p) => ({ ...p, ...data }));
       toast({ title: 'Privacy saved', description: 'Your visibility settings are up to date.' });
-    } catch {
+    } catch (error) {
       setPrivacy(previous);
-      toast({ title: t('settings.couldNotSavePrivacy'), variant: 'destructive' });
+      toast({ title: error instanceof Error ? error.message : t('settings.couldNotSavePrivacy'), variant: 'destructive' });
     } finally {
       setPrivacySaving(null);
     }
@@ -207,13 +266,18 @@ export default function Settings() {
 
   const fetchPasskeys = async () => {
     setPasskeysLoading(true);
+    setPasskeysLoadError(null);
     try {
       const res = await fetch('/api/auth/passkey', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (res.ok) {
-        const data = await res.json();
-        setPasskeys(Array.isArray(data?.passkeys) ? data.passkeys : []);
-      }
-    } catch {} finally {
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load passkeys.'));
+      const data = await res.json() as { passkeys?: unknown };
+      if (!Array.isArray(data.passkeys)) throw new Error('The passkey response was invalid.');
+      setPasskeys(data.passkeys);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not load passkeys.';
+      setPasskeysLoadError(message);
+      toast({ title: message, variant: 'destructive' });
+    } finally {
       setPasskeysLoading(false);
     }
   };
@@ -451,18 +515,36 @@ export default function Settings() {
 
   const fetchWorkHistory = async () => {
     setIsLoadingWork(true);
+    setWorkHistoryLoadError(null);
     try {
       const res = await fetch('/api/users/me/work-history', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (res.ok) setWorkHistory(await res.json());
-    } catch { } finally { setIsLoadingWork(false); }
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load work history.'));
+      const entries = await res.json() as unknown;
+      if (!isWorkEntries(entries)) throw new Error('The work history response was invalid.');
+      setWorkHistory(entries);
+      setWorkHistoryLoaded(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not load work history.';
+      setWorkHistoryLoadError(message);
+      toast({ title: message, variant: 'destructive' });
+    } finally { setIsLoadingWork(false); }
   };
 
   const fetchEducation = async () => {
     setIsLoadingEdu(true);
+    setEducationLoadError(null);
     try {
       const res = await fetch('/api/users/me/education', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (res.ok) setEducationHistory(await res.json());
-    } catch { } finally { setIsLoadingEdu(false); }
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load education history.'));
+      const entries = await res.json() as unknown;
+      if (!isEducationEntries(entries)) throw new Error('The education response was invalid.');
+      setEducationHistory(entries);
+      setEducationLoaded(true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not load education history.';
+      setEducationLoadError(message);
+      toast({ title: message, variant: 'destructive' });
+    } finally { setIsLoadingEdu(false); }
   };
 
   const loadNotifPrefs = async () => {
@@ -473,12 +555,15 @@ export default function Settings() {
       const res = await fetch('/api/notifications/preferences', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error('Could not load notification preferences');
-      const data = await res.json() as { preferences: Record<string, { inApp: boolean; push: boolean; email: boolean }> };
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load notification preferences.'));
+      const data = await res.json() as { preferences?: unknown };
+      if (!isNotifPrefs(data.preferences)) {
+        throw new Error('The notification preferences response was invalid.');
+      }
       setNotifPrefs(data.preferences);
-    } catch {
+    } catch (error) {
       setNotifPrefsLoadFailed(true);
-      toast({ title: 'Could not load notification preferences', variant: 'destructive' });
+      toast({ title: error instanceof Error ? error.message : 'Could not load notification preferences.', variant: 'destructive' });
     } finally { setIsLoadingNotifPrefs(false); }
   };
 
@@ -493,11 +578,11 @@ export default function Settings() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ [type]: updated }),
       });
-      if (!res.ok) throw new Error('Could not save notification preferences');
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not save notification preferences.'));
       toast({ title: 'Notification preference saved' });
-    } catch {
+    } catch (error) {
       setNotifPrefs(prev => prev ? { ...prev, [type]: previous } : prev);
-      toast({ title: 'Could not save notification preferences', variant: 'destructive' });
+      toast({ title: error instanceof Error ? error.message : 'Could not save notification preferences.', variant: 'destructive' });
     } finally { setIsSavingNotifPref(false); }
   };
 
@@ -579,17 +664,23 @@ export default function Settings() {
       const body = { title: workForm.title, organization: workForm.organization, startYear: Number(workForm.startYear), endYear: workForm.endYear ? Number(workForm.endYear) : null, description: workForm.description || null };
       const url = workDialog.editing ? `/api/users/me/work-history/${workDialog.editing.id}` : '/api/users/me/work-history';
       const res = await fetch(url, { method: workDialog.editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not save work history.'));
       toast({ title: workDialog.editing ? t('settings.updated') : t('settings.added') });
       setWorkDialog({ open: false });
-      fetchWorkHistory();
-    } catch { toast({ title: t('settings.uploadFailed'), variant: 'destructive' }); }
+      await fetchWorkHistory();
+    } catch (error) { toast({ title: error instanceof Error ? error.message : t('settings.uploadFailed'), variant: 'destructive' }); }
     finally { setIsSavingWork(false); }
   };
   const handleDeleteWork = async (id: number) => {
     if (!window.confirm('Permanently delete this work experience?')) return;
-    try { await fetch(`/api/users/me/work-history/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} }); setWorkHistory(p => p.filter(w => w.id !== id)); toast({ title: t('settings.deleted') }); }
-    catch { toast({ title: t('settings.failedToDeleteAccount'), variant: 'destructive' }); }
+    try {
+      const res = await fetch(`/api/users/me/work-history/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not delete work history.'));
+      setWorkHistory(p => p.filter(w => w.id !== id));
+      toast({ title: t('settings.deleted') });
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Could not delete work history.', variant: 'destructive' });
+    }
   };
 
   const openAddEdu = () => { setEduForm({ school: '', degree: '', field: '', startYear: new Date().getFullYear(), endYear: '', description: '' }); setEduDialog({ open: true }); };
@@ -601,17 +692,23 @@ export default function Settings() {
       const body = { school: eduForm.school, degree: eduForm.degree, field: eduForm.field || null, startYear: Number(eduForm.startYear), endYear: eduForm.endYear ? Number(eduForm.endYear) : null, description: eduForm.description || null };
       const url = eduDialog.editing ? `/api/users/me/education/${eduDialog.editing.id}` : '/api/users/me/education';
       const res = await fetch(url, { method: eduDialog.editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not save education history.'));
       toast({ title: eduDialog.editing ? t('settings.updated') : t('settings.added') });
       setEduDialog({ open: false });
-      fetchEducation();
-    } catch { toast({ title: t('settings.uploadFailed'), variant: 'destructive' }); }
+      await fetchEducation();
+    } catch (error) { toast({ title: error instanceof Error ? error.message : t('settings.uploadFailed'), variant: 'destructive' }); }
     finally { setIsSavingEdu(false); }
   };
   const handleDeleteEdu = async (id: number) => {
     if (!window.confirm('Permanently delete this education entry?')) return;
-    try { await fetch(`/api/users/me/education/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} }); setEducationHistory(p => p.filter(e => e.id !== id)); toast({ title: t('settings.deleted') }); }
-    catch { toast({ title: t('settings.failedToDeleteAccount'), variant: 'destructive' }); }
+    try {
+      const res = await fetch(`/api/users/me/education/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not delete education history.'));
+      setEducationHistory(p => p.filter(e => e.id !== id));
+      toast({ title: t('settings.deleted') });
+    } catch (error) {
+      toast({ title: error instanceof Error ? error.message : 'Could not delete education history.', variant: 'destructive' });
+    }
   };
 
   const sections = [
@@ -930,6 +1027,14 @@ export default function Settings() {
                   </div>
 
                   <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
+                    {twofaStatusLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading two-factor status…</div>
+                    ) : twofaStatusLoadError ? (
+                      <div>
+                        <p role="alert" className="text-sm text-destructive">{twofaStatusLoadError}</p>
+                        <Button variant="outline" className="mt-3 rounded-xl" onClick={() => void fetch2faStatus()}>Try again</Button>
+                      </div>
+                    ) : twofaStatus && <>
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -997,6 +1102,7 @@ export default function Settings() {
                         </Button>
                       </div>
                     )}
+                    </>}
                   </div>
 
                   {passkeyEnabled && <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
@@ -1017,6 +1123,11 @@ export default function Settings() {
                     </div>
                     {passkeysLoading ? (
                       <div className="text-xs text-muted-foreground">{t('settings.passkeysLoading')}</div>
+                    ) : passkeysLoadError ? (
+                      <div>
+                        <p role="alert" className="text-sm text-destructive">{passkeysLoadError}</p>
+                        <Button variant="outline" className="mt-3 rounded-xl" onClick={() => void fetchPasskeys()}>Try again</Button>
+                      </div>
                     ) : passkeys.length === 0 ? (
                       <p className="text-xs text-muted-foreground border-t border-border/40 pt-3">{t('settings.noPasskeys')}</p>
                     ) : (
@@ -1144,8 +1255,13 @@ export default function Settings() {
                     <Button size="sm" onClick={openAddWork} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> {t('settings.add')}</Button>
                   </div>
                   <Separator />
-                  {isLoadingWork ? (
+                  {isLoadingWork || (!workHistoryLoaded && !workHistoryLoadError) ? (
                     <div className="space-y-3">{Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}</div>
+                  ) : workHistoryLoadError ? (
+                    <div className="py-6">
+                      <p role="alert" className="text-sm text-destructive">{workHistoryLoadError}</p>
+                      <Button className="mt-3 rounded-xl" variant="outline" onClick={() => void fetchWorkHistory()}>Try again</Button>
+                    </div>
                   ) : workHistory.length === 0 ? (
                     <div className="text-center py-16 bg-muted/20 rounded-2xl border border-dashed border-border">
                       <Briefcase className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-40" />
@@ -1186,8 +1302,13 @@ export default function Settings() {
                     <Button size="sm" onClick={openAddEdu} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> {t('settings.add')}</Button>
                   </div>
                   <Separator />
-                  {isLoadingEdu ? (
+                  {isLoadingEdu || (!educationLoaded && !educationLoadError) ? (
                     <div className="space-y-3">{Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-24 rounded-xl bg-muted animate-pulse" />)}</div>
+                  ) : educationLoadError ? (
+                    <div className="py-6">
+                      <p role="alert" className="text-sm text-destructive">{educationLoadError}</p>
+                      <Button className="mt-3 rounded-xl" variant="outline" onClick={() => void fetchEducation()}>Try again</Button>
+                    </div>
                   ) : educationHistory.length === 0 ? (
                     <div className="text-center py-16 bg-muted/20 rounded-2xl border border-dashed border-border">
                       <GraduationCap className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-40" />

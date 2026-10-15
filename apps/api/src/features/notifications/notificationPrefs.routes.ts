@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
@@ -18,6 +18,14 @@ const channelSchema = z.object({
 });
 
 const updatePrefsSchema = z.record(z.string(), channelSchema);
+
+function isMissingPrefsColumn(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const databaseError = error as { code?: unknown; message?: unknown };
+  return databaseError.code === "42703"
+    && typeof databaseError.message === "string"
+    && databaseError.message.includes("notification_prefs");
+}
 
 const DEFAULT_PREFS: Record<string, { inApp: boolean; push: boolean; email: boolean }> = {
   like: { inApp: true, push: false, email: false },
@@ -53,42 +61,67 @@ const DEFAULT_PREFS: Record<string, { inApp: boolean; push: boolean; email: bool
   digest: { inApp: false, push: false, email: true },
 };
 
-notificationPrefsRouter.get("/preferences", requireAuth, async (req: Request, res: Response) => {
+notificationPrefsRouter.get("/preferences", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   const userId = (req as AuthedReq).currentUser.id;
-  const [user] = await db
-    .select({ notificationPrefs: usersTable.notificationPrefs })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId))
-    .limit(1);
-  const saved = (user?.notificationPrefs ?? {}) as Record<string, { inApp: boolean; push: boolean; email: boolean }>;
-  const merged: Record<string, { inApp: boolean; push: boolean; email: boolean }> = { ...DEFAULT_PREFS };
-  for (const [type, pref] of Object.entries(saved)) {
-    if (type in merged) merged[type] = pref;
+  try {
+    const [user] = await db
+      .select({ notificationPrefs: usersTable.notificationPrefs })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+    const saved = (user?.notificationPrefs ?? {}) as Record<string, { inApp: boolean; push: boolean; email: boolean }>;
+    const merged: Record<string, { inApp: boolean; push: boolean; email: boolean }> = { ...DEFAULT_PREFS };
+    for (const [type, pref] of Object.entries(saved)) {
+      if (type in merged) merged[type] = pref;
+    }
+    return res.json({ preferences: merged });
+  } catch (error) {
+    if (isMissingPrefsColumn(error)) return res.json({ preferences: DEFAULT_PREFS });
+    return next(error);
   }
-  return res.json({ preferences: merged, defaults: DEFAULT_PREFS });
 });
 
-notificationPrefsRouter.patch("/preferences", requireAuth, async (req: Request, res: Response) => {
+notificationPrefsRouter.patch("/preferences", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   const userId = (req as AuthedReq).currentUser.id;
   const parsed = updatePrefsSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "invalid_prefs", issues: parsed.error.issues });
 
-  const [user] = await db
-    .select({ notificationPrefs: usersTable.notificationPrefs })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId))
-    .limit(1);
-  const existing = (user?.notificationPrefs ?? {}) as Record<string, { inApp: boolean; push: boolean; email: boolean }>;
-  const updated = { ...existing, ...parsed.data };
+  try {
+    const [user] = await db
+      .select({ notificationPrefs: usersTable.notificationPrefs })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId))
+      .limit(1);
+    const existing = (user?.notificationPrefs ?? {}) as Record<string, { inApp: boolean; push: boolean; email: boolean }>;
+    const updated = { ...existing, ...parsed.data };
 
-  await db.update(usersTable).set({ notificationPrefs: updated }).where(eq(usersTable.id, userId));
-  return res.json({ ok: true, prefs: updated });
+    await db.update(usersTable).set({ notificationPrefs: updated }).where(eq(usersTable.id, userId));
+    return res.json({ ok: true, prefs: updated });
+  } catch (error) {
+    if (isMissingPrefsColumn(error)) {
+      return res.status(503).json({
+        error: "notification_preferences_unavailable",
+        message: "Notification preferences cannot be saved until the database schema is updated.",
+      });
+    }
+    return next(error);
+  }
 });
 
-notificationPrefsRouter.post("/preferences/reset", requireAuth, async (req: Request, res: Response) => {
+notificationPrefsRouter.post("/preferences/reset", requireAuth, async (req: Request, res: Response, next: NextFunction) => {
   const userId = (req as AuthedReq).currentUser.id;
-  await db.update(usersTable).set({ notificationPrefs: DEFAULT_PREFS }).where(eq(usersTable.id, userId));
-  return res.json({ ok: true, prefs: DEFAULT_PREFS });
+  try {
+    await db.update(usersTable).set({ notificationPrefs: DEFAULT_PREFS }).where(eq(usersTable.id, userId));
+    return res.json({ ok: true, prefs: DEFAULT_PREFS });
+  } catch (error) {
+    if (isMissingPrefsColumn(error)) {
+      return res.status(503).json({
+        error: "notification_preferences_unavailable",
+        message: "Notification preferences cannot be saved until the database schema is updated.",
+      });
+    }
+    return next(error);
+  }
 });
 
 export { DEFAULT_PREFS };
