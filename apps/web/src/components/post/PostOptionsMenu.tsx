@@ -1,4 +1,5 @@
 import * as React from 'react';
+import type { ComponentType } from 'react';
 import {
   Archive,
   BarChart3,
@@ -108,6 +109,7 @@ export type PostOptionsMenuProps = {
   hideBoost?: boolean;
   onAction?: (action: PostOptionAction, post: PostOptionPost) => void | Promise<void>;
   onDeletePermanently: () => void | Promise<void>;
+  extraActions?: Array<{ label: string; icon: ComponentType<{ className?: string }>; onSelect: () => void }>;
   className?: string;
 };
 
@@ -143,6 +145,7 @@ export function PostOptionsMenu({
   hideBoost = false,
   onAction,
   onDeletePermanently,
+  extraActions = [],
   className,
 }: PostOptionsMenuProps) {
   const isMobile = useIsMobile();
@@ -322,6 +325,16 @@ export function PostOptionsMenu({
     ));
   };
 
+  const renderExtraActions = (mobile = false) => extraActions.length > 0 ? (
+    <>
+      {mobile ? <div className="my-3 h-px bg-border" /> : <DropdownMenuSeparator />}
+      {mobile ? <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Group</p> : <DropdownMenuLabel className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-muted-foreground">Group</DropdownMenuLabel>}
+      {extraActions.map(({ label, icon: Icon, onSelect }) => mobile
+        ? <button key={label} type="button" className={itemClass()} onClick={() => { setOpen(false); onSelect(); }}><Icon className="h-4 w-4 shrink-0" aria-hidden="true" /><span>{label}</span></button>
+        : <DropdownMenuItem key={label} onSelect={() => { setOpen(false); onSelect(); }} className={`${itemClass()} cursor-pointer`}><Icon className="h-4 w-4 shrink-0" aria-hidden="true" /><span>{label}</span></DropdownMenuItem>)}
+    </>
+  ) : null;
+
   const trigger = <Button variant="ghost" size="icon" className={`h-8 w-8 text-muted-foreground ${className ?? ''}`} aria-label="Open post options"><MoreHorizontal className="h-4 w-4" /></Button>;
 
   return (
@@ -334,14 +347,14 @@ export function PostOptionsMenu({
               <DrawerTitle>Post Options</DrawerTitle>
               <DrawerDescription>Choose an action for this {post.type.replace('_', ' ')}.</DrawerDescription>
             </DrawerHeader>
-            <div className="overflow-y-auto pb-2">{renderSections(true)}</div>
+            <div className="overflow-y-auto pb-2">{renderSections(true)}{renderExtraActions(true)}</div>
             <DrawerFooter className="px-0 pt-2"><DrawerClose asChild><Button variant="outline" className="w-full rounded-xl">Cancel</Button></DrawerClose></DrawerFooter>
           </DrawerContent>
         </Drawer>
       ) : (
         <DropdownMenu open={open} onOpenChange={setOpen}>
           <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64 rounded-xl p-1.5">{renderSections()}</DropdownMenuContent>
+          <DropdownMenuContent align="end" className="w-64 rounded-xl p-1.5">{renderSections()}{renderExtraActions()}</DropdownMenuContent>
         </DropdownMenu>
       )}
 

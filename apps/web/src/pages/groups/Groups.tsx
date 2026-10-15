@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ComponentType, ReactNode } from 'react';
 import { Timestamp } from '@/lib/postTimestamp';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -201,7 +202,7 @@ function GroupActivityTimeline({ groupId }: { groupId: number }) {
   })}</ol>;
 }
 
-function GroupPostActions({ groupId, postId, isAuthor, canModerate, isPinned, commentsEnabled, onChanged }: {
+function GroupPostActions({ groupId, postId, isAuthor, canModerate, isPinned, commentsEnabled, onChanged, children }: {
   groupId: number;
   postId: number;
   isAuthor: boolean;
@@ -209,6 +210,7 @@ function GroupPostActions({ groupId, postId, isAuthor, canModerate, isPinned, co
   isPinned: boolean;
   commentsEnabled: boolean;
   onChanged: () => void;
+  children: (actions: Array<{ label: string; icon: ComponentType<{ className?: string }>; onSelect: () => void }>) => ReactNode;
 }) {
   const { toast } = useToast();
   const [reportOpen, setReportOpen] = useState(false);
@@ -236,17 +238,26 @@ function GroupPostActions({ groupId, postId, isAuthor, canModerate, isPinned, co
     }
   };
 
+  const runWithToast = (path: string, method: string, successTitle: string, body?: unknown) => {
+    void run(path, method, body)
+      .then(() => toast({ title: successTitle }))
+      .catch(error => toast({ title: 'Could not update post', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' }));
+  };
+  const actions = [
+    ...(canModerate ? [{
+      label: isPinned ? 'Unpin post' : 'Pin post',
+      icon: Pin,
+      onSelect: () => runWithToast(`/api/groups/${groupId}/posts/${postId}/pin`, isPinned ? 'DELETE' : 'POST', isPinned ? 'Post unpinned' : 'Post pinned'),
+    }] : []),
+    ...((isAuthor || canModerate) ? [
+      { label: 'Archive post', icon: Archive, onSelect: () => runWithToast(`/api/groups/${groupId}/posts/${postId}/archive`, 'POST', 'Post archived') },
+      { label: commentsEnabled ? 'Turn off comments' : 'Turn on comments', icon: MessageCircleOff, onSelect: () => runWithToast(`/api/groups/${groupId}/posts/${postId}/comments`, 'PATCH', commentsEnabled ? 'Comments turned off' : 'Comments turned on', { enabled: !commentsEnabled }) },
+    ] : []),
+    { label: 'Report to group moderators', icon: Flag, onSelect: () => setReportOpen(true) },
+  ];
+
   return <>
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild><Button type="button" size="icon" variant="ghost" aria-label="Post actions" className="absolute right-2 top-2 z-10 h-8 w-8"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        {canModerate && <DropdownMenuItem onSelect={() => void run(`/api/groups/${groupId}/posts/${postId}/pin`, isPinned ? 'DELETE' : 'POST').catch(error => toast({ title: 'Could not update pin', description: error.message, variant: 'destructive' }))}><Pin className="mr-2 h-4 w-4" />{isPinned ? 'Unpin' : 'Pin'}</DropdownMenuItem>}
-        {(isAuthor || canModerate) && <DropdownMenuItem onSelect={() => void run(`/api/groups/${groupId}/posts/${postId}/archive`, 'POST').then(() => toast({ title: 'Post archived' })).catch(error => toast({ title: 'Could not archive post', description: error.message, variant: 'destructive' }))}><Archive className="mr-2 h-4 w-4" />Archive</DropdownMenuItem>}
-        {(isAuthor || canModerate) && <DropdownMenuItem onSelect={() => void run(`/api/groups/${groupId}/posts/${postId}/comments`, 'PATCH', { enabled: !commentsEnabled }).then(() => toast({ title: commentsEnabled ? 'Comments turned off' : 'Comments turned on' })).catch(error => toast({ title: 'Could not update comments', description: error.message, variant: 'destructive' }))}><MessageCircleOff className="mr-2 h-4 w-4" />{commentsEnabled ? 'Turn off comments' : 'Turn on comments'}</DropdownMenuItem>}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => setReportOpen(true)}><Flag className="mr-2 h-4 w-4" />Report</DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    {children(actions)}
     <Dialog open={reportOpen} onOpenChange={setReportOpen}>
       <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Report group post</DialogTitle><DialogDescription>Your report goes to the group moderators first.</DialogDescription></DialogHeader>
         <Select value={reportReason} onValueChange={setReportReason}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="spam">Spam</SelectItem><SelectItem value="harassment">Harassment</SelectItem><SelectItem value="off_topic">Off-topic</SelectItem><SelectItem value="scam_reshare">Scam reshare</SelectItem></SelectContent></Select>
@@ -770,20 +781,13 @@ function GroupDetail({ id }: { id: number }) {
       .sort((a, b) => Number(b.likesCount ?? b.likeCount ?? 0) - Number(a.likesCount ?? a.likeCount ?? 0));
   }
 
-  const renderGroupPost = (post: any) => <article key={post.id} className={`relative ${post.groupDetails?.type === 'announcement' ? 'rounded-lg border-l-4 border-amber-500 bg-amber-500/5 pl-3' : ''}`}>
+  const renderGroupPost = (post: any) => <div key={post.id} className="relative">
     {post.groupDetails?.type === 'opportunity_reshare' && <div className="mb-3 rounded-r-lg border-l-4 border-primary bg-primary/5 px-4 py-3">
       <div className="flex items-center gap-2 text-xs font-semibold text-primary"><Share2 className="h-3.5 w-3.5" />Opportunity reshared</div>
       <p className="mt-1 font-medium">{post.groupDetails?.opportunitySnapshot?.title}</p>
       {post.groupDetails?.opportunitySnapshot?.budget != null && <p className="mt-1 text-xs text-muted-foreground">Budget {post.groupDetails.opportunitySnapshot.budget}</p>}
     </div>}
     {post.groupDetails?.type === 'announcement' && <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300"><Megaphone className="h-3.5 w-3.5" />Announcement</div>}
-    <PostCard post={post} />
-    {post.groupDetails?.type === 'question' && post.groupDetails?.question && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <Badge variant={post.groupDetails.question.isAnswered ? 'secondary' : 'outline'}>{post.commentsCount ?? 0} answers · {post.groupDetails.question.isAnswered ? 'Answered' : 'Awaiting answer'}</Badge>
-      <GroupQuestion groupId={id} postId={post.id} question={post.groupDetails.question} canChooseAnswer={user?.id === post.authorId || myRole === 'owner' || myRole === 'admin'} />
-    </div>}
-    {post.groupDetails?.type === 'poll' && post.groupDetails?.poll && <GroupPoll groupId={id} postId={post.id} poll={post.groupDetails.poll} />}
-    {activeTab === 'pending' && <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void reviewPendingPost(post.id, 'approve')}>Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewPendingPost(post.id, 'reject')}>Reject</Button></div>}
     <GroupPostActions
       groupId={id}
       postId={post.id}
@@ -792,8 +796,16 @@ function GroupDetail({ id }: { id: number }) {
       isPinned={Boolean(post.groupDetails?.isPinned)}
       commentsEnabled={post.groupDetails?.commentsEnabled !== false}
       onChanged={() => { void queryClient.invalidateQueries({ queryKey: [`/api/groups/${id}/posts`] }); setPinnedRefreshKey(value => value + 1); }}
-    />
-  </article>;
+    >
+      {extraActions => <PostCard post={post} feedStyle extraActions={extraActions} />}
+    </GroupPostActions>
+    {post.groupDetails?.type === 'question' && post.groupDetails?.question && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+      <Badge variant={post.groupDetails.question.isAnswered ? 'secondary' : 'outline'}>{post.commentsCount ?? 0} answers · {post.groupDetails.question.isAnswered ? 'Answered' : 'Awaiting answer'}</Badge>
+      <GroupQuestion groupId={id} postId={post.id} question={post.groupDetails.question} canChooseAnswer={user?.id === post.authorId || myRole === 'owner' || myRole === 'admin'} />
+    </div>}
+    {post.groupDetails?.type === 'poll' && post.groupDetails?.poll && <GroupPoll groupId={id} postId={post.id} poll={post.groupDetails.poll} />}
+    {activeTab === 'pending' && <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void reviewPendingPost(post.id, 'approve')}>Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewPendingPost(post.id, 'reject')}>Reject</Button></div>}
+  </div>;
 
   const richEditor = <div className="overflow-hidden rounded-md border border-border bg-background">
     <div className="flex items-center gap-1 border-b border-border px-2 py-1">

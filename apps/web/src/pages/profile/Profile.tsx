@@ -721,8 +721,8 @@ export default function Profile() {
                 {isMe && !profileContentHasMore && <Link href="/write"><Button className="mt-4 rounded-lg"><Pencil className="mr-2 h-4 w-4" />Write a post</Button></Link>}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {allUserPosts.map((post) => <PostCard key={post.id} post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} hideAnalytics hideBoost hideReputation />)}
+              <div className="space-y-6">
+                {allUserPosts.map((post) => <PostCard key={post.id} post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} feedStyle hideAnalytics hideBoost hideReputation />)}
               </div>
             )}
             {profileContentHasMore && <div className="text-center"><Button variant="outline" onClick={() => void loadMoreProfilePosts()} disabled={profileContentLoadingMore}>{profileContentLoadingMore ? 'Loading…' : 'Load more posts'}</Button></div>}
@@ -745,11 +745,11 @@ export default function Profile() {
                 {isMe && !profileContentHasMore && <Link href="/write?type=spark"><Button className="mt-4 rounded-lg"><Sparkles className="mr-2 h-4 w-4" />Share a Spark</Button></Link>}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-6">
                 {sparkPosts.map(post => (
                   <div key={post.id} className="min-w-0">
                     {isMe && post.visibility && <p className="mb-2 text-xs font-medium text-muted-foreground">Visibility: {post.visibility}</p>}
-                    <PostCard post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} hideAnalytics hideBoost hideReputation />
+                    <PostCard post={post as import('@workspace/api-client-react').Post & { authorTrustTier?: string; authorCreatorLevel?: string | null; authorHireEnabled?: boolean }} feedStyle hideAnalytics hideBoost hideReputation />
                   </div>
                 ))}
               </div>

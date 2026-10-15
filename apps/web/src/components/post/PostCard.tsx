@@ -23,7 +23,7 @@ import { linkifyHashtags } from '@/lib/hashtags';
 import { getStoredToken } from '@/lib/api';
 import { useI18n, useT } from '@/lib/i18n';
 import { PollBlock, samePollText } from '@/components/post/PollBlock';
-import { PostOptionsMenu, type PostOptionAction, type PostOptionPost } from './PostOptionsMenu';
+import { PostOptionsMenu, type PostOptionAction, type PostOptionPost, type PostOptionsMenuProps } from './PostOptionsMenu';
 import { ImageLightbox } from './ImageLightbox';
 import { formatPostTimestamp } from '@/lib/postTimestamp';
 import { useFeature } from '@/lib/features';
@@ -116,13 +116,12 @@ function GroupPostAttribution({ groupId }: { groupId: number }) {
   if (!group) return null;
 
   return (
-    <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-      <Link href={`/groups/${groupId}`} className="flex min-w-0 items-center gap-2 hover:text-foreground">
+    <div className="mb-2 flex items-center gap-2 text-sm">
+      <Link href={`/g/${groupId}`} className="flex min-w-0 items-center gap-2 hover:text-primary">
         <Avatar className="h-5 w-5 shrink-0">
           <AvatarImage src={group.avatarUrl ? mediaUrl(group.avatarUrl) : undefined} alt="" />
           <AvatarFallback className="text-[9px]">{group.name.slice(0, 1)}</AvatarFallback>
         </Avatar>
-        <span className="shrink-0">Posted in</span>
         <span className="truncate font-semibold text-foreground">{group.name}</span>
       </Link>
     </div>
@@ -352,7 +351,7 @@ function TrustBadge({ tier, isAdmin }: { tier?: string; isAdmin?: boolean }) {
   return null;
 }
 
-export function PostCard({ post: initialPost, compact = false, feedStyle = false, hideAnalytics = false, hideBoost = false, hideReputation = false }: { post: EnrichedPost; compact?: boolean; feedStyle?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean }) {
+export function PostCard({ post: initialPost, compact = false, feedStyle = false, hideAnalytics = false, hideBoost = false, hideReputation = false, extraActions = [] }: { post: EnrichedPost; compact?: boolean; feedStyle?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean; extraActions?: PostOptionsMenuProps['extraActions'] }) {
   const [, setLocation] = useLocation();
   const { user: currentUser } = useAuthStore();
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
@@ -823,7 +822,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
 
         {/* Header */}
         <div className={`flex min-w-0 items-center gap-3 ${feedStyle ? 'mb-3' : 'mb-4'}`}>
-          <Link href={`/profile/${post.author.username}`} className="shrink-0">
+          <Link href={`/u/${encodeURIComponent(post.author.username)}`} className="shrink-0">
             <Avatar className="h-10 w-10 border border-border transition-colors group-hover:border-primary">
               <AvatarImage src={post.author.avatarUrl || ''} />
               <AvatarFallback className="bg-primary/10 text-primary">{post.author.displayName.substring(0, 2)}</AvatarFallback>
@@ -832,7 +831,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5 text-sm">
-              <Link href={`/profile/${post.author.username}`} className="min-w-0 truncate font-semibold text-foreground hover:text-primary transition-colors">
+              <Link href={`/u/${encodeURIComponent(post.author.username)}`} className="min-w-0 truncate font-semibold text-foreground hover:text-primary transition-colors">
                 {post.author.displayName}
               </Link>
 
@@ -840,7 +839,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
               <SuperUserBadge isSuperUser={post.authorIsSuperUser} />
               {post.groupId != null && post.authorGroupRole && (
                 <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-                  {post.authorGroupRole === 'owner' ? 'Group Admin' : post.authorGroupRole === 'admin' ? 'Admin' : post.authorGroupRole === 'moderator' ? 'Moderator' : 'Member'}
+                  {post.authorGroupRole === 'owner' || post.authorGroupRole === 'admin' ? 'Group Admin' : 'Moderator'}
                 </Badge>
               )}
 
@@ -870,6 +869,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
               hideBoost={hideBoost}
               onAction={handlePostOptionAction}
               onDeletePermanently={handleDeletePermanently}
+              extraActions={extraActions}
             />
           </div>
         </div>
