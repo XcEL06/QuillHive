@@ -159,9 +159,9 @@ export function JobsPanel() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <Tabs value={typeFilter} onValueChange={v => setTypeFilter(v as JobType)}>
-          <TabsList className="flex h-auto flex-wrap gap-1 text-xs">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <Tabs value={typeFilter} onValueChange={v => setTypeFilter(v as JobType)} className="min-w-0">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 text-xs sm:w-auto">
             <TabsTrigger value="all" className="text-xs px-2">All</TabsTrigger>
             <TabsTrigger value="freelance" className="text-xs px-2">Freelance</TabsTrigger>
             <TabsTrigger value="micro_contract" className="text-xs px-2">Contracts</TabsTrigger>
@@ -172,8 +172,10 @@ export function JobsPanel() {
         </Tabs>
         {user && (
           <Link href="/jobs/post">
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8">
-              <Plus className="w-3.5 h-3.5" /> Post Opportunity
+            <Button aria-label="Post Opportunity" title="Post Opportunity" className="h-9 shrink-0 gap-1.5 px-3 text-sm">
+              <Plus className="w-4 h-4" />
+              <span className="sm:hidden">Post</span>
+              <span className="hidden sm:inline">Post Opportunity</span>
             </Button>
           </Link>
         )}

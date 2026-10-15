@@ -818,10 +818,10 @@ function GroupDetail({ id }: { id: number }) {
               {groupView.isPromoted && <Badge variant="secondary">Featured community</Badge>}
             </div>
           </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2 pb-1">
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5 pb-1">
             {group.isMember ? <Button variant="secondary" disabled>Joined</Button> : groupView.hasPendingJoinRequest ? <Button variant="outline" disabled>Request pending</Button> : groupView.privacy === 'private' || groupView.type === 'secret' ? inviteCode ? <Button onClick={() => void acceptGroupInvite(inviteCode)}>Accept invite</Button> : <Badge variant="outline">Invite-only</Badge> : !user ? <Link href="/login"><Button>{groupView.privacy === 'public' ? 'Sign in to request to join' : 'Sign in to join'}</Button></Link> : <Button onClick={() => toggleJoin({ id })} disabled={isJoining}>{isJoining ? <Loader2 className="h-4 w-4 animate-spin" /> : groupView.privacy === 'public' ? 'Request to join' : 'Join group'}</Button>}
-            {groupView.privacy !== 'private' && groupView.type !== 'secret' && <Button variant="outline" onClick={() => void shareGroup()} className="gap-1.5"><Copy className="h-4 w-4" />Copy link</Button>}
-            <Button variant="outline" onClick={() => setInviteOpen(true)} disabled={!group.isMember} className="gap-1.5"><UserPlus className="h-4 w-4" />Invite</Button>
+            {groupView.privacy !== 'private' && groupView.type !== 'secret' && <Button variant="outline" size="sm" aria-label="Copy group link" onClick={() => void shareGroup()} className="gap-1.5"><Copy className="h-4 w-4" />Copy link</Button>}
+            <Button aria-label="Invite members" onClick={() => setInviteOpen(true)} disabled={!group.isMember} className="gap-1.5"><UserPlus className="h-4 w-4" />Invite</Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Community actions"><MoreHorizontal className="h-5 w-5" /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
@@ -1165,7 +1165,7 @@ function GroupsList() {
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Users className="w-3.5 h-3.5" />{group.membersCount} {t('groups.members', 'members')}
                     </span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-1.5">
                       <Link href={`/g/${(group as GroupView).slug || group.id}`}>
                         <Button variant="ghost" size="sm" className="rounded-xl h-8 text-xs">{t('groups.view', 'View')}</Button>
                       </Link>
@@ -1173,12 +1173,15 @@ function GroupsList() {
                         size="sm"
                         disabled
                         className="rounded-xl h-8 text-xs"
-                      >{t('groups.joined', 'Joined')}</Button> : (group as GroupView).hasPendingJoinRequest ? <Button size="sm" disabled variant="outline" className="rounded-xl h-8 text-xs">Request pending</Button> : <Button
+                      >{t('groups.joined', 'Joined')}</Button> : (group as GroupView).hasPendingJoinRequest ? <Button size="sm" disabled variant="outline" aria-label="Join request pending" className="rounded-xl h-8 text-xs"><span className="sm:hidden">Pending</span><span className="hidden sm:inline">Request pending</span></Button> : <Button
                         size="sm"
                         onClick={() => joinGroup({ id: group.id })}
+                        aria-label={(group as GroupView).privacy === 'public' ? 'Request to join' : t('groups.join', 'Join group')}
                         className="rounded-xl h-8 text-xs bg-primary text-primary-foreground"
                       >
-                        {(group as GroupView).privacy === 'public' ? 'Request to join' : t('groups.join', '+ Join')}
+                        {(group as GroupView).privacy === 'public'
+                          ? <><span className="sm:hidden">Request</span><span className="hidden sm:inline">Request to join</span></>
+                          : t('groups.join', '+ Join')}
                       </Button>}
                     </div>
                   </div>

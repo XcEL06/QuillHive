@@ -420,7 +420,7 @@ export default function Profile() {
         <div className="mx-auto max-w-xl px-4 py-20 text-center">
           <p className="font-medium text-foreground">This profile is unavailable right now.</p>
           <p className="mt-2 text-sm text-muted-foreground">Your hive is still here. Try loading this profile again.</p>
-          <Button onClick={() => void refetch()} variant="outline" className="mt-5 min-h-11 rounded-xl">Try again</Button>
+          <Button onClick={() => void refetch()} variant="outline" size="sm" className="mt-5 rounded-lg">Try again</Button>
         </div>
       </AppLayout>
     );
@@ -659,22 +659,22 @@ export default function Profile() {
         <div className="mb-6 flex flex-wrap items-center gap-2">
           {isMe ? (
             <>
-              <Link href="/settings"><Button variant="outline" className="min-h-11 rounded-xl border-border/80"><Pencil className="mr-2 h-4 w-4" />{t('profile.editProfile', 'Edit Profile')}</Button></Link>
-              {creatorIncomeEnabled && <Button variant="outline" onClick={openEditCreator} className="min-h-11 rounded-xl gap-2"><Sparkles className="h-4 w-4" />{t('profile.creatorProfile', 'Creator Profile')}</Button>}
-              <Link href="/inbox"><Button variant="outline" className="min-h-11 rounded-xl gap-2"><Handshake className="h-4 w-4" />{t('profile.collabInbox', 'Collab Inbox')}</Button></Link>
+              <Link href="/settings"><Button variant="outline" size="sm" className="rounded-lg border-border/80"><Pencil className="h-4 w-4" />{t('profile.editProfile', 'Edit Profile')}</Button></Link>
+              {creatorIncomeEnabled && <Button variant="outline" size="sm" onClick={openEditCreator} className="rounded-lg gap-1.5"><Sparkles className="h-4 w-4" />{t('profile.creatorProfile', 'Creator Profile')}</Button>}
+              <Link href="/inbox"><Button variant="outline" size="sm" className="rounded-lg gap-1.5"><Handshake className="h-4 w-4" />{t('profile.collabInbox', 'Collab Inbox')}</Button></Link>
             </>
           ) : (
             <>
-              {creatorIncomeEnabled && creatorProfile.isAvailableForHire && <Button onClick={handleHireMe} disabled={isOpeningMessage} className="min-h-11 rounded-xl gap-2"><Zap className="h-4 w-4" />{t('profile.inviteToCollaborate', 'Message about a project')}</Button>}
-              {currentUser && <Button onClick={() => void openDirectMessage()} disabled={isOpeningMessage} variant="outline" className="min-h-11 rounded-xl gap-2"><MessageCircle className="h-4 w-4" />{isOpeningMessage ? 'Opening…' : t('profile.message', 'Message')}</Button>}
-              <Button onClick={() => toggleFollow({ username })} disabled={isFollowing} className={`min-h-11 rounded-xl ${user.isFollowing ? 'bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground' : 'bg-primary text-primary-foreground'}`}>
+              {creatorIncomeEnabled && creatorProfile.isAvailableForHire && <Button onClick={handleHireMe} disabled={isOpeningMessage} aria-label={t('profile.inviteToCollaborate', 'Message about a project')} className="max-w-full rounded-lg gap-1.5"><Zap className="h-4 w-4" /><span className="max-w-[10rem] truncate sm:max-w-none">{t('profile.inviteToCollaborate', 'Message about a project')}</span></Button>}
+              {currentUser && <Button onClick={() => void openDirectMessage()} disabled={isOpeningMessage} variant="outline" size="sm" className="rounded-lg gap-1.5"><MessageCircle className="h-4 w-4" />{isOpeningMessage ? 'Opening…' : t('profile.message', 'Message')}</Button>}
+              <Button onClick={() => toggleFollow({ username })} disabled={isFollowing} aria-label={user.isFollowing ? t('profile.following', 'Following') : t('profile.follow', 'Follow')} className={`rounded-lg ${user.isFollowing ? 'bg-secondary text-secondary-foreground hover:bg-destructive hover:text-destructive-foreground' : 'bg-primary text-primary-foreground'}`}>
                 {user.isFollowing ? <><UserCheck className="mr-2 h-4 w-4" />{t('profile.following', 'Following')}</> : <><UserPlus className="mr-2 h-4 w-4" />{t('profile.follow', 'Follow')}</>}
               </Button>
-              <Button onClick={() => setIsCollaborateOpen(true)} variant="outline" className="min-h-11 rounded-xl gap-2"><Handshake className="h-4 w-4" />{t('profile.collaborate', 'Request collaboration')}</Button>
+              <Button onClick={() => setIsCollaborateOpen(true)} variant="outline" size="sm" aria-label={t('profile.collaborate', 'Request collaboration')} className="rounded-lg gap-1.5"><Handshake className="h-4 w-4" /><span className="max-w-[9rem] truncate sm:max-w-none">{t('profile.collaborate', 'Request collaboration')}</span></Button>
               <ReportDialog targetType="user" targetId={user.id} label="Report" />
             </>
           )}
-          <Button variant="outline" onClick={() => void shareProfile()} className="min-h-11 rounded-xl gap-2"><Share2 className="h-4 w-4" />Share profile</Button>
+          <Button variant="outline" size="sm" onClick={() => void shareProfile()} aria-label="Share profile" className="rounded-lg gap-1.5"><Share2 className="h-4 w-4" />Share profile</Button>
         </div>
 
         {/* Profile Tabs */}
@@ -694,7 +694,7 @@ export default function Profile() {
             {profileContentError ? (
               <div className="rounded-2xl border border-border/60 bg-card px-5 py-10 text-center">
                 <p className="text-sm text-muted-foreground">Posts could not be loaded. Nothing has been changed.</p>
-                <Button variant="outline" className="mt-4 min-h-11 rounded-xl" onClick={() => setProfileContentRetryCount(count => count + 1)}>Try again</Button>
+                <Button variant="outline" size="sm" className="mt-4 rounded-lg" onClick={() => setProfileContentRetryCount(count => count + 1)}>Try again</Button>
               </div>
             ) : profileContentLoading && profileContentPosts.length === 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -704,7 +704,7 @@ export default function Profile() {
               <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-5 py-10 text-center">
                 <p className="font-medium text-foreground">{profileContentHasMore ? 'No posts on this page yet.' : isMe ? 'Your voice starts with a post.' : t('profile.noPostsYet', 'No posts here yet.')}</p>
                 <p className="mt-2 text-sm text-muted-foreground">{profileContentHasMore ? 'There may be older posts in the hive.' : isMe ? 'Put an idea into words and let it find its people.' : 'Check back when this creator shares something new.'}</p>
-                {isMe && !profileContentHasMore && <Link href="/write"><Button className="mt-4 min-h-11 rounded-xl"><Pencil className="mr-2 h-4 w-4" />Write a post</Button></Link>}
+                {isMe && !profileContentHasMore && <Link href="/write"><Button className="mt-4 rounded-lg"><Pencil className="mr-2 h-4 w-4" />Write a post</Button></Link>}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -718,7 +718,7 @@ export default function Profile() {
             {profileContentError ? (
               <div className="rounded-2xl border border-border/60 bg-card px-5 py-10 text-center">
                 <p className="text-sm text-muted-foreground">Sparks could not be loaded. Nothing has been changed.</p>
-                <Button variant="outline" className="mt-4 min-h-11 rounded-xl" onClick={() => setProfileContentRetryCount(count => count + 1)}>Try again</Button>
+                <Button variant="outline" size="sm" className="mt-4 rounded-lg" onClick={() => setProfileContentRetryCount(count => count + 1)}>Try again</Button>
               </div>
             ) : profileContentLoading ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -728,7 +728,7 @@ export default function Profile() {
               <div className="rounded-2xl border border-dashed border-border bg-muted/20 px-5 py-10 text-center">
                 <p className="font-medium text-foreground">{profileContentHasMore ? 'No Sparks on this page yet.' : isMe ? 'A small spark can start something big.' : 'No Sparks here yet.'}</p>
                 <p className="mt-2 text-sm text-muted-foreground">{profileContentHasMore ? 'There may be older Sparks to discover.' : isMe ? 'Share a quick thought, a work-in-progress, or a bright idea.' : 'Come back when this creator has a thought to share.'}</p>
-                {isMe && !profileContentHasMore && <Link href="/write?type=spark"><Button className="mt-4 min-h-11 rounded-xl"><Sparkles className="mr-2 h-4 w-4" />Share a Spark</Button></Link>}
+                {isMe && !profileContentHasMore && <Link href="/write?type=spark"><Button className="mt-4 rounded-lg"><Sparkles className="mr-2 h-4 w-4" />Share a Spark</Button></Link>}
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -740,7 +740,7 @@ export default function Profile() {
                 ))}
               </div>
             )}
-            {profileContentHasMore && <div className="text-center"><Button variant="outline" className="min-h-11 rounded-xl" onClick={() => void loadMoreProfilePosts()} disabled={profileContentLoadingMore}>{profileContentLoadingMore ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading…</> : 'Load more Sparks'}</Button></div>}
+            {profileContentHasMore && <div className="text-center"><Button variant="outline" size="sm" className="rounded-lg" onClick={() => void loadMoreProfilePosts()} disabled={profileContentLoadingMore}>{profileContentLoadingMore ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading…</> : 'Load more Sparks'}</Button></div>}
           </TabsContent>
 
 
