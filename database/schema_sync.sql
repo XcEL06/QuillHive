@@ -22403,4 +22403,47 @@ EXCEPTION
 END
 $schema_sync$;
 
+DO $profile_contract$
+BEGIN
+  IF to_regclass('users') IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'email_digest_enabled'
+    ) THEN
+      UPDATE "users" SET "email_digest_enabled" = true WHERE "email_digest_enabled" IS NULL;
+      ALTER TABLE "users"
+        ALTER COLUMN "email_digest_enabled" SET DEFAULT true,
+        ALTER COLUMN "email_digest_enabled" SET NOT NULL;
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'date_of_birth'
+    ) THEN
+      ALTER TABLE "users" ALTER COLUMN "date_of_birth" DROP NOT NULL;
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'notification_prefs'
+    ) THEN
+      ALTER TABLE "users" ALTER COLUMN "notification_prefs" DROP NOT NULL;
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'users' AND column_name = 'last_weekly_digest_at'
+    ) THEN
+      ALTER TABLE "users" ALTER COLUMN "last_weekly_digest_at" DROP NOT NULL;
+    END IF;
+  END IF;
+  IF to_regclass('notifications') IS NOT NULL AND EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'notifications' AND column_name = 'digest_group'
+  ) THEN
+    ALTER TABLE "notifications" ALTER COLUMN "digest_group" DROP NOT NULL;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped profile nullability compatibility: %', SQLERRM;
+END
+$profile_contract$;
+
 COMMIT;

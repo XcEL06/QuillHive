@@ -203,7 +203,7 @@ export default function Settings() {
     setTwofaStatusLoading(true);
     setTwofaStatusLoadError(null);
     try {
-      const res = await fetch('/api/auth/2fa/status', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/auth/2fa/status', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load two-factor authentication status.'));
       const data = await res.json() as { enabled?: unknown };
       if (typeof data.enabled !== 'boolean') throw new Error('The two-factor status response was invalid.');
@@ -222,7 +222,7 @@ export default function Settings() {
     setPrivacyLoading(true);
     setPrivacyLoadFailed(false);
     try {
-      const res = await fetch('/api/users/me/privacy', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/users/me/privacy', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load your privacy settings.'));
       const data = await res.json() as Partial<PrivacyPrefs>;
       if (
@@ -247,7 +247,7 @@ export default function Settings() {
     setPrivacy((p) => ({ ...p, [key]: value }));
     setPrivacySaving(String(key));
     try {
-      const res = await fetch('/api/users/me/privacy', {
+      const res = await apiFetch('/api/users/me/privacy', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ [key]: value }),
@@ -268,7 +268,7 @@ export default function Settings() {
     setPasskeysLoading(true);
     setPasskeysLoadError(null);
     try {
-      const res = await fetch('/api/auth/passkey', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/auth/passkey', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load passkeys.'));
       const data = await res.json() as { passkeys?: unknown };
       if (!Array.isArray(data.passkeys)) throw new Error('The passkey response was invalid.');
@@ -289,7 +289,7 @@ export default function Settings() {
     }
     setPasskeyAdding(true);
     try {
-      const optsRes = await fetch('/api/auth/passkey/registration-options', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const optsRes = await apiFetch('/api/auth/passkey/registration-options', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!optsRes.ok) throw new Error('Could not start passkey registration');
       const { challengeId, publicKeyOptions } = await optsRes.json();
       const b64uToBuf = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)).buffer;
@@ -303,7 +303,7 @@ export default function Settings() {
         ? cred.response.getTransports()
         : [];
       const deviceName = `${navigator.platform || 'Device'} · ${new Date().toLocaleDateString()}`;
-      const reg = await fetch('/api/auth/passkey/register', {
+      const reg = await apiFetch('/api/auth/passkey/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ challengeId, credentialId, publicKey, transports, deviceName }),
@@ -324,7 +324,7 @@ export default function Settings() {
   const removePasskey = async (id: number) => {
     if (!window.confirm('Remove this passkey? You will no longer be able to sign in with it.')) return;
     try {
-      const res = await fetch(`/api/auth/passkey/${id}`, {
+      const res = await apiFetch(`/api/auth/passkey/${id}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -339,7 +339,7 @@ export default function Settings() {
   const setup2fa = async () => {
     setTwofaBusy(true);
     try {
-      const res = await fetch('/api/auth/2fa/setup', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/auth/2fa/setup', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       setTwofaSecret(data.secret || data.otpauth || null);
@@ -352,7 +352,7 @@ export default function Settings() {
     if (!twofaCode || twofaCode.length !== 6) { toast({ title: t('settings.enterSixDigitCode'), variant: 'destructive' }); return; }
     setTwofaBusy(true);
     try {
-      const res = await fetch('/api/auth/2fa/enable', {
+      const res = await apiFetch('/api/auth/2fa/enable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ token: twofaCode }),
@@ -372,7 +372,7 @@ export default function Settings() {
     if (!twofaCode || twofaCode.length !== 6) { toast({ title: t('settings.enterCodeToConfirm'), variant: 'destructive' }); return; }
     setTwofaBusy(true);
     try {
-      const res = await fetch('/api/auth/2fa/disable', {
+      const res = await apiFetch('/api/auth/2fa/disable', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ token: twofaCode }),
@@ -390,7 +390,7 @@ export default function Settings() {
   const handleExportData = async () => {
     setIsExporting(true);
     try {
-      const res = await fetch('/api/auth/me/export', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/auth/me/export', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error('Failed to export');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -412,7 +412,7 @@ export default function Settings() {
     }
     setIsDeletingAccount(true);
     try {
-      const res = await fetch('/api/auth/me', {
+      const res = await apiFetch('/api/auth/me', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ confirm: 'DELETE' }),
@@ -517,7 +517,7 @@ export default function Settings() {
     setIsLoadingWork(true);
     setWorkHistoryLoadError(null);
     try {
-      const res = await fetch('/api/users/me/work-history', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/users/me/work-history', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load work history.'));
       const entries = await res.json() as unknown;
       if (!isWorkEntries(entries)) throw new Error('The work history response was invalid.');
@@ -534,7 +534,7 @@ export default function Settings() {
     setIsLoadingEdu(true);
     setEducationLoadError(null);
     try {
-      const res = await fetch('/api/users/me/education', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/users/me/education', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load education history.'));
       const entries = await res.json() as unknown;
       if (!isEducationEntries(entries)) throw new Error('The education response was invalid.');
@@ -552,7 +552,7 @@ export default function Settings() {
     setIsLoadingNotifPrefs(true);
     setNotifPrefsLoadFailed(false);
     try {
-      const res = await fetch('/api/notifications/preferences', {
+      const res = await apiFetch('/api/notifications/preferences', {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not load notification preferences.'));
@@ -573,7 +573,7 @@ export default function Settings() {
     setNotifPrefs(prev => prev ? { ...prev, [type]: updated } : prev);
     setIsSavingNotifPref(true);
     try {
-      const res = await fetch('/api/notifications/preferences', {
+      const res = await apiFetch('/api/notifications/preferences', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ [type]: updated }),
@@ -663,7 +663,7 @@ export default function Settings() {
     try {
       const body = { title: workForm.title, organization: workForm.organization, startYear: Number(workForm.startYear), endYear: workForm.endYear ? Number(workForm.endYear) : null, description: workForm.description || null };
       const url = workDialog.editing ? `/api/users/me/work-history/${workDialog.editing.id}` : '/api/users/me/work-history';
-      const res = await fetch(url, { method: workDialog.editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+      const res = await apiFetch(url, { method: workDialog.editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not save work history.'));
       toast({ title: workDialog.editing ? t('settings.updated') : t('settings.added') });
       setWorkDialog({ open: false });
@@ -674,7 +674,7 @@ export default function Settings() {
   const handleDeleteWork = async (id: number) => {
     if (!window.confirm('Permanently delete this work experience?')) return;
     try {
-      const res = await fetch(`/api/users/me/work-history/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch(`/api/users/me/work-history/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not delete work history.'));
       setWorkHistory(p => p.filter(w => w.id !== id));
       toast({ title: t('settings.deleted') });
@@ -691,7 +691,7 @@ export default function Settings() {
     try {
       const body = { school: eduForm.school, degree: eduForm.degree, field: eduForm.field || null, startYear: Number(eduForm.startYear), endYear: eduForm.endYear ? Number(eduForm.endYear) : null, description: eduForm.description || null };
       const url = eduDialog.editing ? `/api/users/me/education/${eduDialog.editing.id}` : '/api/users/me/education';
-      const res = await fetch(url, { method: eduDialog.editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
+      const res = await apiFetch(url, { method: eduDialog.editing ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not save education history.'));
       toast({ title: eduDialog.editing ? t('settings.updated') : t('settings.added') });
       setEduDialog({ open: false });
@@ -702,7 +702,7 @@ export default function Settings() {
   const handleDeleteEdu = async (id: number) => {
     if (!window.confirm('Permanently delete this education entry?')) return;
     try {
-      const res = await fetch(`/api/users/me/education/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch(`/api/users/me/education/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error(await getApiErrorMessage(res, 'Could not delete education history.'));
       setEducationHistory(p => p.filter(e => e.id !== id));
       toast({ title: t('settings.deleted') });
@@ -1219,7 +1219,7 @@ export default function Settings() {
                       className="rounded-xl gap-2"
                       onClick={async () => {
                         try {
-                          const res = await fetch('/api/auth/me/export', {
+                          const res = await apiFetch('/api/auth/me/export', {
                             headers: token ? { Authorization: `Bearer ${token}` } : {},
                           });
                           if (!res.ok) throw new Error(`Export failed (${res.status})`);
@@ -1455,7 +1455,7 @@ export default function Settings() {
                     onClick={async () => {
                       setIsSavingCreatorSettings(true);
                       try {
-                        const res = await fetch('/api/users/me/settings', {
+                        const res = await apiFetch('/api/users/me/settings', {
                           method: 'PATCH',
                           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
                           body: JSON.stringify({ emailDigestEnabled: creatorSettings.emailDigestEnabled }),
@@ -1561,7 +1561,7 @@ export default function Settings() {
                   </div>
                   <Button className="rounded-xl" onClick={async () => {
                     try {
-                      const res = await fetch('/api/user/language', {
+                      const res = await apiFetch('/api/user/language', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
                         body: JSON.stringify({ lang: language }),
@@ -1734,27 +1734,36 @@ function WarningsSection() {
   const t = useT();
   const [strikes, setStrikes] = useState<StrikeRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      setLoadError(true);
+      return;
+    }
+    setLoading(true);
+    setLoadError(false);
     (async () => {
       try {
-        const res = await fetch('/api/strikes/me', { headers: { Authorization: `Bearer ${token}` } });
+        const res = await apiFetch('/api/strikes/me', { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) throw new Error();
         const json = await res.json() as { strikes: StrikeRecord[] };
         setStrikes(Array.isArray(json?.strikes) ? json.strikes : []);
       } catch {
+        setLoadError(true);
         toast({ title: 'Could not load warnings', variant: 'destructive' });
       } finally {
         setLoading(false);
       }
     })();
-  }, [token, toast]);
+  }, [token, toast, retryCount]);
 
   const acknowledge = async (id: number) => {
     if (!token) return;
     try {
-      await fetch(`/api/strikes/${id}/acknowledge`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      await apiFetch(`/api/strikes/${id}/acknowledge`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       setStrikes(prev => prev.map(s => s.id === id ? { ...s, acknowledgedAt: new Date().toISOString() } : s));
     } catch {
       toast({ title: t('settings.failedToAcknowledge'), variant: 'destructive' });
@@ -1770,6 +1779,11 @@ function WarningsSection() {
       <Separator />
       {loading ? (
         <div className="py-8 text-center"><Loader2 className="w-6 h-6 animate-spin mx-auto text-muted-foreground" /></div>
+      ) : loadError ? (
+        <div className="py-6 text-center">
+          <p role="alert" className="text-sm text-destructive">Warnings could not be loaded. Try again.</p>
+          <Button variant="outline" className="mt-3" onClick={() => setRetryCount(count => count + 1)}>Try again</Button>
+        </div>
       ) : strikes.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground">
           <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -1816,22 +1830,28 @@ function InvitesSection() {
   const [codes, setCodes] = useState<InviteRow[]>([]);
   const [totalInvited, setTotalInvited] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
 
   const load = async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
-      const res = await fetch('/api/invites/mine', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/invites/mine', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) throw new Error(`Could not load invites (${res.status}).`);
       const data = await res.json();
       setCodes(Array.isArray(data?.codes) ? data.codes : []);
       setTotalInvited(Number(data?.totalInvited) || 0);
-    } catch { setCodes([]); setTotalInvited(0); } finally { setLoading(false); }
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not load invites.');
+    } finally { setLoading(false); }
   };
   useEffect(() => { void load(); /* eslint-disable-next-line */ }, []);
 
   const generate = async () => {
     setGenerating(true);
     try {
-      const res = await fetch('/api/invites/generate', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const res = await apiFetch('/api/invites/generate', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || t('settings.couldNotExportData'));
       toast({ title: t('settings.inviteCreated'), description: data?.shareUrl ?? '' });
@@ -1898,13 +1918,18 @@ function InvitesSection() {
           <p className="text-sm font-medium">{active.length} {active.length === 1 ? t('settings.activeCodes') : t('settings.activeCodesPlural')}</p>
           <p className="text-xs text-muted-foreground">{used.length} {t('settings.redeemedTotal')}</p>
         </div>
-        <Button onClick={() => void generate()} disabled={generating || active.length >= 10}>
+        <Button onClick={() => void generate()} disabled={loading || !!loadError || generating || active.length >= 10}>
           <Plus className="w-4 h-4 mr-2" /> {generating ? t('settings.generating') : t('settings.generateInvite')}
         </Button>
       </div>
 
       {loading ? (
         <div className="py-6 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></div>
+      ) : loadError ? (
+        <div className="py-6 text-center">
+          <p role="alert" className="text-sm text-destructive">{loadError}</p>
+          <Button variant="outline" className="mt-3" onClick={() => void load()}>Try again</Button>
+        </div>
       ) : codes.length === 0 ? (
         <div className="py-10 text-center text-muted-foreground">
           <p className="text-sm">{t('settings.noInvitesYet')}</p>
@@ -1975,14 +2000,23 @@ function BillingSection() {
   const token = getStoredToken();
   const [boosts, setBoosts] = useState<BoostHistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    fetch('/api/boost/my', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
-      .then(r => r.ok ? r.json() : [])
+    setLoading(true);
+    setLoadError(null);
+    apiFetch('/api/boost/my', { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(r => {
+        if (!r.ok) throw new Error(`Could not load boost history (${r.status}).`);
+        return r.json();
+      })
       .then(d => setBoosts(Array.isArray(d) ? d : []))
-      .catch(() => {})
+      .catch(error => {
+        setLoadError(error instanceof Error ? error.message : 'Could not load boost history.');
+      })
       .finally(() => setLoading(false));
-  }, [token]);
+  }, [token, retryCount]);
 
   const activeCount = boosts.filter(b => b.status === 'active').length;
   const totalSpent = boosts
@@ -1997,7 +2031,7 @@ function BillingSection() {
       </div>
       <Separator />
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {!loading && !loadError && <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div className="rounded-2xl border border-border/60 bg-card p-4">
           <p className="text-xs text-muted-foreground mb-1">Total Boosts</p>
           <p className="text-2xl font-bold">{boosts.length}</p>
@@ -2010,13 +2044,18 @@ function BillingSection() {
           <p className="text-xs text-muted-foreground mb-1">Total Spent</p>
           <p className="text-2xl font-bold">${totalSpent}</p>
         </div>
-      </div>
+      </div>}
 
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Payment History</h3>
         {loading ? (
           <div className="space-y-2">
             {[1, 2, 3].map(i => <div key={i} className="h-16 rounded-2xl bg-muted animate-pulse" />)}
+          </div>
+        ) : loadError ? (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+            <p role="alert" className="text-sm text-destructive">{loadError}</p>
+            <Button variant="outline" className="mt-3" onClick={() => setRetryCount(count => count + 1)}>Try again</Button>
           </div>
         ) : boosts.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border/60 py-12 text-center">
@@ -2071,22 +2110,25 @@ function ApiKeysSection() {
   const token = getStoredToken();
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newKeyName, setNewKeyName] = useState('');
   const [revealedKey, setRevealedKey] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
-      const res = await fetch(apiUrl('/api/me/api-keys'), {
+      const res = await apiFetch(apiUrl('/api/me/api-keys'), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         credentials: 'include',
       });
+      if (!res.ok) throw new Error(`Could not load API keys (${res.status}).`);
       const data = await res.json();
       const list: ApiKeyRow[] = Array.isArray(data?.data) ? data.data : Array.isArray(data?.apiKeys) ? data.apiKeys : Array.isArray(data) ? data : [];
       setKeys(list);
-    } catch {
-      setKeys([]);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'Could not load API keys.');
     } finally {
       setLoading(false);
     }
@@ -2102,7 +2144,7 @@ function ApiKeysSection() {
     }
     setCreating(true);
     try {
-      const res = await fetch(apiUrl('/api/me/api-keys'), {
+      const res = await apiFetch(apiUrl('/api/me/api-keys'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         credentials: 'include',
@@ -2125,7 +2167,7 @@ function ApiKeysSection() {
   const revoke = async (id: number) => {
     if (!confirm(t('settings.revokeKeyConfirm'))) return;
     try {
-      const res = await fetch(apiUrl(`/api/me/api-keys/${id}`), {
+      const res = await apiFetch(apiUrl(`/api/me/api-keys/${id}`), {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         credentials: 'include',
@@ -2190,6 +2232,11 @@ function ApiKeysSection() {
 
       {loading ? (
         <p className="text-sm text-muted-foreground">{t('settings.loading')}</p>
+      ) : loadError ? (
+        <div>
+          <p role="alert" className="text-sm text-destructive">{loadError}</p>
+          <Button variant="outline" className="mt-3" onClick={() => void load()}>Try again</Button>
+        </div>
       ) : keys.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('settings.noApiKeysYet')}</p>
       ) : (

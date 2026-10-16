@@ -53,8 +53,8 @@ export function SessionsCard({
     setLoadError(false);
     try {
       const [sRes, eRes] = await Promise.all([
-        fetch('/api/auth/sessions', { headers }),
-        fetch('/api/auth/login-activity', { headers }),
+        apiFetch('/api/auth/sessions', { headers }),
+        apiFetch('/api/auth/login-activity', { headers }),
       ]);
       if (!sRes.ok || !eRes.ok) throw new Error('Could not load session activity.');
       setSessions(await sRes.json());
@@ -77,7 +77,7 @@ export function SessionsCard({
     if (!confirm('Revoke all device sessions? This device is included and will be signed out immediately.')) return;
     setRevoking(true);
     try {
-      const res = await fetch('/api/auth/sessions/logout-all', { method: 'POST', headers });
+      const res = await apiFetch('/api/auth/sessions/logout-all', { method: 'POST', headers });
       if (!res.ok) throw new Error('Could not revoke sessions.');
       const { revoked } = await res.json();
       toast({ title: 'Sessions revoked', description: `${revoked} device session(s) revoked. Protected requests from those devices will be rejected immediately.` });
@@ -93,7 +93,7 @@ export function SessionsCard({
     if (!window.confirm('Revoke this session? That device will need to sign in again.')) return;
     setRevokingSession(sessionId);
     try {
-      const res = await fetch(`/api/auth/sessions/${sessionId}`, { method: 'DELETE', headers });
+      const res = await apiFetch(`/api/auth/sessions/${sessionId}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error('Could not revoke this session.');
       toast({ title: 'Session revoked', description: 'That device will need to sign in again. Protected requests from that device are now rejected.' });
       void load();
@@ -108,7 +108,7 @@ export function SessionsCard({
     if (!token || !window.confirm('Sign out of all other devices? This device will stay signed in.')) return;
     setRevokingOthers(true);
     try {
-      const res = await fetch('/api/auth/sessions/logout-others', { method: 'POST', headers });
+      const res = await apiFetch('/api/auth/sessions/logout-others', { method: 'POST', headers });
       if (!res.ok) throw new Error('Could not revoke other sessions.');
       const { revoked } = await res.json();
       toast({ title: 'Other sessions revoked', description: `${revoked} other device session(s) signed out.` });

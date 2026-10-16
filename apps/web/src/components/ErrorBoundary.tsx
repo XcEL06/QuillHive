@@ -42,8 +42,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
     if (isChunkLoadError(error)) {
       try {
-        if (window.sessionStorage.getItem(CHUNK_RELOAD_KEY) !== "1") {
-          window.sessionStorage.setItem(CHUNK_RELOAD_KEY, "1");
+        const retryKey = `${CHUNK_RELOAD_KEY}:${window.location.pathname}`;
+        if (window.sessionStorage.getItem(retryKey) !== "1") {
+          window.sessionStorage.setItem(retryKey, "1");
           window.location.reload();
         }
       } catch {

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { getStoredToken } from "@/lib/api";
+import { apiFetch, getStoredToken } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useT } from "@/lib/i18n";
@@ -19,7 +19,7 @@ export function CreatorModeToggle() {
   const toggle = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/users/me/creator-mode", {
+      const res = await apiFetch("/api/users/me/creator-mode", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

@@ -281,6 +281,13 @@
       "when": 1792310400004,
       "tag": "0043_job_fee_details",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1792310400005,
+      "tag": "0044_profile_null_contracts",
+      "breakpoints": true
     }
   ]
 }
