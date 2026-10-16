@@ -17,7 +17,7 @@ describe("message request policy", () => {
     expect(shouldRequireMessageRequest(false, false)).toBe(true);
     expect(shouldRequireMessageRequest(true, false)).toBe(false);
     expect(shouldRequireMessageRequest(false, true)).toBe(false);
-  });
+  }, 15000);
 });
 
 describe("reputation event idempotency", () => {

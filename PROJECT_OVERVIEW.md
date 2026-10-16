@@ -1,6 +1,6 @@
 # QuillHive project overview
 
-> Generated on 2026-10-14 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
+> Generated on 2026-10-16 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
 
 ## Project shape
 
@@ -162,14 +162,14 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 ### features / chains / chains
 
-- `GET /api/chains` — Read or list chains. ([source](apps/api/src/features/chains/chains.routes.ts)).
-- `POST /api/chains` — Create or submit chains. ([source](apps/api/src/features/chains/chains.routes.ts)).
-- `DELETE /api/chains/:id` — Remove chains. ([source](apps/api/src/features/chains/chains.routes.ts)).
-- `GET /api/chains/:id` — Read or list chains. ([source](apps/api/src/features/chains/chains.routes.ts)).
-- `GET /api/chains/:id/analytics` — Read or list chains analytics. ([source](apps/api/src/features/chains/chains.routes.ts)).
-- `POST /api/chains/:id/entries` — Create or submit chains entries. ([source](apps/api/src/features/chains/chains.routes.ts)).
-- `POST /api/chains/:id/invites` — Create or submit chains invites. ([source](apps/api/src/features/chains/chains.routes.ts)).
-- `GET /api/chains/mine` — Read or list chains mine. ([source](apps/api/src/features/chains/chains.routes.ts)).
+- `GET /api/chains/chains` — Read or list chains chains. ([source](apps/api/src/features/chains/chains.routes.ts)).
+- `POST /api/chains/chains` — Create or submit chains chains. ([source](apps/api/src/features/chains/chains.routes.ts)).
+- `DELETE /api/chains/chains/:id` — Remove chains chains. ([source](apps/api/src/features/chains/chains.routes.ts)).
+- `GET /api/chains/chains/:id` — Read or list chains chains. ([source](apps/api/src/features/chains/chains.routes.ts)).
+- `GET /api/chains/chains/:id/analytics` — Read or list chains analytics. ([source](apps/api/src/features/chains/chains.routes.ts)).
+- `POST /api/chains/chains/:id/entries` — Create or submit chains entries. ([source](apps/api/src/features/chains/chains.routes.ts)).
+- `POST /api/chains/chains/:id/invites` — Create or submit chains invites. ([source](apps/api/src/features/chains/chains.routes.ts)).
+- `GET /api/chains/chains/mine` — Read or list chains mine. ([source](apps/api/src/features/chains/chains.routes.ts)).
 
 ### features / challenges / challenges
 
@@ -319,6 +319,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `GET /api/groups/:id/reports` — Read or list groups reports. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `PATCH /api/groups/:id/reports/:reportId` — Update groups reports. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `PATCH /api/groups/:id/settings` — Update groups settings. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
+- `POST /api/groups/:id/transfer-ownership` — Create or submit groups transfer ownership. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `POST /api/groups/invites/:code/accept` — Create or submit invites accept. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 
 ### features / highlights / highlights
@@ -535,17 +536,20 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `DELETE /api/series/:id` — Remove series. ([source](apps/api/src/features/series/series.routes.ts)).
 - `GET /api/series/:id` — Read or list series. ([source](apps/api/src/features/series/series.routes.ts)).
 - `PATCH /api/series/:id` — Update series. ([source](apps/api/src/features/series/series.routes.ts)).
+- `DELETE /api/series/:id/follow` — Remove series follow. ([source](apps/api/src/features/series/series.routes.ts)).
+- `POST /api/series/:id/follow` — Create or submit series follow. ([source](apps/api/src/features/series/series.routes.ts)).
 - `DELETE /api/series/:id/posts/:postId` — Remove series posts. ([source](apps/api/src/features/series/series.routes.ts)).
 - `POST /api/series/:id/posts/:postId` — Create or submit series posts. ([source](apps/api/src/features/series/series.routes.ts)).
 - `GET /api/series/user/:username` — Read or list series user. ([source](apps/api/src/features/series/series.routes.ts)).
 
 ### features / series / seriesNav
 
-- `GET /api/posts/:id/series-nav` — Read or list posts series nav. ([source](apps/api/src/features/series/seriesNav.routes.ts)).
+- `GET /api/posts/posts/:id/series-nav` — Read or list posts series nav. ([source](apps/api/src/features/series/seriesNav.routes.ts)).
 
 ### features / strikes / strikes
 
 - `POST /api/strikes/:id/acknowledge` — Acknowledge a notice (strikes :id). ([source](apps/api/src/features/strikes/strikes.routes.ts)).
+- `POST /api/strikes/:id/appeal` — Create or submit strikes appeal. ([source](apps/api/src/features/strikes/strikes.routes.ts)).
 - `GET /api/strikes/me` — Read or list strikes me. ([source](apps/api/src/features/strikes/strikes.routes.ts)).
 - `GET /api/strikes/me/unacknowledged` — Read or list me unacknowledged. ([source](apps/api/src/features/strikes/strikes.routes.ts)).
 
@@ -583,9 +587,13 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 - `GET /api/admin/trust/accounts` — Read or list trust accounts. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/admin/trust/moderation` — Read or list trust moderation. ([source](apps/api/src/features/trust/trust.routes.ts)).
+- `PATCH /api/admin/trust/strikes/:strikeId/appeal` — Update strikes appeal. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/admin/trust/users` — Read or list trust users. ([source](apps/api/src/features/trust/trust.routes.ts)).
+- `PATCH /api/admin/trust/users/:userId/dispute` — Update users dispute. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/trust/:userId` — Read or list trust. ([source](apps/api/src/features/trust/trust.routes.ts)).
+- `GET /api/trust/definitions` — Read or list trust definitions. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/trust/me` — Read or list trust me. ([source](apps/api/src/features/trust/trust.routes.ts)).
+- `POST /api/trust/me/dispute` — Create or submit me dispute. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `POST /api/trust/recalculate` — Create or submit trust recalculate. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/trust/timeline` — Read or list trust timeline. ([source](apps/api/src/features/trust/trust.routes.ts)).
 - `GET /api/trust/timeline/:userId` — Read or list trust timeline. ([source](apps/api/src/features/trust/trust.routes.ts)).
@@ -710,6 +718,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `GET /api/auth/sessions` — Read or list auth sessions. ([source](apps/api/src/routes/index.ts)).
 - `DELETE /api/auth/sessions/:id` — Remove auth sessions. ([source](apps/api/src/routes/index.ts)).
 - `POST /api/auth/sessions/logout-all` — Create or submit sessions logout all. ([source](apps/api/src/routes/index.ts)).
+- `POST /api/auth/sessions/logout-others` — Create or submit sessions logout others. ([source](apps/api/src/routes/index.ts)).
 
 ### routes / jobs
 
@@ -722,6 +731,8 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `POST /api/jobs/:id/click` — Create or submit jobs click. ([source](apps/api/src/routes/jobs.ts)).
 - `GET /api/jobs/:id/creator-matches` — Read or list jobs creator matches. ([source](apps/api/src/routes/jobs.ts)).
 - `GET /api/jobs/applications` — Read or list jobs applications. ([source](apps/api/src/routes/jobs.ts)).
+- `PATCH /api/jobs/applications/:applicationId` — Update jobs applications. ([source](apps/api/src/routes/jobs.ts)).
+- `POST /api/jobs/applications/:applicationId/completion` — Create or submit applications completion. ([source](apps/api/src/routes/jobs.ts)).
 - `GET /api/jobs/creators` — Read or list jobs creators. ([source](apps/api/src/routes/jobs.ts)).
 - `GET /api/jobs/my-matches` — Read or list jobs my matches. ([source](apps/api/src/routes/jobs.ts)).
 
@@ -801,6 +812,7 @@ Every PostgreSQL table exported from the current Drizzle schema index is listed 
 | `topics` | Discoverable topic definitions. | [schema](packages/utils/db/src/schema/topics.ts) |
 | `mentions` | User mentions extracted from content. | [schema](packages/utils/db/src/schema/mentions.ts) |
 | `translation_cache` | Cached machine translations. | [schema](packages/utils/db/src/schema/translationCache.ts) |
+| `series_follows` | Stores series follows data for the associated feature. | [schema](packages/utils/db/src/schema/series.ts) |
 | `series` | Ordered collections of posts authored as a series. | [schema](packages/utils/db/src/schema/series.ts) |
 | `collection_posts` | Post membership and ordering within collections. | [schema](packages/utils/db/src/schema/collections.ts) |
 | `collections` | User-curated post collections. | [schema](packages/utils/db/src/schema/collections.ts) |

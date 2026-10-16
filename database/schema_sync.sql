@@ -275,6 +275,8 @@ CREATE TABLE IF NOT EXISTS "conversations" (
 	"is_group" boolean DEFAULT false NOT NULL,
 	"group_name" text,
 	"opportunity_id" integer,
+	"context_type" text,
+	"context_id" integer,
 	"request_status" text DEFAULT 'accepted' NOT NULL,
 	"request_recipient_id" integer,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -338,6 +340,7 @@ CREATE TABLE IF NOT EXISTS "group_join_requests" (
 	"reviewed_by" integer,
 	"reviewed_at" timestamp,
 	"screening_answers" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"review_reason" text,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 
@@ -373,6 +376,7 @@ CREATE TABLE IF NOT EXISTS "group_post_details" (
 	"is_announcement" boolean DEFAULT false NOT NULL,
 	"comments_enabled" boolean DEFAULT true NOT NULL,
 	"approval_status" text DEFAULT 'approved' NOT NULL,
+	"approval_reason" text,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 
@@ -395,6 +399,9 @@ CREATE TABLE IF NOT EXISTS "groups" (
 	"is_announcement_only" boolean DEFAULT false NOT NULL,
 	"require_approval_first_three" boolean DEFAULT false NOT NULL,
 	"require_approval_all" boolean DEFAULT false NOT NULL,
+	"min_join_reputation" real,
+	"min_post_reputation" real,
+	"min_review_bypass_reputation" real,
 	"announcement_policy" text DEFAULT 'admins' NOT NULL,
 	"is_archived" boolean DEFAULT false NOT NULL,
 	"is_deleted" boolean DEFAULT false NOT NULL,
@@ -440,6 +447,8 @@ CREATE TABLE IF NOT EXISTS "opportunity_applications" (
 	"proposed_budget" real,
 	"proposed_currency" text DEFAULT 'USD' NOT NULL,
 	"status" text DEFAULT 'pending' NOT NULL,
+	"completion_requested_by_id" integer,
+	"completed_at" timestamp,
 	"conversation_id" integer,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
@@ -480,6 +489,12 @@ CREATE TABLE IF NOT EXISTS "moderation_strikes" (
 	"issued_by" integer,
 	"expires_at" timestamp,
 	"acknowledged_at" timestamp,
+	"appeal_text" text,
+	"appeal_status" text DEFAULT 'none' NOT NULL,
+	"appealed_at" timestamp,
+	"appeal_reviewed_by" integer,
+	"appeal_reviewed_at" timestamp,
+	"appeal_review_note" text,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 
@@ -521,6 +536,7 @@ CREATE TABLE IF NOT EXISTS "portfolio_items" (
 	"title" text NOT NULL,
 	"description" text,
 	"media_url" text NOT NULL,
+	"evidence_url" text,
 	"category" text DEFAULT 'general' NOT NULL,
 	"visibility" text DEFAULT 'public' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
@@ -552,7 +568,8 @@ CREATE TABLE IF NOT EXISTS "collaboration_requests" (
 CREATE TABLE IF NOT EXISTS "collaboration_rooms" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"public_id" text DEFAULT gen_random_uuid()::text NOT NULL,
-	"request_id" integer NOT NULL,
+	"request_id" integer,
+	"opportunity_application_id" integer,
 	"created_by_id" integer NOT NULL,
 	"title" text NOT NULL,
 	"brief" text DEFAULT '' NOT NULL,
@@ -687,6 +704,7 @@ CREATE TABLE IF NOT EXISTS "reputation_events" (
 	"type" text NOT NULL,
 	"score_change" real DEFAULT 0 NOT NULL,
 	"reason" text NOT NULL,
+	"event_key" text,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 
@@ -698,6 +716,10 @@ CREATE TABLE IF NOT EXISTS "user_trust_scores" (
 	"cts" real DEFAULT 0 NOT NULL,
 	"avg_cis" real DEFAULT 0 NOT NULL,
 	"uti" real DEFAULT 0 NOT NULL,
+	"is_disputed" boolean DEFAULT false NOT NULL,
+	"dispute_reason" text,
+	"dispute_review_note" text,
+	"disputed_at" timestamp,
 	"visibility_multiplier" real DEFAULT 0.3 NOT NULL,
 	"tier" text DEFAULT 'restricted' NOT NULL,
 	"creator_level" text DEFAULT 'new_voice' NOT NULL,
@@ -752,6 +774,13 @@ CREATE TABLE IF NOT EXISTS "translation_cache" (
 	"hit_count" integer DEFAULT 1 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "series_follows" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"series_id" integer NOT NULL,
+	"follower_id" integer NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "series" (
@@ -4501,6 +4530,36 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('conversations') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "context_type" text;
+  ELSE
+    RAISE NOTICE 'Skipped column context_type: conversations is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column context_type on conversations: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('conversations') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "context_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column context_id: conversations is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column context_id on conversations: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('conversations') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "request_status" text DEFAULT 'accepted' NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column request_status: conversations is not a table';
@@ -5176,6 +5235,21 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('group_join_requests') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "group_join_requests" ADD COLUMN IF NOT EXISTS "review_reason" text;
+  ELSE
+    RAISE NOTICE 'Skipped column review_reason: group_join_requests is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column review_reason on group_join_requests: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('group_join_requests') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "group_join_requests" ADD COLUMN IF NOT EXISTS "created_at" timestamp DEFAULT now() NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column created_at: group_join_requests is not a table';
@@ -5566,6 +5640,21 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('group_post_details') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "group_post_details" ADD COLUMN IF NOT EXISTS "approval_reason" text;
+  ELSE
+    RAISE NOTICE 'Skipped column approval_reason: group_post_details is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column approval_reason on group_post_details: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('group_post_details') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "group_post_details" ADD COLUMN IF NOT EXISTS "created_at" timestamp DEFAULT now() NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column created_at: group_post_details is not a table';
@@ -5843,6 +5932,51 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column require_approval_all on groups: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('groups') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "min_join_reputation" real;
+  ELSE
+    RAISE NOTICE 'Skipped column min_join_reputation: groups is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column min_join_reputation on groups: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('groups') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "min_post_reputation" real;
+  ELSE
+    RAISE NOTICE 'Skipped column min_post_reputation: groups is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column min_post_reputation on groups: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('groups') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "groups" ADD COLUMN IF NOT EXISTS "min_review_bypass_reputation" real;
+  ELSE
+    RAISE NOTICE 'Skipped column min_review_bypass_reputation: groups is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column min_review_bypass_reputation on groups: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -6436,6 +6570,36 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('opportunity_applications') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "opportunity_applications" ADD COLUMN IF NOT EXISTS "completion_requested_by_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column completion_requested_by_id: opportunity_applications is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column completion_requested_by_id on opportunity_applications: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('opportunity_applications') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "opportunity_applications" ADD COLUMN IF NOT EXISTS "completed_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column completed_at: opportunity_applications is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column completed_at on opportunity_applications: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('opportunity_applications') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "opportunity_applications" ADD COLUMN IF NOT EXISTS "conversation_id" integer;
   ELSE
     RAISE NOTICE 'Skipped column conversation_id: opportunity_applications is not a table';
@@ -6901,6 +7065,96 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('moderation_strikes') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "moderation_strikes" ADD COLUMN IF NOT EXISTS "appeal_text" text;
+  ELSE
+    RAISE NOTICE 'Skipped column appeal_text: moderation_strikes is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column appeal_text on moderation_strikes: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('moderation_strikes') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "moderation_strikes" ADD COLUMN IF NOT EXISTS "appeal_status" text DEFAULT 'none' NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column appeal_status: moderation_strikes is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column appeal_status on moderation_strikes: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('moderation_strikes') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "moderation_strikes" ADD COLUMN IF NOT EXISTS "appealed_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column appealed_at: moderation_strikes is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column appealed_at on moderation_strikes: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('moderation_strikes') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "moderation_strikes" ADD COLUMN IF NOT EXISTS "appeal_reviewed_by" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column appeal_reviewed_by: moderation_strikes is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column appeal_reviewed_by on moderation_strikes: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('moderation_strikes') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "moderation_strikes" ADD COLUMN IF NOT EXISTS "appeal_reviewed_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column appeal_reviewed_at: moderation_strikes is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column appeal_reviewed_at on moderation_strikes: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('moderation_strikes') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "moderation_strikes" ADD COLUMN IF NOT EXISTS "appeal_review_note" text;
+  ELSE
+    RAISE NOTICE 'Skipped column appeal_review_note: moderation_strikes is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column appeal_review_note on moderation_strikes: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('moderation_strikes') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "moderation_strikes" ADD COLUMN IF NOT EXISTS "created_at" timestamp DEFAULT now() NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column created_at: moderation_strikes is not a table';
@@ -7321,6 +7575,21 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('portfolio_items') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "portfolio_items" ADD COLUMN IF NOT EXISTS "evidence_url" text;
+  ELSE
+    RAISE NOTICE 'Skipped column evidence_url: portfolio_items is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column evidence_url on portfolio_items: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('portfolio_items') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "portfolio_items" ADD COLUMN IF NOT EXISTS "category" text DEFAULT 'general' NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column category: portfolio_items is not a table';
@@ -7643,6 +7912,21 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column request_id on collaboration_rooms: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('collaboration_rooms') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "collaboration_rooms" ADD COLUMN IF NOT EXISTS "opportunity_application_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column opportunity_application_id: collaboration_rooms is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column opportunity_application_id on collaboration_rooms: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -9061,6 +9345,21 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('reputation_events') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "reputation_events" ADD COLUMN IF NOT EXISTS "event_key" text;
+  ELSE
+    RAISE NOTICE 'Skipped column event_key: reputation_events is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column event_key on reputation_events: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('reputation_events') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "reputation_events" ADD COLUMN IF NOT EXISTS "created_at" timestamp DEFAULT now() NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column created_at: reputation_events is not a table';
@@ -9173,6 +9472,66 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column uti on user_trust_scores: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('user_trust_scores') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "user_trust_scores" ADD COLUMN IF NOT EXISTS "is_disputed" boolean DEFAULT false NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column is_disputed: user_trust_scores is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column is_disputed on user_trust_scores: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('user_trust_scores') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "user_trust_scores" ADD COLUMN IF NOT EXISTS "dispute_reason" text;
+  ELSE
+    RAISE NOTICE 'Skipped column dispute_reason: user_trust_scores is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column dispute_reason on user_trust_scores: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('user_trust_scores') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "user_trust_scores" ADD COLUMN IF NOT EXISTS "dispute_review_note" text;
+  ELSE
+    RAISE NOTICE 'Skipped column dispute_review_note: user_trust_scores is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column dispute_review_note on user_trust_scores: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('user_trust_scores') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "user_trust_scores" ADD COLUMN IF NOT EXISTS "disputed_at" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column disputed_at: user_trust_scores is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column disputed_at on user_trust_scores: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -9683,6 +10042,66 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column updated_at on translation_cache: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('series_follows') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "series_follows" ADD COLUMN IF NOT EXISTS "id" serial NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column id: series_follows is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column id on series_follows: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('series_follows') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "series_follows" ADD COLUMN IF NOT EXISTS "series_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column series_id: series_follows is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column series_id on series_follows: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('series_follows') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "series_follows" ADD COLUMN IF NOT EXISTS "follower_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column follower_id: series_follows is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column follower_id on series_follows: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('series_follows') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "series_follows" ADD COLUMN IF NOT EXISTS "created_at" timestamp DEFAULT now() NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column created_at: series_follows is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column created_at on series_follows: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -16876,6 +17295,20 @@ DO $schema_sync$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'series_follows'::regclass AND contype = 'p'
+  ) THEN
+    ALTER TABLE "series_follows" ADD CONSTRAINT "series_follows_pkey" PRIMARY KEY ("id");
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped primary key series_follows_pkey: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
     WHERE conrelid = 'series'::regclass AND contype = 'p'
   ) THEN
     ALTER TABLE "series" ADD CONSTRAINT "series_pkey" PRIMARY KEY ("id");
@@ -18465,6 +18898,25 @@ DO $schema_sync$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'opportunity_applications'::regclass AND conname = 'opportunity_applications_completion_requested_by_id_users_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "opportunity_applications" LIMIT 1) THEN
+      ALTER TABLE "opportunity_applications" ADD CONSTRAINT "opportunity_applications_completion_requested_by_id_users_id_fk" FOREIGN KEY ("completion_requested_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+    ELSE
+      ALTER TABLE "opportunity_applications" ADD CONSTRAINT "opportunity_applications_completion_requested_by_id_users_id_fk" FOREIGN KEY ("completion_requested_by_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key opportunity_applications_completion_requested_by_id_users_id_fk NOT VALID because opportunity_applications contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key opportunity_applications_completion_requested_by_id_users_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
     WHERE conrelid = 'notifications'::regclass AND conname = 'notifications_user_id_users_id_fk'
   ) THEN
     IF NOT EXISTS (SELECT 1 FROM "notifications" LIMIT 1) THEN
@@ -18591,6 +19043,25 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped foreign key moderation_strikes_issued_by_users_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'moderation_strikes'::regclass AND conname = 'moderation_strikes_appeal_reviewed_by_users_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "moderation_strikes" LIMIT 1) THEN
+      ALTER TABLE "moderation_strikes" ADD CONSTRAINT "moderation_strikes_appeal_reviewed_by_users_id_fk" FOREIGN KEY ("appeal_reviewed_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+    ELSE
+      ALTER TABLE "moderation_strikes" ADD CONSTRAINT "moderation_strikes_appeal_reviewed_by_users_id_fk" FOREIGN KEY ("appeal_reviewed_by") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key moderation_strikes_appeal_reviewed_by_users_id_fk NOT VALID because moderation_strikes contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key moderation_strikes_appeal_reviewed_by_users_id_fk: %', SQLERRM;
 END
 $schema_sync$;
 
@@ -18743,6 +19214,25 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped foreign key collaboration_rooms_request_id_collaboration_requests_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'collaboration_rooms'::regclass AND conname = 'collaboration_rooms_opportunity_application_id_opportunity_applications_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "collaboration_rooms" LIMIT 1) THEN
+      ALTER TABLE "collaboration_rooms" ADD CONSTRAINT "collaboration_rooms_opportunity_application_id_opportunity_applications_id_fk" FOREIGN KEY ("opportunity_application_id") REFERENCES "public"."opportunity_applications"("id") ON DELETE cascade ON UPDATE no action;
+    ELSE
+      ALTER TABLE "collaboration_rooms" ADD CONSTRAINT "collaboration_rooms_opportunity_application_id_opportunity_applications_id_fk" FOREIGN KEY ("opportunity_application_id") REFERENCES "public"."opportunity_applications"("id") ON DELETE cascade ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key collaboration_rooms_opportunity_application_id_opportunity_applications_id_fk NOT VALID because collaboration_rooms contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key collaboration_rooms_opportunity_application_id_opportunity_applications_id_fk: %', SQLERRM;
 END
 $schema_sync$;
 
@@ -19237,6 +19727,44 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped foreign key mentions_mentioning_user_id_users_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'series_follows'::regclass AND conname = 'series_follows_series_id_series_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "series_follows" LIMIT 1) THEN
+      ALTER TABLE "series_follows" ADD CONSTRAINT "series_follows_series_id_series_id_fk" FOREIGN KEY ("series_id") REFERENCES "public"."series"("id") ON DELETE cascade ON UPDATE no action;
+    ELSE
+      ALTER TABLE "series_follows" ADD CONSTRAINT "series_follows_series_id_series_id_fk" FOREIGN KEY ("series_id") REFERENCES "public"."series"("id") ON DELETE cascade ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key series_follows_series_id_series_id_fk NOT VALID because series_follows contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key series_follows_series_id_series_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'series_follows'::regclass AND conname = 'series_follows_follower_id_users_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "series_follows" LIMIT 1) THEN
+      ALTER TABLE "series_follows" ADD CONSTRAINT "series_follows_follower_id_users_id_fk" FOREIGN KEY ("follower_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;
+    ELSE
+      ALTER TABLE "series_follows" ADD CONSTRAINT "series_follows_follower_id_users_id_fk" FOREIGN KEY ("follower_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key series_follows_follower_id_users_id_fk NOT VALID because series_follows contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key series_follows_follower_id_users_id_fk: %', SQLERRM;
 END
 $schema_sync$;
 
@@ -21385,6 +21913,17 @@ $schema_sync$;
 
 DO $schema_sync$
 BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS "collaboration_rooms_opportunity_application_unique" ON "collaboration_rooms" USING btree ("opportunity_application_id");
+EXCEPTION
+  WHEN unique_violation THEN
+    RAISE NOTICE 'Skipped unique index collaboration_rooms_opportunity_application_unique: existing rows contain duplicate values';
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped unique index collaboration_rooms_opportunity_application_unique: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
   CREATE UNIQUE INDEX IF NOT EXISTS "collaboration_rooms_public_id_unique" ON "collaboration_rooms" USING btree ("public_id");
 EXCEPTION
   WHEN unique_violation THEN
@@ -21435,6 +21974,17 @@ EXCEPTION
     RAISE NOTICE 'Skipped unique index writing_activity_user_post_date_unique: existing rows contain duplicate values';
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped unique index writing_activity_user_post_date_unique: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS "series_follows_series_follower_unique" ON "series_follows" USING btree ("series_id","follower_id");
+EXCEPTION
+  WHEN unique_violation THEN
+    RAISE NOTICE 'Skipped unique index series_follows_series_follower_unique: existing rows contain duplicate values';
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped unique index series_follows_series_follower_unique: %', SQLERRM;
 END
 $schema_sync$;
 
