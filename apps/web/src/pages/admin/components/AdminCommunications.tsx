@@ -36,6 +36,8 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
   const [mode, setMode] = useState<CommunicationMode>("message");
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<Recipient[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [userSearchError, setUserSearchError] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<Recipient | null>(null);
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
@@ -44,23 +46,33 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
   useEffect(() => {
     if (mode === "broadcast" || search.trim().length < 2) {
       setUsers([]);
+      setSearchingUsers(false);
+      setUserSearchError(null);
       return;
     }
     let cancelled = false;
+    setSearchingUsers(true);
+    setUserSearchError(null);
     const timer = window.setTimeout(() => {
-      void fetchAdmin(`/api/admin/master/users?q=${encodeURIComponent(search.trim())}`)
+      void fetchAdmin(`/api/admin/users?q=${encodeURIComponent(search.trim())}&limit=30`)
         .then((data) => {
           if (!cancelled) setUsers(data.users ?? []);
         })
         .catch((error: Error) => {
-          if (!cancelled) toast({ title: "Could not search users", description: error.message, variant: "destructive" });
+          if (!cancelled) {
+            setUsers([]);
+            setUserSearchError(error.message);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setSearchingUsers(false);
         });
     }, 250);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [fetchAdmin, mode, search, toast]);
+  }, [fetchAdmin, mode, search]);
 
   const send = async (selectedMode: CommunicationMode) => {
     if (!content.trim() || (selectedMode !== "broadcast" && !selectedUser)) return;
@@ -148,6 +160,12 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
               Selected: <span className="font-medium">{recipientLabel}</span> · {selectedUser.email}
             </p>
           )}
+          {searchingUsers && (
+            <p className="text-xs text-muted-foreground" role="status">Searching users…</p>
+          )}
+          {userSearchError && (
+            <p className="text-xs text-destructive" role="alert">Could not search users: {userSearchError}</p>
+          )}
           {search.trim().length >= 2 && users.length > 0 && (
             <div className="max-h-52 overflow-y-auto rounded-md border border-border" role="listbox" aria-label="Matching users">
               {users.map((user) => (
@@ -167,7 +185,7 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
               ))}
             </div>
           )}
-          {search.trim().length >= 2 && users.length === 0 && !selectedUser && (
+          {search.trim().length >= 2 && !searchingUsers && !userSearchError && users.length === 0 && !selectedUser && (
             <p className="text-xs text-muted-foreground">No matching users. Try a username or email address.</p>
           )}
         </div>
