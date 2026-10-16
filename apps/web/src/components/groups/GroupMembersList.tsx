@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Timestamp } from '@/lib/postTimestamp';
-import { Ban, Check, Shield, ShieldCheck, User as UserIcon, UserMinus, Volume2, VolumeX } from "lucide-react";
+import { ArrowRightLeft, Ban, Check, Shield, ShieldCheck, User as UserIcon, UserMinus, Volume2, VolumeX } from "lucide-react";
 import { Link } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,7 @@ interface JoinRequest {
   joinedAt: string;
   trustScore: number | null;
   screeningAnswers: Record<string, string>;
+  reviewReason?: string | null;
 }
 
 interface GroupMembersListProps {
@@ -150,6 +151,18 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
     setMembers(current => current.map(item => item.userId === member.userId ? { ...item, status: "active" } : item));
   };
 
+  const transferOwnership = async (member: Member) => {
+    if (!window.confirm(`Transfer ownership of this group to @${member.username}? You will become an administrator.`)) return;
+    const response = await apiFetch(`/api/groups/${groupId}/transfer-ownership`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: member.userId }),
+    });
+    if (!response.ok) return toast({ title: "Could not transfer ownership", variant: "destructive" });
+    toast({ title: "Group ownership transferred" });
+    window.location.reload();
+  };
+
   if (loading) return <div className="py-10 text-center text-sm text-muted-foreground">Loading members...</div>;
 
   const canManage = myRole === "admin" || myRole === "owner";
@@ -164,13 +177,14 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
         <Badge variant="secondary">{member.role === "owner" ? "Group Admin" : member.role === "admin" ? "Admin" : member.role === "moderator" ? "Moderator" : "Member"}</Badge>
       </div>
       {canModerate && member.role !== "owner" && <div className="flex flex-wrap items-center gap-2">
-        {canManage && <Select value={member.role} onValueChange={value => void updateRole(member.userId, value as GroupRole)}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent>{ROLES.map(role => <SelectItem key={role} value={role} className="capitalize">{role}</SelectItem>)}</SelectContent></Select>}
-        {member.status === "banned" ? <Button size="sm" variant="outline" onClick={() => void unban(member)}><Check className="mr-1.5 h-4 w-4" />Unban</Button> : <>
+        {canManage && (myRole === "owner" || member.role !== "admin") && <Select value={member.role} onValueChange={value => void updateRole(member.userId, value as GroupRole)}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent>{(myRole === "owner" ? ROLES : ROLES.filter(role => role !== "admin")).map(role => <SelectItem key={role} value={role} className="capitalize">{role}</SelectItem>)}</SelectContent></Select>}
+        {myRole === "owner" && member.status === "active" && <Button size="sm" variant="outline" onClick={() => void transferOwnership(member)}><ArrowRightLeft className="mr-1.5 h-4 w-4" />Transfer ownership</Button>}
+        {member.status === "banned" && (myRole === "owner" || myRole === "admin" && ["member", "moderator"].includes(member.role)) ? <Button size="sm" variant="outline" onClick={() => void unban(member)}><Check className="mr-1.5 h-4 w-4" />Unban</Button> : member.status !== "banned" && (myRole === "owner" || myRole === "admin" && ["member", "moderator"].includes(member.role) || myRole === "moderator" && member.role === "member") ? <>
           <Select value={muteDuration} onValueChange={setMuteDuration}><SelectTrigger className="h-9 w-28"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="24h">24 hours</SelectItem><SelectItem value="7d">7 days</SelectItem><SelectItem value="30d">30 days</SelectItem><SelectItem value="custom">Custom</SelectItem></SelectContent></Select>
           {muteDuration === "custom" && <Input aria-label="Mute until" type="datetime-local" className="h-9 w-44" value={customMuteUntil} onChange={event => setCustomMuteUntil(event.target.value)} />}
           <Button size="sm" variant="outline" onClick={() => void updateMemberStatus(member, member.status === "muted" ? "active" : "muted")} title={member.status === "muted" ? "Unmute member" : "Mute member"}>{member.status === "muted" ? <Volume2 className="mr-1.5 h-4 w-4" /> : <VolumeX className="mr-1.5 h-4 w-4" />}{member.status === "muted" ? "Unmute" : "Mute"}</Button>
-          {canManage && <><Button size="sm" variant="ghost" onClick={() => void removeMember(member, false)}><UserMinus className="mr-1.5 h-4 w-4" />Remove</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => void removeMember(member, true)}><Ban className="mr-1.5 h-4 w-4" />Ban</Button></>}
-        </>}
+          {(myRole === "owner" || myRole === "admin" && ["member", "moderator"].includes(member.role)) && <><Button size="sm" variant="ghost" onClick={() => void removeMember(member, false)}><UserMinus className="mr-1.5 h-4 w-4" />Remove</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => void removeMember(member, true)}><Ban className="mr-1.5 h-4 w-4" />Ban</Button></>}
+        </> : null}
       </div>}
     </div>)}</div>;
 
@@ -185,6 +199,7 @@ export function GroupMembersList({ groupId }: GroupMembersListProps) {
       <TabsContent value="pending" className="space-y-5">
         {canManage && requests.length > 0 && <div className="divide-y divide-border border-y">{requests.map(request => <article key={request.id} className="space-y-3 py-4">
           <div className="flex flex-wrap items-center gap-3"><Link href={`/u/${encodeURIComponent(request.username)}`} aria-label={`View ${request.displayName || request.username}'s profile`} className="shrink-0"><Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1)}</AvatarFallback></Avatar></Link><div className="min-w-0 flex-1"><Link href={`/u/${encodeURIComponent(request.username)}`} className="text-sm font-semibold hover:underline">{request.displayName || request.username}</Link><p className="text-xs text-muted-foreground"><Link href={`/u/${encodeURIComponent(request.username)}`} className="hover:underline">@{request.username}</Link> · applied <Timestamp value={request.createdAt} mode="date" /></p></div><TrustBadge score={request.trustScore} /></div>
+          {request.reviewReason && request.reviewReason !== "member_request" && <p className="text-xs text-amber-700 dark:text-amber-300">Manual reputation review requested: {request.reviewReason.replace("reputation_", "").replace(/_/g, " ")}.</p>}
           {Object.entries(request.screeningAnswers ?? {}).map(([question, answer]) => <div key={question} className="pl-13 text-sm"><p className="text-xs font-medium text-muted-foreground">{question}</p><p>{answer}</p></div>)}
           <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void reviewRequest(request, "approve")}><Check className="mr-1.5 h-4 w-4" />Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewRequest(request, "reject")}>Decline</Button><Button size="sm" variant="ghost" className="text-destructive" onClick={() => void reviewRequest(request, "block")}><Ban className="mr-1.5 h-4 w-4" />Block</Button></div>
         </article>)}</div>}

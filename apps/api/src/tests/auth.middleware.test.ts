@@ -4,6 +4,7 @@ import type { Request, Response, NextFunction } from "express";
 const authMocks = vi.hoisted(() => ({
   getSessionUserId: vi.fn(),
   getSessionAuthVersion: vi.fn(),
+  isSessionActive: vi.fn(),
   isTokenBlacklisted: vi.fn(),
 }));
 const dbMocks = vi.hoisted(() => ({
@@ -65,6 +66,7 @@ describe("requireAdmin middleware", () => {
   beforeEach(() => {
     authMocks.getSessionUserId.mockReturnValue(1);
     authMocks.getSessionAuthVersion.mockReturnValue(0);
+    authMocks.isSessionActive.mockResolvedValue(true);
     authMocks.isTokenBlacklisted.mockResolvedValue(false);
     dbMocks.user.role = "user";
     dbMocks.user.isBanned = false;
@@ -75,6 +77,7 @@ describe("requireAdmin middleware", () => {
     beforeEach(() => {
       authMocks.getSessionUserId.mockReturnValue(1);
       authMocks.getSessionAuthVersion.mockReturnValue(0);
+      authMocks.isSessionActive.mockResolvedValue(true);
       authMocks.isTokenBlacklisted.mockResolvedValue(false);
       dbMocks.user.role = "user";
       dbMocks.user.isBanned = false;
@@ -156,6 +159,19 @@ describe("requireAdmin middleware", () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(next).not.toHaveBeenCalled();
   });
+
+  it("rejects access tokens after their device session is revoked", async () => {
+    authMocks.isSessionActive.mockResolvedValue(false);
+    const { requireAuth } = await import("../middleware/admin");
+    const req = { headers: { authorization: "Bearer token" } } as unknown as Request;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
+    const next = vi.fn() as NextFunction;
+
+    await requireAuth(req, res, next);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith({ error: "Session revoked or expired" });
+    expect(next).not.toHaveBeenCalled();
+  });
 });
 
 describe("manage_settings permission", () => {
@@ -174,6 +190,7 @@ describe("validateBearerTokenState middleware", () => {
   beforeEach(() => {
     authMocks.getSessionUserId.mockReturnValue(1);
     authMocks.getSessionAuthVersion.mockReturnValue(0);
+    authMocks.isSessionActive.mockResolvedValue(true);
     authMocks.isTokenBlacklisted.mockResolvedValue(false);
     dbMocks.user.authVersion = 0;
   });
@@ -194,6 +211,18 @@ describe("validateBearerTokenState middleware", () => {
     authMocks.isTokenBlacklisted.mockResolvedValue(true);
     const { validateBearerTokenState } = await import("../middleware/admin");
     const req = { headers: { authorization: "Bearer revoked-token" } } as unknown as Request;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
+    const next = vi.fn() as NextFunction;
+
+    await validateBearerTokenState(req, res, next);
+    expect(req.headers.authorization).toBeUndefined();
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it("strips access tokens belonging to revoked device sessions before direct-token handlers", async () => {
+    authMocks.isSessionActive.mockResolvedValue(false);
+    const { validateBearerTokenState } = await import("../middleware/admin");
+    const req = { headers: { authorization: "Bearer token" } } as unknown as Request;
     const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
     const next = vi.fn() as NextFunction;
 

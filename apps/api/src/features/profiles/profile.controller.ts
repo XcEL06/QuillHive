@@ -297,6 +297,9 @@ export const login = async (req: Request, res: Response) => {
   if (!user.emailVerified) return res.status(403).json({ error: "Please verify your email before signing in." });
 
   const loginIntegrity = await recordLoginIntegrity(user.id, req, { deferReviewBaseline: true });
+  if (loginIntegrity.integrityStatus === "unknown") {
+    return res.status(503).json({ error: "Sign-in security checks are temporarily unavailable. Please try again." });
+  }
   if (loginIntegrity.integrityStatus === "review") {
     let challenge;
     try {
@@ -377,6 +380,9 @@ export const verifyEmail = async (req: Request, res: Response) => {
   const user = await verifyEmailToken(req.body.token);
   if (!user) return res.status(400).json({ error: "Invalid or expired verification token." });
   const loginIntegrity = await recordLoginIntegrity(user.id, req);
+  if (loginIntegrity.integrityStatus === "unknown") {
+    return res.status(503).json({ error: "Sign-in security checks are temporarily unavailable. Please try again." });
+  }
   const authTokens = await createAuthTokens(user.id, { userAgent: loginIntegrity.userAgent, ipHash: loginIntegrity.ipHash });
   const userWithCounts = await getUserWithCounts(user.id, null);
   return res.json({ ...authTokens, user: userWithCounts, message: "Email verified successfully.", loginIntegrity: { status: loginIntegrity.integrityStatus, riskScore: loginIntegrity.riskScore } });

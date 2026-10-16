@@ -27,6 +27,14 @@ const privacyInviteMigrationSql = readFileSync(
   fileURLToPath(new URL('../../../../packages/utils/db/drizzle/0024_group_privacy_invites.sql', import.meta.url)),
   'utf8'
 );
+const reputationGateMigrationSql = readFileSync(
+  fileURLToPath(new URL('../../../../packages/utils/db/drizzle/0037_group_reputation_gates.sql', import.meta.url)),
+  'utf8'
+);
+const migrationJournal = JSON.parse(readFileSync(
+  fileURLToPath(new URL('../../../../packages/utils/db/drizzle/meta/_journal.json', import.meta.url)),
+  'utf8'
+)) as { entries: Array<{ tag: string }> };
 
 describe('Group create validation', () => {
   it('allows super admins to inspect private group posts without membership', () => {
@@ -139,5 +147,13 @@ describe('Group create validation', () => {
     expect(privacyInviteMigrationSql).toContain('SET "type" = \'private\'');
     expect(privacyInviteMigrationSql).toContain('CREATE TABLE IF NOT EXISTS "group_invites"');
     expect(privacyInviteMigrationSql).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "group_invites_code_unique"');
+  });
+
+  it('registers the reputation-gate and dispute-state migration', () => {
+    expect(reputationGateMigrationSql).toContain('"min_join_reputation" real');
+    expect(reputationGateMigrationSql).toContain('"min_post_reputation" real');
+    expect(reputationGateMigrationSql).toContain('"min_review_bypass_reputation" real');
+    expect(reputationGateMigrationSql).toContain('"is_disputed" boolean NOT NULL DEFAULT false');
+    expect(migrationJournal.entries.some(entry => entry.tag === '0037_group_reputation_gates')).toBe(true);
   });
 });

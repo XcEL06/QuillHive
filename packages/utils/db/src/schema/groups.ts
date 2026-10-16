@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, uniqueIndex, jsonb, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, uniqueIndex, jsonb, index, real } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -24,6 +24,9 @@ export const groupsTable = pgTable("groups", {
   isAnnouncementOnly: boolean("is_announcement_only").notNull().default(false),
   requireApprovalFirstThree: boolean("require_approval_first_three").notNull().default(false),
   requireApprovalAll: boolean("require_approval_all").notNull().default(false),
+  minJoinReputation: real("min_join_reputation"),
+  minPostReputation: real("min_post_reputation"),
+  minReviewBypassReputation: real("min_review_bypass_reputation"),
   announcementPolicy: text("announcement_policy").notNull().default("admins"),
   isArchived: boolean("is_archived").notNull().default(false),
   isDeleted: boolean("is_deleted").notNull().default(false),
@@ -64,6 +67,7 @@ export const groupPostDetailsTable = pgTable("group_post_details", {
   isAnnouncement: boolean("is_announcement").notNull().default(false),
   commentsEnabled: boolean("comments_enabled").notNull().default(true),
   approvalStatus: text("approval_status").notNull().default("approved"),
+  approvalReason: text("approval_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   postUnique: uniqueIndex("group_post_details_post_unique").on(t.postId),
@@ -78,6 +82,7 @@ export const groupJoinRequestsTable = pgTable("group_join_requests", {
   reviewedBy: integer("reviewed_by").references(() => usersTable.id),
   reviewedAt: timestamp("reviewed_at"),
   screeningAnswers: jsonb("screening_answers").$type<Record<string, string>>().notNull().default({}),
+  reviewReason: text("review_reason"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   requestUnique: uniqueIndex("group_join_requests_group_user_unique").on(t.groupId, t.userId),

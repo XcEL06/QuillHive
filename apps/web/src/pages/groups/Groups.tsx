@@ -65,6 +65,9 @@ interface GroupView {
   isAnnouncementOnly?: boolean;
   requireApprovalFirstThree?: boolean;
   requireApprovalAll?: boolean;
+  minJoinReputation?: number | null;
+  minPostReputation?: number | null;
+  minReviewBypassReputation?: number | null;
   announcementPolicy?: 'owner' | 'admins';
   features?: { eventsEnabled: boolean };
   hasPendingJoinRequest?: boolean;
@@ -90,6 +93,7 @@ interface JoinRequestPreview {
   displayName: string | null;
   avatarUrl: string | null;
   trustScore: number | null;
+  reviewReason?: string | null;
 }
 
 interface GroupPollData {
@@ -326,7 +330,12 @@ function GroupDetail({ id }: { id: number }) {
   const { data: postsData, isLoading: postsLoading, isError: postsError, refetch: refetchPosts } = useGetGroupPosts(id, { page: postsPage });
   const { token } = useAuthStore();
   const [myRole, setMyRole] = useState<GroupView['memberRole']>(null);
-  const [settings, setSettings] = useState({ name: '', description: '', privacy: 'open', rules: '', coverUrl: '', iconUrl: '', isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false, announcementPolicy: 'admins' });
+  const [settings, setSettings] = useState({
+    name: '', description: '', privacy: 'open', rules: '', coverUrl: '', iconUrl: '',
+    isAnnouncementOnly: false, requireApprovalFirstThree: false, requireApprovalAll: false,
+    announcementPolicy: 'admins', minJoinReputation: '', minPostReputation: '',
+    minReviewBypassReputation: '',
+  });
   const [composerType, setComposerType] = useState('discussion');
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
   const [postContent, setPostContent] = useState('');
@@ -375,7 +384,21 @@ function GroupDetail({ id }: { id: number }) {
     if (!group) return;
     const current = group as GroupView;
     setMyRole(current.memberRole ?? null);
-    setSettings({ name: current.name, description: current.description ?? '', privacy: current.privacy ?? (current.type === 'secret' ? 'private' : current.type === 'private' ? 'public' : 'open'), rules: (current.rules ?? []).join('\n'), coverUrl: current.coverImage ?? current.coverUrl ?? '', iconUrl: current.iconImage ?? current.avatarUrl ?? '', isAnnouncementOnly: current.isAnnouncementOnly ?? false, requireApprovalFirstThree: current.requireApprovalFirstThree ?? false, requireApprovalAll: current.requireApprovalAll ?? false, announcementPolicy: current.announcementPolicy ?? 'admins' });
+    setSettings({
+      name: current.name,
+      description: current.description ?? '',
+      privacy: current.privacy ?? (current.type === 'secret' ? 'private' : current.type === 'private' ? 'public' : 'open'),
+      rules: (current.rules ?? []).join('\n'),
+      coverUrl: current.coverImage ?? current.coverUrl ?? '',
+      iconUrl: current.iconImage ?? current.avatarUrl ?? '',
+      isAnnouncementOnly: current.isAnnouncementOnly ?? false,
+      requireApprovalFirstThree: current.requireApprovalFirstThree ?? false,
+      requireApprovalAll: current.requireApprovalAll ?? false,
+      announcementPolicy: current.announcementPolicy ?? 'admins',
+      minJoinReputation: current.minJoinReputation == null ? '' : String(current.minJoinReputation),
+      minPostReputation: current.minPostReputation == null ? '' : String(current.minPostReputation),
+      minReviewBypassReputation: current.minReviewBypassReputation == null ? '' : String(current.minReviewBypassReputation),
+    });
   }, [group]);
 
   useEffect(() => {
@@ -576,7 +599,22 @@ function GroupDetail({ id }: { id: number }) {
 
   const saveSettings = async () => {
     if (!token) return;
-    const res = await apiFetch(`/api/groups/${id}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...settings, rules: settings.rules.split('\n').map(rule => rule.trim()).filter(Boolean).slice(0, 5) }) });
+    const threshold = (value: string) => value.trim() === '' ? null : Number(value);
+    const payload = {
+      name: settings.name,
+      description: settings.description,
+      rules: settings.rules.split('\n').map(rule => rule.trim()).filter(Boolean).slice(0, 5),
+      coverUrl: settings.coverUrl,
+      iconUrl: settings.iconUrl,
+      isAnnouncementOnly: settings.isAnnouncementOnly,
+      requireApprovalFirstThree: settings.requireApprovalFirstThree,
+      requireApprovalAll: settings.requireApprovalAll,
+      minJoinReputation: threshold(settings.minJoinReputation),
+      minPostReputation: threshold(settings.minPostReputation),
+      minReviewBypassReputation: threshold(settings.minReviewBypassReputation),
+      ...(myRole === 'owner' ? { privacy: settings.privacy, announcementPolicy: settings.announcementPolicy } : {}),
+    };
+    const res = await apiFetch(`/api/groups/${id}/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (!res.ok) return toast({ title: 'Could not update group settings', variant: 'destructive' });
     toast({ title: 'Group settings updated' });
     void refetch();
@@ -921,12 +959,19 @@ function GroupDetail({ id }: { id: number }) {
                 {activeTab === 'settings' && (myRole === 'admin' || myRole === 'owner') && <div className="space-y-3">
                   <Input value={settings.name} onChange={e => setSettings(s => ({ ...s, name: e.target.value }))} placeholder="Group name" />
                   <Textarea maxLength={280} value={settings.description} onChange={e => setSettings(s => ({ ...s, description: e.target.value }))} placeholder="Description, up to 280 characters" />
-                  <div><Label>Group privacy</Label><Select value={settings.privacy} onValueChange={privacy => setSettings(s => ({ ...s, privacy }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="private">Private</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-muted-foreground">{settings.privacy === 'open' ? 'Anyone can find and join immediately.' : settings.privacy === 'public' ? 'Anyone can find the group and request to join; moderators approve requests.' : 'Only people with a valid invite can join.'}</p></div>
+                  <div><Label>Group privacy</Label><Select disabled={myRole !== 'owner'} value={settings.privacy} onValueChange={privacy => setSettings(s => ({ ...s, privacy }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="open">Open</SelectItem><SelectItem value="public">Public</SelectItem><SelectItem value="private">Private</SelectItem></SelectContent></Select><p className="mt-1 text-xs text-muted-foreground">{settings.privacy === 'open' ? 'Anyone can find and join immediately unless a reputation gate sends them to manual review.' : settings.privacy === 'public' ? 'Anyone can find the group and request to join; managers approve requests.' : 'Only people with a valid invite can join.'}{myRole !== 'owner' ? ' Only the owner can change privacy.' : ''}</p></div>
                   <Textarea value={settings.rules} onChange={e => setSettings(s => ({ ...s, rules: e.target.value }))} placeholder="Up to five rules, one per line" />
                   <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.isAnnouncementOnly} onChange={e => setSettings(s => ({ ...s, isAnnouncementOnly: e.target.checked }))} />Announcement-only</label>
                   <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalFirstThree} onChange={e => setSettings(s => ({ ...s, requireApprovalFirstThree: e.target.checked, requireApprovalAll: false }))} />Require approval for each member's first 3 posts</label>
                   <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={settings.requireApprovalAll} onChange={e => setSettings(s => ({ ...s, requireApprovalAll: e.target.checked, requireApprovalFirstThree: false }))} />Require approval for all posts</label>
-                  <label className="flex items-center justify-between gap-3 text-xs"><span>Who can post announcements</span><Select value={settings.announcementPolicy} onValueChange={announcementPolicy => setSettings(s => ({ ...s, announcementPolicy }))}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="owner">Owner only</SelectItem><SelectItem value="admins">Admins</SelectItem></SelectContent></Select></label>
+                  <div className="space-y-3 rounded-md border border-border/70 p-3">
+                    <h3 className="text-sm font-medium">Platform reputation gates</h3>
+                    <p className="text-xs text-muted-foreground">Scores are 0–100 and must be refreshed within 30 days. New, missing, stale, or disputed scores require manual join/post review where available. Group comments are blocked until the posting threshold is met.</p>
+                    <label className="block space-y-1 text-xs"><span>Minimum reputation to join (blank disables)</span><Input type="number" min="0" max="100" step="0.1" value={settings.minJoinReputation} onChange={e => setSettings(s => ({ ...s, minJoinReputation: e.target.value }))} /></label>
+                    <label className="block space-y-1 text-xs"><span>Minimum reputation to publish group posts/comments (blank disables)</span><Input type="number" min="0" max="100" step="0.1" value={settings.minPostReputation} onChange={e => setSettings(s => ({ ...s, minPostReputation: e.target.value }))} /></label>
+                    <label className="block space-y-1 text-xs"><span>Minimum reputation to bypass manual post review (blank disables)</span><Input type="number" min="0" max="100" step="0.1" value={settings.minReviewBypassReputation} onChange={e => setSettings(s => ({ ...s, minReviewBypassReputation: e.target.value }))} /></label>
+                  </div>
+                  <label className="flex items-center justify-between gap-3 text-xs"><span>Who can post announcements</span><Select disabled={myRole !== 'owner'} value={settings.announcementPolicy} onValueChange={announcementPolicy => setSettings(s => ({ ...s, announcementPolicy }))}><SelectTrigger className="h-9 w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="owner">Owner only</SelectItem><SelectItem value="admins">Admins</SelectItem></SelectContent></Select>{myRole !== 'owner' && <span className="text-muted-foreground">Owner only</span>}</label>
                   <ImageUploadField value={settings.iconUrl} onChange={iconUrl => setSettings(s => ({ ...s, iconUrl }))} category="group" label="Change group icon" previewClassName="h-20 w-20" />
                   <ImageUploadField value={settings.coverUrl} onChange={coverUrl => setSettings(s => ({ ...s, coverUrl }))} category="group" label="Change cover image" />
                   <div className="flex flex-wrap gap-2"><Button size="sm" onClick={() => void saveSettings()}>Save settings</Button><Button size="sm" variant="outline" onClick={() => setLifecycleAction('archive')}>Archive group</Button></div>
@@ -999,7 +1044,7 @@ function GroupDetail({ id }: { id: number }) {
                 {joinRequests.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No pending join requests.</p> : joinRequests.map(request => <article key={request.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
                   <div className="flex min-w-0 items-center gap-3">
                     <Link href={`/u/${encodeURIComponent(request.username)}`} aria-label={`View ${request.displayName || request.username}'s profile`} className="shrink-0"><Avatar className="h-10 w-10"><AvatarImage src={request.avatarUrl ?? undefined} /><AvatarFallback>{(request.displayName || request.username).slice(0, 1).toUpperCase()}</AvatarFallback></Avatar></Link>
-                    <div className="min-w-0"><Link href={`/u/${encodeURIComponent(request.username)}`} className="block truncate text-sm font-semibold hover:underline">{request.displayName || request.username}</Link><p className="truncate text-xs text-muted-foreground"><Link href={`/u/${encodeURIComponent(request.username)}`} className="hover:underline">@{request.username}</Link> · requested <Timestamp value={request.createdAt} mode="date" /></p>{request.trustScore != null && <p className="mt-0.5 text-xs text-muted-foreground">Trust score {request.trustScore}</p>}</div>
+                    <div className="min-w-0"><Link href={`/u/${encodeURIComponent(request.username)}`} className="block truncate text-sm font-semibold hover:underline">{request.displayName || request.username}</Link><p className="truncate text-xs text-muted-foreground"><Link href={`/u/${encodeURIComponent(request.username)}`} className="hover:underline">@{request.username}</Link> · requested <Timestamp value={request.createdAt} mode="date" /></p>{request.trustScore != null && <p className="mt-0.5 text-xs text-muted-foreground">Trust score {request.trustScore}</p>}{request.reviewReason && request.reviewReason !== 'member_request' && <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">Manual review: platform reputation is {request.reviewReason.replace('reputation_', '').replace(/_/g, ' ')}.</p>}</div>
                   </div>
                   <div className="flex gap-2"><Button size="sm" onClick={() => void reviewJoinRequest(request.id, 'approve')}><Check className="mr-1.5 h-4 w-4" />Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewJoinRequest(request.id, 'deny')}><X className="mr-1.5 h-4 w-4" />Deny</Button></div>
                 </article>)}
@@ -1023,6 +1068,7 @@ function GroupDetail({ id }: { id: number }) {
               <h2 className="text-lg font-semibold">About {group.name}</h2>
               <p className="text-sm leading-relaxed text-muted-foreground">{group.description || 'A community for shared interests and useful conversations.'}</p>
               <dl className="grid grid-cols-2 gap-2 text-xs"><div><dt className="text-muted-foreground">Category</dt><dd className="mt-0.5 font-medium">{group.category}</dd></div><div><dt className="text-muted-foreground">Access</dt><dd className="mt-0.5 font-medium">{groupView.privacy === 'private' ? 'Invite-only' : groupView.privacy === 'public' ? 'Request to join' : 'Open join'}</dd></div>{groupView.createdAt && <div><dt className="text-muted-foreground">Created</dt><dd className="mt-0.5 font-medium"><Timestamp value={groupView.createdAt} mode="date" /></dd></div>}</dl>
+              {(groupView.minJoinReputation != null || groupView.minPostReputation != null || groupView.minReviewBypassReputation != null) && <div className="rounded-md bg-muted/50 p-3 text-xs"><h3 className="font-semibold">Reputation requirements</h3><p className="mt-1 text-muted-foreground">{groupView.minJoinReputation != null ? `Join: ${groupView.minJoinReputation} minimum. ` : ''}{groupView.minPostReputation != null ? `Posts and comments: ${groupView.minPostReputation} minimum. ` : ''}{groupView.minReviewBypassReputation != null ? `Manual post-review bypass: ${groupView.minReviewBypassReputation} minimum. ` : ''}Scores older than 30 days, disputed, or unavailable are treated as unverified. Managers can manually review join and post requests.</p></div>}
               {groupView.tags?.length ? <div className="flex flex-wrap gap-1">{groupView.tags.map(tag => <Badge variant="secondary" key={tag} className="text-[10px]">{tag}</Badge>)}</div> : null}
               <details className="group border-t border-border/60 pt-3">
                 <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium">Community rules <span className="text-muted-foreground group-open:rotate-180">⌄</span></summary>

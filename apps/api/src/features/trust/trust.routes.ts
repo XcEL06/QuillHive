@@ -81,6 +81,7 @@ adminTrustRouter.get("/users", requirePermission("view_users"), async (req, res)
       cts: userTrustScoresTable.cts,
       avgCis: userTrustScoresTable.avgCis,
       uti: userTrustScoresTable.uti,
+      isDisputed: userTrustScoresTable.isDisputed,
       visibilityMultiplier: userTrustScoresTable.visibilityMultiplier,
       tier: userTrustScoresTable.tier,
       creatorLevel: userTrustScoresTable.creatorLevel,
@@ -100,6 +101,17 @@ adminTrustRouter.get("/users", requirePermission("view_users"), async (req, res)
       ? { ...score, uti: 100, tier: "trusted", creatorLevel: "luminary", visibilityMultiplier: 1.2 }
       : score;
   }));
+});
+
+adminTrustRouter.patch("/users/:userId/dispute", requirePermission("manage_moderation"), async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: "Invalid user id" });
+  if (typeof req.body?.isDisputed !== "boolean") return res.status(400).json({ error: "isDisputed must be a boolean" });
+  const [updated] = await db.update(userTrustScoresTable)
+    .set({ isDisputed: req.body.isDisputed })
+    .where(eq(userTrustScoresTable.userId, userId))
+    .returning({ userId: userTrustScoresTable.userId, isDisputed: userTrustScoresTable.isDisputed });
+  return updated ? res.json(updated) : res.status(404).json({ error: "Trust score not found" });
 });
 
 adminTrustRouter.get("/accounts", requirePermission("view_users"), async (req, res) => {

@@ -45,6 +45,7 @@ type TokenType = "access" | "refresh";
 type TokenPayload = {
   sub: number;
   ver?: number;
+  sid?: string;
   typ: TokenType;
   iat: number;
   exp: number;
@@ -75,12 +76,13 @@ function hashJti(jti: string): string {
   return createHash("sha256").update(jti).digest("hex");
 }
 
-function createJwt(userId: number, type: TokenType, ttlSeconds: number, authVersion = 0): string {
+function createJwt(userId: number, type: TokenType, ttlSeconds: number, authVersion = 0, sessionId?: string): string {
   const now = Math.floor(Date.now() / 1000);
   const header = base64UrlEncode(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const payload = base64UrlEncode(JSON.stringify({
     sub: userId,
     ver: authVersion,
+    ...(sessionId ? { sid: sessionId } : {}),
     typ: type,
     iat: now,
     exp: now + ttlSeconds,
@@ -100,6 +102,7 @@ function verifyJwtSync(token: string, expectedType: TokenType): TokenPayload | n
   try {
     const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as TokenPayload;
     if (decoded.typ !== expectedType) return null;
+    if (decoded.sid !== undefined && !/^[a-f0-9]{32}$/.test(decoded.sid)) return null;
     if (!Number.isInteger(decoded.sub) || decoded.sub <= 0) return null;
     if (!Number.isInteger(decoded.exp) || decoded.exp < Math.floor(Date.now() / 1000)) return null;
     return decoded;
@@ -108,6 +111,7 @@ function verifyJwtSync(token: string, expectedType: TokenType): TokenPayload | n
   }
 }
 
+/** Creates an unbound legacy token; HTTP requests require tokens from createAuthTokens. */
 export function createSession(userId: number): string {
   return createJwt(userId, "access", ACCESS_TOKEN_TTL_SECONDS);
 }
@@ -115,21 +119,20 @@ export function createSession(userId: number): string {
 export async function createAuthTokens(userId: number, meta?: { userAgent?: string; ipHash?: string }) {
   const [user] = await db.select({ authVersion: usersTable.authVersion }).from(usersTable).where(eq(usersTable.id, userId));
   if (!user) throw new Error("Cannot create auth tokens for a missing user");
-  const accessToken = createJwt(userId, "access", ACCESS_TOKEN_TTL_SECONDS, user.authVersion);
   const refreshToken = createJwt(userId, "refresh", REFRESH_TOKEN_TTL_SECONDS, user.authVersion);
 
   const refreshPayload = verifyJwtSync(refreshToken, "refresh");
-  if (refreshPayload) {
-    const tokenHash = hashJti(refreshPayload.jti);
-    const expiresAt = new Date(refreshPayload.exp * 1000);
-    await db.insert(sessionsTable).values({
-      userId,
-      tokenHash,
-      userAgent: meta?.userAgent ?? null,
-      ipHash: meta?.ipHash ?? null,
-      expiresAt,
-    }).onConflictDoNothing();
-  }
+  if (!refreshPayload) throw new Error("Failed to create a valid refresh token");
+  const tokenHash = hashJti(refreshPayload.jti);
+  const expiresAt = new Date(refreshPayload.exp * 1000);
+  await db.insert(sessionsTable).values({
+    userId,
+    tokenHash,
+    userAgent: meta?.userAgent ?? null,
+    ipHash: meta?.ipHash ?? null,
+    expiresAt,
+  }).onConflictDoNothing();
+  const accessToken = createJwt(userId, "access", ACCESS_TOKEN_TTL_SECONDS, user.authVersion, refreshPayload.jti);
 
   return {
     token: accessToken,
@@ -147,10 +150,14 @@ export async function refreshSession(refreshToken: string, meta?: { userAgent?: 
   if (!user || (payload.ver ?? 0) !== user.authVersion) return null;
 
   const tokenHash = hashJti(payload.jti);
-  const [session] = await db.select().from(sessionsTable).where(eq(sessionsTable.tokenHash, tokenHash));
+  const [session] = await db.delete(sessionsTable)
+    .where(and(
+      eq(sessionsTable.tokenHash, tokenHash),
+      eq(sessionsTable.userId, payload.sub),
+      gt(sessionsTable.expiresAt, new Date()),
+    ))
+    .returning({ id: sessionsTable.id });
   if (!session) return null;
-
-  await db.delete(sessionsTable).where(eq(sessionsTable.tokenHash, tokenHash));
 
   return createAuthTokens(payload.sub, meta);
 }
@@ -170,6 +177,24 @@ export function getSessionUserId(token: string): number | null {
 export function getSessionAuthVersion(token: string): number | null {
   const payload = verifyJwtSync(token, "access");
   return payload ? payload.ver ?? 0 : null;
+}
+
+export function getSessionTokenHash(token: string): string | null {
+  const payload = verifyJwtSync(token, "access");
+  return payload?.sid ? hashJti(payload.sid) : null;
+}
+
+export async function isSessionActive(token: string, userId: number): Promise<boolean> {
+  const tokenHash = getSessionTokenHash(token);
+  if (!tokenHash) return false;
+  const [session] = await db.select({ id: sessionsTable.id })
+    .from(sessionsTable)
+    .where(and(
+      eq(sessionsTable.tokenHash, tokenHash),
+      eq(sessionsTable.userId, userId),
+      gt(sessionsTable.expiresAt, new Date()),
+    ));
+  return Boolean(session);
 }
 
 export async function blacklistToken(token: string): Promise<void> {

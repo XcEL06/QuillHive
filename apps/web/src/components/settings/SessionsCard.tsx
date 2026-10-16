@@ -9,6 +9,7 @@ type Session = {
   ipHash: string | null;
   createdAt: string;
   expiresAt: string;
+  isCurrent: boolean;
 };
 
 type LoginEvent = {
@@ -38,6 +39,7 @@ export function SessionsCard({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [revoking, setRevoking] = useState(false);
+  const [revokingOthers, setRevokingOthers] = useState(false);
   const [revokingSession, setRevokingSession] = useState<number | null>(null);
 
   const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
@@ -72,13 +74,13 @@ export function SessionsCard({
 
   const revokeAll = async () => {
     if (!token) return;
-    if (!confirm('Revoke all device sessions? This device is included. Access tokens may remain valid for up to 15 minutes.')) return;
+    if (!confirm('Revoke all device sessions? This device is included and will be signed out immediately.')) return;
     setRevoking(true);
     try {
       const res = await fetch('/api/auth/sessions/logout-all', { method: 'POST', headers });
       if (!res.ok) throw new Error('Could not revoke sessions.');
       const { revoked } = await res.json();
-      toast({ title: 'Sessions revoked', description: `${revoked} refresh session(s) revoked. Access tokens may remain valid for up to 15 minutes.` });
+      toast({ title: 'Sessions revoked', description: `${revoked} device session(s) revoked. Protected requests from those devices will be rejected immediately.` });
       void load();
     } catch (error) {
       toast({ title: 'Could not revoke sessions', description: error instanceof Error ? error.message : undefined, variant: 'destructive' });
@@ -93,12 +95,28 @@ export function SessionsCard({
     try {
       const res = await fetch(`/api/auth/sessions/${sessionId}`, { method: 'DELETE', headers });
       if (!res.ok) throw new Error('Could not revoke this session.');
-      toast({ title: 'Session revoked', description: 'That device will need to sign in again. Existing access may remain valid for up to 15 minutes.' });
+      toast({ title: 'Session revoked', description: 'That device will need to sign in again. Protected requests from that device are now rejected.' });
       void load();
     } catch (error) {
       toast({ title: 'Could not revoke session', description: error instanceof Error ? error.message : undefined, variant: 'destructive' });
     } finally {
       setRevokingSession(null);
+    }
+  };
+
+  const revokeOthers = async () => {
+    if (!token || !window.confirm('Sign out of all other devices? This device will stay signed in.')) return;
+    setRevokingOthers(true);
+    try {
+      const res = await fetch('/api/auth/sessions/logout-others', { method: 'POST', headers });
+      if (!res.ok) throw new Error('Could not revoke other sessions.');
+      const { revoked } = await res.json();
+      toast({ title: 'Other sessions revoked', description: `${revoked} other device session(s) signed out.` });
+      void load();
+    } catch (error) {
+      toast({ title: 'Could not revoke other sessions', description: error instanceof Error ? error.message : undefined, variant: 'destructive' });
+    } finally {
+      setRevokingOthers(false);
     }
   };
 
@@ -144,15 +162,16 @@ export function SessionsCard({
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          onClick={revokeAll}
-          disabled={revoking || sessions.length === 0}
-          className="min-h-11 rounded-xl"
-        >
-          {revoking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <LogOut className="w-4 h-4 mr-2" />}
-          Revoke all sessions
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={revokeOthers} disabled={revokingOthers || sessions.every(session => session.isCurrent)} className="min-h-11 rounded-xl">
+            {revokingOthers ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <LogOut className="w-4 h-4 mr-2" />}
+            Sign out other devices
+          </Button>
+          <Button variant="outline" onClick={revokeAll} disabled={revoking || sessions.length === 0} className="min-h-11 rounded-xl">
+            {revoking ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <LogOut className="w-4 h-4 mr-2" />}
+            Revoke all sessions
+          </Button>
+        </div>
       </div>
 
       <div>
@@ -166,7 +185,7 @@ export function SessionsCard({
             {sessions.map((s) => (
               <li key={s.id} className="py-3 flex items-center justify-between gap-3 text-sm">
                 <div>
-                  <p className="font-medium">{formatUA(s.userAgent)}</p>
+                  <p className="font-medium">{formatUA(s.userAgent)}{s.isCurrent ? ' · This device' : ''}</p>
                   <p className="text-xs text-muted-foreground">
                     Started <Timestamp value={s.createdAt} mode="datetime" />
                     {s.ipHash ? ` · ${s.ipHash}` : ''}

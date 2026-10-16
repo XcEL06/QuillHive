@@ -117,6 +117,7 @@ router.get("/auth/sessions", Sessions.listMySessions);
 router.get("/auth/login-activity", Sessions.listMyLoginActivity);
 router.delete("/auth/sessions/:id", Sessions.revokeMySession);
 router.post("/auth/sessions/logout-all", Sessions.revokeAllMySessions);
+router.post("/auth/sessions/logout-others", Sessions.revokeOtherSessions);
 
 // Post version history
 router.use(postVersionsRouter);

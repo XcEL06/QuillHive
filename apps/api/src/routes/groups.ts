@@ -9,6 +9,8 @@ import { enrichPost } from "../features/profiles/profile.service";
 import { deletePostsPermanently } from "../features/posts/post.service";
 import { postVisibilityCondition } from "../features/posts/postVisibility";
 import { sanitizeRichText } from "../lib/sanitize";
+import { assessGroupReputation, readTrustScoreAtJoin } from "../features/groups/groupReputation";
+import { evaluateGroupPostReview, requiresManualJoinReview } from "../features/groups/groupPermissions";
 
 const router = Router();
 router.param("id", async (req: Request, res: Response, next: NextFunction, id: string) => {
@@ -291,6 +293,8 @@ router.post("/:id/posts", async (req, res) => {
     announcementPolicy: groupsTable.announcementPolicy,
     requireApprovalFirstThree: groupsTable.requireApprovalFirstThree,
     requireApprovalAll: groupsTable.requireApprovalAll,
+    minPostReputation: groupsTable.minPostReputation,
+    minReviewBypassReputation: groupsTable.minReviewBypassReputation,
     name: groupsTable.name,
   }).from(groupsTable).where(and(eq(groupsTable.id, groupId), eq(groupsTable.isDeleted, false)));
   if (!group) return res.status(404).json({ error: "Group not found" });
@@ -318,9 +322,21 @@ router.post("/:id/posts", async (req, res) => {
       .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, viewerId)));
   }
 
+  const reputationThresholds = [group.minPostReputation, group.minReviewBypassReputation].filter((value): value is number => value !== null);
+  const reputation = reputationThresholds.length
+    ? await assessGroupReputation(viewerId, Math.max(...reputationThresholds))
+    : { score: null, status: "not_required" as const, reviewReason: null };
   const [authorPostCount] = await db.select({ count: sql<number>`count(*)::int` }).from(postsTable)
     .where(and(eq(postsTable.groupId, groupId), eq(postsTable.authorId, viewerId), eq(postsTable.isDeleted, false)));
-  const needsApproval = group.requireApprovalAll || (group.requireApprovalFirstThree && (authorPostCount?.count ?? 0) < 3);
+  const { needsApproval, approvalReason } = evaluateGroupPostReview({
+    requireApprovalAll: group.requireApprovalAll,
+    requireApprovalFirstThree: group.requireApprovalFirstThree,
+    authorPostCount: authorPostCount?.count ?? 0,
+    minPostReputation: group.minPostReputation,
+    minReviewBypassReputation: group.minReviewBypassReputation,
+    reputationStatus: reputation.status,
+    reputationScore: reputation.score,
+  });
 
   let pollData: { options: string[]; endsAt: string | null; allowMultiple: boolean; votes: Record<string, number[]> } | null = null;
   if (type === "poll") {
@@ -367,6 +383,7 @@ router.post("/:id/posts", async (req, res) => {
     isAnnouncement: type === "announcement",
     isPinned: type === "announcement",
     approvalStatus: needsApproval ? "pending" : "approved",
+    approvalReason,
   }).returning();
   if (type === "announcement" && !needsApproval) {
     if (!needsApproval) await db.insert(groupPinnedPostsTable).values({ groupId, postId: post.id, pinnedBy: viewerId });
@@ -408,10 +425,38 @@ router.post("/:id/opportunities/:opportunityId/reshare", async (req, res) => {
     return res.status(400).json({ error: "Invalid group or opportunity id" });
   }
 
-  const [membership] = await db.select({ status: groupMembersTable.status })
+  const [group] = await db.select({
+    isDeleted: groupsTable.isDeleted,
+    isArchived: groupsTable.isArchived,
+    isAnnouncementOnly: groupsTable.isAnnouncementOnly,
+    announcementPolicy: groupsTable.announcementPolicy,
+    requireApprovalFirstThree: groupsTable.requireApprovalFirstThree,
+    requireApprovalAll: groupsTable.requireApprovalAll,
+    minPostReputation: groupsTable.minPostReputation,
+    minReviewBypassReputation: groupsTable.minReviewBypassReputation,
+    name: groupsTable.name,
+  }).from(groupsTable).where(eq(groupsTable.id, groupId));
+  if (!group || group.isDeleted || group.isArchived) return res.status(404).json({ error: "Group not found" });
+
+  const [membership] = await db.select({
+    status: groupMembersTable.status,
+    role: groupMembersTable.role,
+    mutedUntil: groupMembersTable.mutedUntil,
+  })
     .from(groupMembersTable)
     .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, viewerId)));
-  if (!membership || membership.status !== "active") return res.status(403).json({ error: "Only active group members can reshare opportunities" });
+  if (!membership || !canCreateGroupPost({
+    status: membership.status,
+    role: membership.role,
+    isAnnouncementOnly: group.isAnnouncementOnly,
+    announcementPolicy: group.announcementPolicy,
+    type: "opportunity_reshare",
+    mutedUntil: membership.mutedUntil,
+  })) return res.status(403).json({ error: "You do not have permission to reshare opportunities in this group" });
+
+  const [ban] = await db.select({ id: groupBansTable.id }).from(groupBansTable)
+    .where(and(eq(groupBansTable.groupId, groupId), eq(groupBansTable.userId, viewerId)));
+  if (ban) return res.status(403).json({ error: "You are banned from this group" });
 
   const [opportunity] = await db.select().from(jobsTable).where(and(
     eq(jobsTable.id, opportunityId),
@@ -427,6 +472,21 @@ router.post("/:id/opportunities/:opportunityId/reshare", async (req, res) => {
     currency: null,
     type: opportunity.type,
   };
+  const reputationThresholds = [group.minPostReputation, group.minReviewBypassReputation].filter((value): value is number => value !== null);
+  const reputation = reputationThresholds.length
+    ? await assessGroupReputation(viewerId, Math.max(...reputationThresholds))
+    : { score: null, status: "not_required" as const, reviewReason: null };
+  const [authorPostCount] = await db.select({ count: sql<number>`count(*)::int` }).from(postsTable)
+    .where(and(eq(postsTable.groupId, groupId), eq(postsTable.authorId, viewerId), eq(postsTable.isDeleted, false)));
+  const { needsApproval, approvalReason } = evaluateGroupPostReview({
+    requireApprovalAll: group.requireApprovalAll,
+    requireApprovalFirstThree: group.requireApprovalFirstThree,
+    authorPostCount: authorPostCount?.count ?? 0,
+    minPostReputation: group.minPostReputation,
+    minReviewBypassReputation: group.minReviewBypassReputation,
+    reputationStatus: reputation.status,
+    reputationScore: reputation.score,
+  });
   const [post] = await db.insert(postsTable).values({
     authorId: viewerId,
     title: opportunity.title.slice(0, 180),
@@ -435,7 +495,7 @@ router.post("/:id/opportunities/:opportunityId/reshare", async (req, res) => {
     type: "post",
     visibility: "public",
     groupId,
-    isPublished: true,
+    isPublished: !needsApproval,
   }).returning();
   const [details] = await db.insert(groupPostDetailsTable).values({
     postId: post.id,
@@ -443,6 +503,8 @@ router.post("/:id/opportunities/:opportunityId/reshare", async (req, res) => {
     type: "opportunity_reshare",
     opportunityId,
     opportunitySnapshot: snapshot,
+    approvalStatus: needsApproval ? "pending" : "approved",
+    approvalReason,
   }).returning();
   return res.status(201).json({ ...(await enrichPost(post, viewerId)), groupDetails: details });
 });
@@ -624,12 +686,7 @@ router.delete("/:id", async (req, res) => {
       .for("update");
     if (!group) return "missing" as const;
 
-    if (group.creatorId !== actorId) {
-      const [membership] = await tx.select({ role: groupMembersTable.role, status: groupMembersTable.status })
-        .from(groupMembersTable)
-        .where(and(eq(groupMembersTable.groupId, groupId), eq(groupMembersTable.userId, actorId)));
-      if (membership?.status !== "active" || membership.role !== "admin") return "forbidden" as const;
-    }
+    if (group.creatorId !== actorId) return "forbidden" as const;
 
     const groupPosts = await tx.select({ id: postsTable.id })
       .from(postsTable)
@@ -641,7 +698,7 @@ router.delete("/:id", async (req, res) => {
   });
 
   if (outcome === "missing") return res.status(404).json({ error: "Group not found" });
-  if (outcome === "forbidden") return res.status(403).json({ error: "Only group owners and admins can delete groups" });
+  if (outcome === "forbidden") return res.status(403).json({ error: "Only the group owner can delete the group" });
   return res.json({ ok: true });
 });
 
@@ -650,7 +707,12 @@ router.post("/:id/join", async (req, res) => {
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const id = parseInt(req.params.id);
 
-  const [group] = await db.select({ privacy: groupsTable.privacy, type: groupsTable.type }).from(groupsTable).where(eq(groupsTable.id, id));
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid group id" });
+  const [group] = await db.select({
+    privacy: groupsTable.privacy,
+    type: groupsTable.type,
+    minJoinReputation: groupsTable.minJoinReputation,
+  }).from(groupsTable).where(eq(groupsTable.id, id));
   if (!group) return res.status(404).json({ error: "Group not found" });
   if (group.type === "secret") return res.status(404).json({ error: "Secret groups are invite-only" });
   const [ban] = await db.select({ id: groupBansTable.id }).from(groupBansTable)
@@ -677,20 +739,24 @@ router.post("/:id/join", async (req, res) => {
       .where(and(eq(groupMembersTable.groupId, id), eq(groupMembersTable.userId, viewerId)));
     isMember = false;
   } else {
-    if (joinAction === "request") {
+    const reputation = await assessGroupReputation(viewerId, group.minJoinReputation);
+    const requiresReputationReview = requiresManualJoinReview(group.minJoinReputation, reputation.status, reputation.score);
+    const trustScoreAtJoin = reputation.score ?? await readTrustScoreAtJoin(viewerId);
+    if (joinAction === "request" || requiresReputationReview) {
       const screeningAnswers = req.body?.screeningAnswers && typeof req.body.screeningAnswers === "object" && !Array.isArray(req.body.screeningAnswers)
         ? Object.fromEntries(Object.entries(req.body.screeningAnswers).slice(0, 10).map(([key, value]) => [String(key).slice(0, 80), String(value).slice(0, 500)]))
         : {};
-      await db.insert(groupJoinRequestsTable).values({ groupId: id, userId: viewerId, status: "pending", screeningAnswers })
-        .onConflictDoUpdate({ target: [groupJoinRequestsTable.groupId, groupJoinRequestsTable.userId], set: { status: "pending", reviewedBy: null, reviewedAt: null, screeningAnswers } });
-      await db.insert(groupActivityLogsTable).values({ groupId: id, actorId: viewerId, action: "join_request_created", details: {} });
-      const [trust] = await db.select({ uti: userTrustScoresTable.uti }).from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, viewerId));
-      await db.insert(groupMembersTable).values({ groupId: id, userId: viewerId, role: "member", status: "pending", trustScoreAtJoin: trust?.uti ?? null })
-        .onConflictDoUpdate({ target: [groupMembersTable.groupId, groupMembersTable.userId], set: { status: "pending", mutedUntil: null } });
-      return res.json({ isMember: false, hasPendingJoinRequest: true });
+      const reviewReason = requiresReputationReview ? reputation.reviewReason : "member_request";
+      await db.transaction(async tx => {
+        await tx.insert(groupJoinRequestsTable).values({ groupId: id, userId: viewerId, status: "pending", screeningAnswers, reviewReason })
+          .onConflictDoUpdate({ target: [groupJoinRequestsTable.groupId, groupJoinRequestsTable.userId], set: { status: "pending", reviewedBy: null, reviewedAt: null, screeningAnswers, reviewReason } });
+        await tx.insert(groupMembersTable).values({ groupId: id, userId: viewerId, role: "member", status: "pending", trustScoreAtJoin })
+          .onConflictDoUpdate({ target: [groupMembersTable.groupId, groupMembersTable.userId], set: { status: "pending", mutedUntil: null } });
+      });
+      await db.insert(groupActivityLogsTable).values({ groupId: id, actorId: viewerId, action: requiresReputationReview ? "reputation_join_review_requested" : "join_request_created", details: { reviewReason } });
+      return res.json({ isMember: false, hasPendingJoinRequest: true, reviewReason });
     }
-    const [trust] = await db.select({ uti: userTrustScoresTable.uti }).from(userTrustScoresTable).where(eq(userTrustScoresTable.userId, viewerId));
-    await db.insert(groupMembersTable).values({ groupId: id, userId: viewerId, role: "member", trustScoreAtJoin: trust?.uti ?? null });
+    await db.insert(groupMembersTable).values({ groupId: id, userId: viewerId, role: "member", trustScoreAtJoin: await readTrustScoreAtJoin(viewerId) });
     isMember = true;
   }
 

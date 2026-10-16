@@ -2,7 +2,8 @@ import { createHash } from "crypto";
 import type { Request } from "express";
 import { db } from "@workspace/db";
 import { loginEventsTable, usersTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
+import { logger } from "../../lib/logger";
 
 function readClientIP(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -29,15 +30,41 @@ export function getLoginMeta(req: Request) {
   };
 }
 
+export function calculateLoginIntegrityRisk(input: {
+  ipChanged: boolean;
+  countryChanged: boolean;
+  timezoneChanged: boolean;
+  deviceChanged: boolean;
+}): { integrityStatus: "normal" | "changed" | "review"; riskScore: number } {
+  const riskScore = Math.min(100,
+    (input.ipChanged ? 30 : 0)
+    + (input.countryChanged ? 45 : 0)
+    + (input.timezoneChanged ? 15 : 0)
+    + (input.deviceChanged ? 20 : 0));
+  const integrityStatus = riskScore >= 70 ? "review" : riskScore >= 20 ? "changed" : "normal";
+  return { integrityStatus, riskScore };
+}
+
 export async function recordLoginIntegrity(userId: number, req: Request, options: { deferReviewBaseline?: boolean } = {}) {
   const meta = getLoginMeta(req);
   try {
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    const [[user], [lastLogin]] = await Promise.all([
+      db.select().from(usersTable).where(eq(usersTable.id, userId)),
+      db.select({ userAgent: loginEventsTable.userAgent }).from(loginEventsTable)
+        .where(eq(loginEventsTable.userId, userId))
+        .orderBy(desc(loginEventsTable.createdAt))
+        .limit(1),
+    ]);
     const ipChanged = Boolean(user?.lastKnownIPHash && user.lastKnownIPHash !== meta.ipHash);
     const countryChanged = Boolean(user?.lastKnownCountry && meta.country && user.lastKnownCountry !== meta.country);
     const timezoneChanged = Boolean(user?.lastKnownTimezone && meta.timezone && user.lastKnownTimezone !== meta.timezone);
-    const riskScore = Math.min(100, (ipChanged ? 30 : 0) + (countryChanged ? 45 : 0) + (timezoneChanged ? 15 : 0));
-    const integrityStatus = riskScore >= 70 ? "review" : riskScore >= 35 ? "changed" : "normal";
+    const deviceChanged = Boolean(lastLogin?.userAgent && meta.userAgent && lastLogin.userAgent !== meta.userAgent);
+    const { riskScore, integrityStatus } = calculateLoginIntegrityRisk({
+      ipChanged,
+      countryChanged,
+      timezoneChanged,
+      deviceChanged,
+    });
 
     await db.insert(loginEventsTable).values({
       userId,
@@ -61,7 +88,8 @@ export async function recordLoginIntegrity(userId: number, req: Request, options
     }
 
     return { ...meta, integrityStatus, riskScore };
-  } catch {
+  } catch (error) {
+    logger.error({ err: error, userId }, "login_integrity_check_failed");
     return { ...meta, integrityStatus: "unknown", riskScore: 0 };
   }
 }

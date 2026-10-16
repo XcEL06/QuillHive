@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
-import { getSessionAuthVersion, getSessionUserId, isTokenBlacklisted } from "../lib/auth";
+import { getSessionAuthVersion, getSessionUserId, isSessionActive, isTokenBlacklisted } from "../lib/auth";
 
 export const ADMIN_ROLES = ["moderator", "admin", "super_admin"] as const;
 const SUPER_ADMIN_ROLES = ["super_admin"];
@@ -62,6 +62,10 @@ async function resolveUser(req: Request, res: Response): Promise<boolean> {
     res.status(401).json({ error: "Token revoked" });
     return false;
   }
+  if (!(await isSessionActive(token, userId))) {
+    res.status(401).json({ error: "Session revoked or expired" });
+    return false;
+  }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user || user.isDeleted || getSessionAuthVersion(token) !== user.authVersion) {
     res.status(401).json({ error: "Unauthorized" });
@@ -100,6 +104,11 @@ export async function validateBearerTokenState(req: Request, res: Response, next
       next();
       return;
     }
+    if (!(await isSessionActive(token, userId))) {
+      delete req.headers.authorization;
+      next();
+      return;
+    }
     const [user] = await db.select({ authVersion: usersTable.authVersion, isDeleted: usersTable.isDeleted }).from(usersTable).where(eq(usersTable.id, userId));
     if (!user || user.isDeleted || getSessionAuthVersion(token) !== user.authVersion) delete req.headers.authorization;
     next();
@@ -117,7 +126,7 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
   if (auth?.startsWith("Bearer ")) {
     const token = auth.slice(7);
     const userId = getSessionUserId(token);
-    if (userId && !(await isTokenBlacklisted(token))) {
+    if (userId && !(await isTokenBlacklisted(token)) && (await isSessionActive(token, userId))) {
       const [user] = await db.select({ authVersion: usersTable.authVersion, isDeleted: usersTable.isDeleted }).from(usersTable).where(eq(usersTable.id, userId));
       if (!user || user.isDeleted || getSessionAuthVersion(token) !== user.authVersion) {
         next();

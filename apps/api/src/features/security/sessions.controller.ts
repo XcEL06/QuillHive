@@ -1,8 +1,9 @@
 import type { Request, Response } from "express";
 import { db } from "@workspace/db";
 import { sessionsTable, loginEventsTable } from "@workspace/db/schema";
-import { and, eq, desc } from "drizzle-orm";
-import { getViewerId } from "../../lib/auth-types";
+import { and, eq, desc, gt, ne } from "drizzle-orm";
+import { getSessionTokenHash } from "../../lib/auth";
+import { loadCurrentUser } from "../../lib/auth-types";
 
 function maskIpHash(hash: string | null): string | null {
   if (!hash) return null;
@@ -10,33 +11,38 @@ function maskIpHash(hash: string | null): string | null {
 }
 
 export async function listMySessions(req: Request, res: Response) {
-  const userId = getViewerId(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const user = await loadCurrentUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  const userId = user.id;
+  const token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "";
+  const currentTokenHash = getSessionTokenHash(token);
 
   const sessions = await db
     .select({
       id: sessionsTable.id,
+      tokenHash: sessionsTable.tokenHash,
       userAgent: sessionsTable.userAgent,
       ipHash: sessionsTable.ipHash,
       createdAt: sessionsTable.createdAt,
       expiresAt: sessionsTable.expiresAt,
     })
     .from(sessionsTable)
-    .where(eq(sessionsTable.userId, userId))
-    .orderBy(desc(sessionsTable.createdAt))
-    .limit(10);
+    .where(and(eq(sessionsTable.userId, userId), gt(sessionsTable.expiresAt, new Date())))
+    .orderBy(desc(sessionsTable.createdAt));
 
   return res.json(
-    sessions.map((s) => ({
-      ...s,
-      ipHash: maskIpHash(s.ipHash),
+    sessions.map(({ tokenHash, ...session }) => ({
+      ...session,
+      ipHash: maskIpHash(session.ipHash),
+      isCurrent: currentTokenHash !== null && tokenHash === currentTokenHash,
     })),
   );
 }
 
 export async function listMyLoginActivity(req: Request, res: Response) {
-  const userId = getViewerId(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const user = await loadCurrentUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  const userId = user.id;
 
   const events = await db
     .select({
@@ -63,20 +69,33 @@ export async function listMyLoginActivity(req: Request, res: Response) {
 }
 
 export async function revokeAllMySessions(req: Request, res: Response) {
-  const userId = getViewerId(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const user = await loadCurrentUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
 
   const deleted = await db
     .delete(sessionsTable)
-    .where(eq(sessionsTable.userId, userId))
+    .where(eq(sessionsTable.userId, user.id))
     .returning({ id: sessionsTable.id });
 
   return res.json({ revoked: deleted.length });
 }
 
+export async function revokeOtherSessions(req: Request, res: Response) {
+  const user = await loadCurrentUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+  const token = req.headers.authorization?.startsWith("Bearer ") ? req.headers.authorization.slice(7) : "";
+  const currentTokenHash = getSessionTokenHash(token);
+  if (!currentTokenHash) return res.status(401).json({ error: "Current session is invalid" });
+
+  const revoked = await db.delete(sessionsTable)
+    .where(and(eq(sessionsTable.userId, user.id), ne(sessionsTable.tokenHash, currentTokenHash)))
+    .returning({ id: sessionsTable.id });
+  return res.json({ revoked: revoked.length });
+}
+
 export async function revokeMySession(req: Request, res: Response) {
-  const userId = getViewerId(req);
-  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const user = await loadCurrentUser(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
 
   const sessionId = Number(req.params.id);
   if (!Number.isInteger(sessionId) || sessionId < 1) {
@@ -85,7 +104,7 @@ export async function revokeMySession(req: Request, res: Response) {
 
   const deleted = await db
     .delete(sessionsTable)
-    .where(and(eq(sessionsTable.id, sessionId), eq(sessionsTable.userId, userId)))
+    .where(and(eq(sessionsTable.id, sessionId), eq(sessionsTable.userId, user.id)))
     .returning({ id: sessionsTable.id });
 
   if (deleted.length === 0) return res.status(404).json({ error: "Session not found" });

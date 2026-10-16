@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, real } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, real, boolean } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 import { postsTable } from "./posts";
 
@@ -10,6 +10,7 @@ export const userTrustScoresTable = pgTable("user_trust_scores", {
   cts: real("cts").notNull().default(0),
   avgCis: real("avg_cis").notNull().default(0),
   uti: real("uti").notNull().default(0),
+  isDisputed: boolean("is_disputed").notNull().default(false),
   visibilityMultiplier: real("visibility_multiplier").notNull().default(0.3),
   // Deprecated compatibility field. Use creatorLevel for display and logic.
   tier: text("tier").notNull().default("restricted"),

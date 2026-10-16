@@ -1,7 +1,7 @@
 import { Server as HttpServer } from "http";
 import { Server as SocketServer } from "socket.io";
 import { logger } from "./logger";
-import { getSessionAuthVersion, getSessionUserId, isTokenBlacklisted } from "./auth";
+import { getSessionAuthVersion, getSessionUserId, isSessionActive, isTokenBlacklisted } from "./auth";
 import { db } from "@workspace/db";
 import { conversationsTable, conversationParticipantsTable, postsTable, supportTicketsTable, usersTable, groupMembersTable } from "@workspace/db/schema";
 import { and, eq } from "drizzle-orm";
@@ -78,7 +78,7 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
         ? header.slice(7)
         : null;
     const userId = token ? getSessionUserId(token) : null;
-    if (!userId || (await isTokenBlacklisted(token!))) {
+    if (!userId || (await isTokenBlacklisted(token!)) || !(await isSessionActive(token!, userId))) {
       next(new Error("Unauthorized"));
       return;
     }
@@ -100,7 +100,7 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
       const token = socket.data.authToken as string;
       const userId = getSessionUserId(token);
       try {
-        if (!userId || await isTokenBlacklisted(token)) throw new Error("Unauthorized");
+        if (!userId || await isTokenBlacklisted(token) || !(await isSessionActive(token, userId))) throw new Error("Unauthorized");
         const [user] = await db.select({ authVersion: usersTable.authVersion }).from(usersTable).where(eq(usersTable.id, userId));
         if (!user || getSessionAuthVersion(token) !== user.authVersion) throw new Error("Unauthorized");
         next();

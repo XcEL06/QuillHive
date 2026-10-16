@@ -8,7 +8,7 @@ import {
   postsTable, likesTable, commentsTable, followsTable,
   postSharesTable, repostsTable, savedPostsTable,
   commentLikesTable, userTrustScoresTable, usersTable, boostRequestsTable,
-  groupPostDetailsTable,
+  groupPostDetailsTable, groupsTable, groupMembersTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, notInArray, sql, isNull, gte, lte, gt, or, ne } from "drizzle-orm";
 import { enrichPost, getUserWithCounts } from "../profiles/profile.service";
@@ -21,6 +21,7 @@ import { calculateRankingScore } from "./ranking.service";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../../lib/featureFlags";
 import { hasPermission } from "../../middleware/admin";
+import { assessGroupReputation, groupReputationDeniedMessage } from "../groups/groupReputation";
 
 function refreshTrustForUsers(...userIds: Array<number | null | undefined>) {
   for (const userId of [...new Set(userIds.filter(Boolean) as number[])]) {
@@ -60,6 +61,27 @@ function getViewerId(req: Request): number | null {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) return null;
   return getSessionUserId(auth.slice(7));
+}
+
+async function checkGroupCommentPermission(postId: number, userId: number): Promise<string | null> {
+  const [post] = await db.select({ groupId: postsTable.groupId }).from(postsTable)
+    .where(and(eq(postsTable.id, postId), eq(postsTable.isDeleted, false)));
+  if (!post) return "Post not found";
+  if (post.groupId === null) return null;
+
+  const [group] = await db.select({ minPostReputation: groupsTable.minPostReputation })
+    .from(groupsTable).where(eq(groupsTable.id, post.groupId));
+  if (!group) return "Group not found";
+  const [membership] = await db.select({ status: groupMembersTable.status })
+    .from(groupMembersTable)
+    .where(and(eq(groupMembersTable.groupId, post.groupId), eq(groupMembersTable.userId, userId)));
+  if (membership?.status !== "active") return "Only active group members can comment";
+
+  if (group.minPostReputation !== null) {
+    const reputation = await assessGroupReputation(userId, group.minPostReputation);
+    if (reputation.status !== "meets") return groupReputationDeniedMessage(reputation.status, group.minPostReputation);
+  }
+  return null;
 }
 
 export const saveDraft = async (req: Request, res: Response) => {
@@ -445,6 +467,8 @@ export const createComment = async (req: Request, res: Response) => {
   const [groupPost] = await db.select({ commentsEnabled: groupPostDetailsTable.commentsEnabled })
     .from(groupPostDetailsTable).where(eq(groupPostDetailsTable.postId, id));
   if (groupPost && !groupPost.commentsEnabled) return res.status(403).json({ error: "Comments are turned off for this group post" });
+  const groupCommentError = await checkGroupCommentPermission(id, viewerId);
+  if (groupCommentError) return res.status(groupCommentError.includes("not found") ? 404 : 403).json({ error: groupCommentError });
   const comment = await PostService.createComment(id, viewerId, content);
   const [post] = await db.select({ authorId: postsTable.authorId }).from(postsTable).where(eq(postsTable.id, id));
   refreshTrustForUsers(viewerId, post?.authorId);
@@ -826,6 +850,8 @@ export const replyToComment = async (req: Request, res: Response) => {
 
   const [parent] = await db.select().from(commentsTable).where(eq(commentsTable.id, commentId));
   if (!parent) return res.status(404).json({ error: "Comment not found" });
+  const groupCommentError = await checkGroupCommentPermission(parent.postId, viewerId);
+  if (groupCommentError) return res.status(groupCommentError.includes("not found") ? 404 : 403).json({ error: groupCommentError });
   const [groupPost] = await db.select({ commentsEnabled: groupPostDetailsTable.commentsEnabled })
     .from(groupPostDetailsTable).where(eq(groupPostDetailsTable.postId, parent.postId));
   if (groupPost && !groupPost.commentsEnabled) return res.status(403).json({ error: "Comments are turned off for this group post" });
