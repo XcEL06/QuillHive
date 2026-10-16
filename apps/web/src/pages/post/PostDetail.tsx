@@ -129,6 +129,8 @@ function CommentNode({
   onReplyPosted,
   targetCommentId,
   targetAncestors,
+  commentsEnabled,
+  likesEnabled,
 }: {
   comment: CommentWithReplies;
   postId: number;
@@ -136,6 +138,8 @@ function CommentNode({
   onReplyPosted: () => void;
   targetCommentId: number | null;
   targetAncestors: ReadonlySet<number>;
+  commentsEnabled: boolean;
+  likesEnabled: boolean;
 }) {
   const { user } = useAuthStore();
   const { toast } = useToast();
@@ -275,7 +279,7 @@ function CommentNode({
           </div>
 
           <div className="flex items-center gap-3 mt-1.5 ml-1">
-            <button
+            {likesEnabled && <button
               onClick={handleLike}
               disabled={isLiking}
               aria-label={liked ? 'Unlike comment' : 'Like comment'}
@@ -287,9 +291,9 @@ function CommentNode({
             >
               <Heart className={clsx('w-3.5 h-3.5', liked && 'fill-current')} />
               {likeCount > 0 && <span>{likeCount}</span>}
-            </button>
+            </button>}
 
-            {depth < MAX_DEPTH && (
+            {commentsEnabled && depth < MAX_DEPTH && (
               <button
                 onClick={() => setShowReplyBox(s => !s)}
                 className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
@@ -319,7 +323,7 @@ function CommentNode({
             )}
           </div>
 
-          {showReplyBox && (
+          {commentsEnabled && showReplyBox && (
             <div className="mt-2 ml-1">
               <MentionInput
                 placeholder={`Reply to ${comment.author.displayName}...`}
@@ -348,6 +352,8 @@ function CommentNode({
               onReplyPosted={onReplyPosted}
               targetCommentId={targetCommentId}
               targetAncestors={targetAncestors}
+              commentsEnabled={commentsEnabled}
+              likesEnabled={likesEnabled}
             />
           ))}
         </div>
@@ -376,6 +382,16 @@ export default function PostDetail() {
   const aiToolsAvailable = useFeature('ai_tools_enabled') && (user?.role === 'admin' || user?.role === 'super_admin');
 
   const { data: post, isLoading: isLoadingPost } = useGetPost(postId);
+  const interactionPost = post as (typeof post & {
+    commentsEnabled?: boolean;
+    likesEnabled?: boolean;
+    repostsEnabled?: boolean;
+    sharingEnabled?: boolean;
+  }) | undefined;
+  const commentsEnabled = interactionPost?.commentsEnabled !== false;
+  const likesEnabled = interactionPost?.likesEnabled !== false;
+  const repostsEnabled = interactionPost?.repostsEnabled !== false;
+  const sharingEnabled = interactionPost?.sharingEnabled !== false;
   const progress = useReadingProgress(postId, { enabled: !!post });
   useRecordRead(post ? postId : null, !!user && !!post);
   const { data: comments, isLoading: isLoadingComments } = useGetPostComments(postId);
@@ -595,7 +611,7 @@ export default function PostDetail() {
                   </Button>
                 </>
               )}
-              <Button size="icon" variant="ghost" onClick={() => {
+              {likesEnabled && <Button size="icon" variant="ghost" onClick={() => {
                 if (!user) {
                   toast({ title: 'Sign in to like posts', variant: 'destructive' });
                   return;
@@ -603,17 +619,18 @@ export default function PostDetail() {
                 toggleLike({ id: post.id });
               }} className={post.isLiked ? 'text-rose-500 hover:text-rose-600' : 'text-muted-foreground'}>
                 <Heart className={`w-5 h-5 ${post.isLiked ? 'fill-current' : ''}`} />
-              </Button>
-              <ShareSheet
+              </Button>}
+              {sharingEnabled && <ShareSheet
                 postId={post.id}
                 title={post.title || undefined}
                 isReposted={Boolean((post as typeof post & { isReposted?: boolean }).isReposted)}
+                repostingEnabled={repostsEnabled}
                 trigger={
                   <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground" data-testid="button-open-share-sheet">
                     <Share2 className="w-5 h-5" />
                   </Button>
                 }
-              />
+              />}
               {user && isOwner && post.isPublished && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -710,7 +727,7 @@ export default function PostDetail() {
             Comments ({post.commentsCount})
           </h3>
 
-          <div className="bg-card border border-border/50 rounded-2xl p-4 mb-10 shadow-sm focus-within:border-primary/50 focus-within:shadow-md transition-all">
+          {commentsEnabled && <div className="bg-card border border-border/50 rounded-2xl p-4 mb-10 shadow-sm focus-within:border-primary/50 focus-within:shadow-md transition-all">
             <MentionInput
               placeholder="Share your thoughts on this piece... (@mention someone)"
               className="min-h-[100px] border-0 focus-visible:ring-0 bg-transparent p-2 text-base"
@@ -727,7 +744,7 @@ export default function PostDetail() {
                 <Send className="w-4 h-4 mr-2" /> Post Comment
               </Button>
             </div>
-          </div>
+          </div>}
 
           <div className="space-y-6">
             {isLoadingComments ? (
@@ -744,6 +761,8 @@ export default function PostDetail() {
                   onReplyPosted={handleReplyPosted}
                   targetCommentId={targetCommentId}
                   targetAncestors={targetAncestors}
+                  commentsEnabled={commentsEnabled}
+                  likesEnabled={likesEnabled}
                 />
               ))
             )}

@@ -65,6 +65,10 @@ type EnrichedPost = Post & {
   viewsCount?: number;
   // Official QuillHive System Posts
   isOfficialPost?: boolean;
+  commentsEnabled?: boolean;
+  likesEnabled?: boolean;
+  repostsEnabled?: boolean;
+  sharingEnabled?: boolean;
   postCategory?: string | null;
   officialPostPriority?: number;
   ctaButtons?: CtaButton[] | null;
@@ -877,6 +881,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
               currentUserId={currentUser?.id}
               isOwner={isOwner}
               isSaved={post.isSaved}
+              sharingEnabled={post.sharingEnabled !== false}
               hideAnalytics={hideAnalytics}
               hideBoost={hideBoost}
               onAction={handlePostOptionAction}
@@ -1103,7 +1108,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
         {/* Actions */}
         <div className={`${feedStyle ? 'mt-3 pt-2' : 'mt-4 pt-3'} flex items-center justify-between gap-2 border-t border-border/40 text-sm text-muted-foreground`}>
           <div className="flex items-center gap-1">
-            <button
+            {post.likesEnabled !== false && <button
               onClick={() => {
                 if (!currentUser) {
                   toast({ title: 'Sign in to like posts', variant: 'destructive' });
@@ -1147,9 +1152,9 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
               <Heart className={`h-4 w-4 ${optimisticLiked ? 'fill-current' : ''}`} />
               {feedStyle && <span>Like</span>}
               {optimisticLikes > 0 && <span>{optimisticLikes}</span>}
-            </button>
+            </button>}
 
-            <button
+            {post.commentsEnabled !== false && <button
               type="button"
               onClick={() => setShowComments(s => !s)}
               title="Comment"
@@ -1159,9 +1164,9 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
               <MessageCircle className={`h-4 w-4 ${showComments ? 'fill-primary/20 text-primary' : ''}`} />
               {feedStyle && <span>Comment</span>}
               {post.commentsCount > 0 && <span>{post.commentsCount}</span>}
-            </button>
+            </button>}
 
-            <button
+            {post.repostsEnabled !== false && <button
               type="button"
               onClick={() => void handleRepost()}
               disabled={isReposting}
@@ -1177,7 +1182,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
               <Repeat2 className={`h-4 w-4 ${post.isReposted ? 'stroke-[2.5]' : ''}`} />
               {feedStyle && <span>Repost</span>}
               {(post.repostsCount ?? 0) > 0 && <span>{post.repostsCount}</span>}
-            </button>
+            </button>}
 
             <button
               onClick={handleSave}

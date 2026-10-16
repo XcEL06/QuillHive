@@ -103,6 +103,10 @@ export interface Post {
   commentsCount: number;
   isLiked: boolean;
   isPublished: boolean;
+  commentsEnabled?: boolean;
+  likesEnabled?: boolean;
+  repostsEnabled?: boolean;
+  sharingEnabled?: boolean;
   /** @nullable */
   groupId?: number | null;
   createdAt: string;

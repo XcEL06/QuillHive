@@ -315,7 +315,7 @@ router.post("/communications/direct", requireSuperAdmin, async (req: any, res) =
   }
 });
 
-async function enqueueOfficialBroadcast(adminId: number, title: string, message: string) {
+async function enqueueOfficialBroadcast(adminId: number, title: string, message: string, postId?: number) {
   if (!/^rediss?:\/\//.test(process.env.BULLMQ_REDIS_URL ?? "")) {
     const error = new Error("Broadcast queue is unavailable. Configure the background worker and try again.");
     Object.assign(error, { status: 503 });
@@ -327,7 +327,7 @@ async function enqueueOfficialBroadcast(adminId: number, title: string, message:
     throw error;
   }
   const actorId = await getOfficialSystemAccountId();
-  const jobId = await addJob("admin_notification_broadcast", { actorId, title, message });
+  const jobId = await addJob("admin_notification_broadcast", { actorId, title, message, postId });
   if (!jobId) {
     const error = new Error("Broadcast queue is unavailable. Configure the background worker and try again.");
     Object.assign(error, { status: 503 });
@@ -341,8 +341,8 @@ router.post("/communications", requireSuperAdmin, async (req: any, res) => {
   const mode = req.body?.mode;
   const userId = Number(req.body?.userId);
   const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
-  if (!["message", "notification", "broadcast"].includes(mode)) {
-    return res.status(400).json({ error: "mode must be message, notification, or broadcast" });
+  if (!["message", "notification", "broadcast", "announcement"].includes(mode)) {
+    return res.status(400).json({ error: "mode must be message, notification, broadcast, or announcement" });
   }
   if (!content || content.length > 5_000) {
     return res.status(400).json({ error: "content is required and must be 5000 characters or fewer" });
@@ -394,6 +394,46 @@ router.post("/communications", requireSuperAdmin, async (req: any, res) => {
 
   const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
   if (title.length > 180) return res.status(400).json({ error: "title must be 180 characters or fewer" });
+  if (mode === "announcement") {
+    const interactionSettings = {
+      commentsEnabled: req.body?.commentsEnabled,
+      likesEnabled: req.body?.likesEnabled,
+      repostsEnabled: req.body?.repostsEnabled,
+      sharingEnabled: req.body?.sharingEnabled,
+    };
+    if (Object.values(interactionSettings).some(value => typeof value !== "boolean")) {
+      return res.status(400).json({ error: "Announcement interaction settings must be boolean values" });
+    }
+    if (!title) return res.status(400).json({ error: "title is required for an announcement" });
+    if (!/^rediss?:\/\//.test(process.env.BULLMQ_REDIS_URL ?? "")) {
+      return res.status(503).json({ error: "Broadcast queue is unavailable. Configure the background worker and try again." });
+    }
+    const authorId = await getOfficialSystemAccountId();
+    const [post] = await db.insert(postsTable).values({
+      authorId,
+      title,
+      content,
+      excerpt: content.slice(0, 500),
+      type: "post",
+      isPublished: true,
+      isOfficialPost: true,
+      postCategory: "announcement",
+      officialTargetAudience: "all",
+      aiTextScore: 0,
+      ...interactionSettings,
+    }).returning({ id: postsTable.id });
+
+    let jobId: string;
+    try {
+      jobId = await enqueueOfficialBroadcast(req.currentUser.id, title, content, post.id);
+    } catch (error) {
+      await db.update(postsTable).set({ isPublished: false, updatedAt: new Date() })
+        .where(eq(postsTable.id, post.id));
+      throw error;
+    }
+    await auditLog(req.currentUser.id, "admin_feed_announcement_published", "post", post.id, title);
+    return res.status(202).json({ success: true, postId: post.id, jobId, status: "queued" });
+  }
   try {
     const jobId = await enqueueOfficialBroadcast(
       req.currentUser.id,

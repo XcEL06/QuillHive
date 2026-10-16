@@ -57,6 +57,7 @@ export interface JobPayloads {
     actorId: number;
     title: string;
     message: string;
+    postId?: number;
   };
   expire_boosts: Record<string, never>;
   streak_break_check: Record<string, never>;

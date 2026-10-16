@@ -102,6 +102,7 @@ export type PostOptionsMenuProps = {
   isOwner: boolean;
   isPinned?: boolean;
   commentsEnabled?: boolean;
+  sharingEnabled?: boolean;
   isSaved?: boolean;
   isFollowingAuthor?: boolean;
   hasApplied?: boolean;
@@ -138,6 +139,7 @@ export function PostOptionsMenu({
   isOwner,
   isPinned = false,
   commentsEnabled = true,
+  sharingEnabled = true,
   isSaved = false,
   isFollowingAuthor = false,
   hasApplied = false,
@@ -203,10 +205,12 @@ export function PostOptionsMenu({
       label: 'Distribution',
       items: [
         { label: 'Add to Library', action: 'add-to-library' as const, icon: BookOpen },
-        { label: 'Copy Link', action: 'copy-link' as const, icon: Link2 },
-        { label: 'Embed Post', action: 'embed' as const, icon: Code2 },
-        { label: 'Share via WhatsApp', action: 'share-whatsapp' as const, icon: Send },
-        { label: 'Share via Twitter', action: 'share-twitter' as const, icon: Share2 },
+        ...(sharingEnabled ? [
+          { label: 'Copy Link', action: 'copy-link' as const, icon: Link2 },
+          { label: 'Embed Post', action: 'embed' as const, icon: Code2 },
+          { label: 'Share via WhatsApp', action: 'share-whatsapp' as const, icon: Send },
+          { label: 'Share via Twitter', action: 'share-twitter' as const, icon: Share2 },
+        ] : []),
       ],
     }] : []),
     {
@@ -233,10 +237,12 @@ export function PostOptionsMenu({
       items: [
         { label: isSaved ? 'Unsave Post' : 'Save Post', action: 'save', icon: Bookmark },
         ...(post.type !== 'job' ? [{ label: 'Add to Library', action: 'add-to-library' as const, icon: BookOpen }] : []),
-        { label: 'Copy Link', action: 'copy-link', icon: Link2 },
-        { label: 'Embed Post', action: 'embed', icon: Code2 },
-        { label: 'Share via WhatsApp', action: 'share-whatsapp', icon: Send },
-        { label: 'Share via Twitter', action: 'share-twitter', icon: Share2 },
+        ...(sharingEnabled ? [
+          { label: 'Copy Link', action: 'copy-link' as const, icon: Link2 },
+          { label: 'Embed Post', action: 'embed' as const, icon: Code2 },
+          { label: 'Share via WhatsApp', action: 'share-whatsapp' as const, icon: Send },
+          { label: 'Share via Twitter', action: 'share-twitter' as const, icon: Share2 },
+        ] : []),
       ],
     },
     {

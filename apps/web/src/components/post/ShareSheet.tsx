@@ -11,6 +11,7 @@ interface ShareSheetProps {
   postId: number;
   title?: string;
   isReposted?: boolean;
+  repostingEnabled?: boolean;
   trigger: React.ReactNode;
 }
 
@@ -19,7 +20,7 @@ interface ConvSummary {
   participantName: string;
 }
 
-export function ShareSheet({ postId, title, isReposted = false, trigger }: ShareSheetProps) {
+export function ShareSheet({ postId, title, isReposted = false, repostingEnabled = true, trigger }: ShareSheetProps) {
   const { toast } = useToast();
   const { token } = useAuthStore();
   const queryClient = useQueryClient();
@@ -149,7 +150,7 @@ export function ShareSheet({ postId, title, isReposted = false, trigger }: Share
           <DialogTitle>Share post</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
-          {token && (
+          {token && repostingEnabled && (
             <button
               onClick={() => void repost()}
               disabled={reposting}

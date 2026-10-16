@@ -485,13 +485,16 @@ export const createComment = async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
   const { content } = req.body;
   if (!content) return res.status(400).json({ error: "Content is required" });
+  const [post] = await db.select({ authorId: postsTable.authorId, commentsEnabled: postsTable.commentsEnabled })
+    .from(postsTable).where(eq(postsTable.id, id));
+  if (!post) return res.status(404).json({ error: "Post not found" });
+  if (!post.commentsEnabled) return res.status(403).json({ error: "Comments are turned off for this post" });
   const [groupPost] = await db.select({ commentsEnabled: groupPostDetailsTable.commentsEnabled })
     .from(groupPostDetailsTable).where(eq(groupPostDetailsTable.postId, id));
   if (groupPost && !groupPost.commentsEnabled) return res.status(403).json({ error: "Comments are turned off for this group post" });
   const groupCommentError = await checkGroupCommentPermission(id, viewerId);
   if (groupCommentError) return res.status(groupCommentError.includes("not found") ? 404 : 403).json({ error: groupCommentError });
   const comment = await PostService.createComment(id, viewerId, content);
-  const [post] = await db.select({ authorId: postsTable.authorId }).from(postsTable).where(eq(postsTable.id, id));
   refreshTrustForUsers(viewerId, post?.authorId);
   void addReputationEvent(viewerId, "comment_added", "You added a comment", undefined, `comment:${comment.id}:author`);
   if (post?.authorId && post.authorId !== viewerId) {
@@ -504,8 +507,11 @@ export const likePost = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const id = parseInt(req.params.id);
+  const [post] = await db.select({ authorId: postsTable.authorId, likesEnabled: postsTable.likesEnabled })
+    .from(postsTable).where(eq(postsTable.id, id));
+  if (!post) return res.status(404).json({ error: "Post not found" });
+  if (!post.likesEnabled) return res.status(403).json({ error: "Likes are turned off for this post" });
   const result = await PostService.toggleLike(id, viewerId);
-  const [post] = await db.select({ authorId: postsTable.authorId }).from(postsTable).where(eq(postsTable.id, id));
   refreshTrustForUsers(viewerId, post?.authorId);
   void deleteCachePattern(`feed:${viewerId}:*`);
   void deleteCachePattern(`trending:*`); memDeletePattern("trending:");
@@ -806,6 +812,7 @@ export const sharePost = async (req: Request, res: Response) => {
     postVisibilityCondition(viewerId),
   ));
   if (!post) return res.status(404).json({ error: "Post not found" });
+  if (!post.sharingEnabled) return res.status(403).json({ error: "Sharing is turned off for this post" });
   const existing = await db.select().from(postSharesTable).where(and(eq(postSharesTable.postId, id), eq(postSharesTable.userId, viewerId)));
   if (existing.length === 0) {
     await db.insert(postSharesTable).values({ postId: id, userId: viewerId });
@@ -839,6 +846,7 @@ export const repostPost = async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
   const [post] = await db.select().from(postsTable).where(eq(postsTable.id, id));
   if (!post) return res.status(404).json({ error: "Post not found" });
+  if (!post.repostsEnabled) return res.status(403).json({ error: "Reposts are turned off for this post" });
 
   const [existing] = await db
     .select()
@@ -977,6 +985,9 @@ export const replyToComment = async (req: Request, res: Response) => {
   const [groupPost] = await db.select({ commentsEnabled: groupPostDetailsTable.commentsEnabled })
     .from(groupPostDetailsTable).where(eq(groupPostDetailsTable.postId, parent.postId));
   if (groupPost && !groupPost.commentsEnabled) return res.status(403).json({ error: "Comments are turned off for this group post" });
+  const [post] = await db.select({ commentsEnabled: postsTable.commentsEnabled })
+    .from(postsTable).where(eq(postsTable.id, parent.postId));
+  if (!post?.commentsEnabled) return res.status(403).json({ error: "Comments are turned off for this post" });
 
   const newDepth = (parent.depth ?? 0) + 1;
   if (newDepth > 3) return res.status(400).json({ error: "Max thread depth (3) reached" });
@@ -1066,6 +1077,9 @@ export const likeComment = async (req: Request, res: Response) => {
   if (!targetComment) return res.status(404).json({ error: "Comment not found" });
   const groupCommentError = await checkGroupCommentPermission(targetComment.postId, viewerId);
   if (groupCommentError) return res.status(groupCommentError.includes("not found") ? 404 : 403).json({ error: groupCommentError });
+  const [post] = await db.select({ likesEnabled: postsTable.likesEnabled })
+    .from(postsTable).where(eq(postsTable.id, targetComment.postId));
+  if (!post?.likesEnabled) return res.status(403).json({ error: "Likes are turned off for this post" });
 
   const [existing] = await db
     .select()

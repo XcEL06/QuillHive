@@ -260,6 +260,13 @@
       "when": 1792310400001,
       "tag": "0040_unique_post_reposts",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1792310400002,
+      "tag": "0041_post_interaction_controls",
+      "breakpoints": true
     }
   ]
 }

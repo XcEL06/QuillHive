@@ -17,7 +17,7 @@ import { Megaphone, Search, Send } from "lucide-react";
 import type { AdminProps } from "./types";
 import { useAdminFetch } from "../hooks/useAdminFetch";
 
-type CommunicationMode = "message" | "notification" | "broadcast";
+type CommunicationMode = "message" | "notification" | "broadcast" | "announcement";
 type Recipient = {
   id: number;
   username: string;
@@ -29,6 +29,7 @@ const MODES: Array<{ key: CommunicationMode; label: string }> = [
   { key: "message", label: "Message a specific user" },
   { key: "notification", label: "Notify a specific user" },
   { key: "broadcast", label: "Broadcast notification to all users" },
+  { key: "announcement", label: "Publish feed announcement + notify everyone" },
 ];
 
 export default function AdminCommunications({ token, toast }: AdminProps) {
@@ -40,11 +41,18 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
   const [userSearchError, setUserSearchError] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<Recipient | null>(null);
   const [content, setContent] = useState("");
+  const [title, setTitle] = useState("");
+  const [interactions, setInteractions] = useState({
+    commentsEnabled: true,
+    likesEnabled: true,
+    repostsEnabled: true,
+    sharingEnabled: true,
+  });
   const [sending, setSending] = useState(false);
   const [confirmBroadcast, setConfirmBroadcast] = useState(false);
 
   useEffect(() => {
-    if (mode === "broadcast" || search.trim().length < 2) {
+    if (mode === "broadcast" || mode === "announcement" || search.trim().length < 2) {
       setUsers([]);
       setSearchingUsers(false);
       setUserSearchError(null);
@@ -75,18 +83,23 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
   }, [fetchAdmin, mode, search]);
 
   const send = async (selectedMode: CommunicationMode) => {
-    if (!content.trim() || (selectedMode !== "broadcast" && !selectedUser)) return;
+    const isMassCommunication = selectedMode === "broadcast" || selectedMode === "announcement";
+    if (!content.trim() || (!isMassCommunication && !selectedUser) ||
+      (selectedMode === "announcement" && !title.trim())) return;
     setSending(true);
     try {
       const result = await fetchAdmin("/api/admin/communications", {
         method: "POST",
         body: JSON.stringify({
           mode: selectedMode,
-          ...(selectedMode !== "broadcast" ? { userId: selectedUser!.id } : {}),
+          ...(!isMassCommunication ? { userId: selectedUser!.id } : {}),
+          ...(isMassCommunication ? { title: title.trim() } : {}),
           content: content.trim(),
+          ...(selectedMode === "announcement" ? interactions : {}),
         }),
       });
       setContent("");
+      setTitle("");
       if (selectedMode === "message") {
         toast({
           title: "Platform message sent",
@@ -94,6 +107,11 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
         });
       } else if (selectedMode === "notification") {
         toast({ title: "QuillHive notification sent", description: "It was saved and pushed through the live notification channel." });
+      } else if (selectedMode === "announcement") {
+        toast({
+          title: "Announcement published",
+          description: `Feed post #${result.postId} is live; notification delivery is queued as job ${result.jobId}.`,
+        });
       } else {
         toast({ title: "Broadcast queued", description: `Background job ${result.jobId} is processing users in batches.` });
       }
@@ -106,6 +124,8 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
   };
 
   const isBroadcast = mode === "broadcast";
+  const isAnnouncement = mode === "announcement";
+  const isMassCommunication = isBroadcast || isAnnouncement;
   const recipientLabel = selectedUser
     ? `${selectedUser.displayName || selectedUser.username} (@${selectedUser.username})`
     : "";
@@ -119,7 +139,7 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
         </p>
       </header>
 
-      <div className="grid gap-2 sm:grid-cols-3" role="group" aria-label="Communication type">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" role="group" aria-label="Communication type">
         {MODES.map(({ key, label }) => (
           <Button
             key={key}
@@ -138,7 +158,7 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
         ))}
       </div>
 
-      {!isBroadcast && (
+      {!isMassCommunication && (
         <div className="space-y-2">
           <Label htmlFor="communication-user-search">Recipient</Label>
           <div className="relative">
@@ -191,26 +211,61 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
         </div>
       )}
 
+      {isMassCommunication && (
+        <div className="space-y-2">
+          <Label htmlFor="communication-title">{isAnnouncement ? "Announcement title" : "Notification title (optional)"}</Label>
+          <Input
+            id="communication-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            maxLength={180}
+            placeholder="A message from the QuillHive team"
+          />
+        </div>
+      )}
+
       <div className="space-y-2">
-        <Label htmlFor="communication-content">{isBroadcast ? "Notification body" : mode === "message" ? "Message body" : "Notification body"}</Label>
+        <Label htmlFor="communication-content">{isAnnouncement ? "Announcement text" : isBroadcast ? "Notification body" : mode === "message" ? "Message body" : "Notification body"}</Label>
         <Textarea
           id="communication-content"
           value={content}
           onChange={(event) => setContent(event.target.value)}
           maxLength={5000}
           rows={7}
-          placeholder={isBroadcast ? "Write the announcement for all users..." : "Write a message from QuillHive..."}
+          placeholder={isAnnouncement ? "Write the announcement to publish in the feed..." : isBroadcast ? "Write the notification for all users..." : "Write a message from QuillHive..."}
         />
         <p className="text-right text-xs text-muted-foreground">{content.length}/5000</p>
       </div>
 
-      {isBroadcast ? (
+      {isAnnouncement && (
+        <fieldset className="space-y-3 rounded-lg border border-border p-4">
+          <legend className="px-1 text-sm font-medium">Allow interactions on this announcement</legend>
+          {([
+            ["commentsEnabled", "Comments and replies"],
+            ["likesEnabled", "Likes (including comment likes)"],
+            ["repostsEnabled", "Reposts"],
+            ["sharingEnabled", "Sharing"],
+          ] as const).map(([key, label]) => (
+            <label key={key} className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={interactions[key]}
+                onChange={(event) => setInteractions(current => ({ ...current, [key]: event.target.checked }))}
+                className="h-4 w-4 accent-primary"
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      {isMassCommunication ? (
         <Button
           onClick={() => setConfirmBroadcast(true)}
-          disabled={sending || !content.trim()}
-          variant="destructive"
+          disabled={sending || !content.trim() || (isAnnouncement && !title.trim())}
+          variant={isBroadcast ? "destructive" : "default"}
         >
-          <Megaphone className="mr-2 h-4 w-4" />Review broadcast
+          <Megaphone className="mr-2 h-4 w-4" />{isAnnouncement ? "Review announcement" : "Review broadcast"}
         </Button>
       ) : (
         <Button onClick={() => void send(mode)} disabled={sending || !selectedUser || !content.trim()}>
@@ -223,25 +278,38 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
     <AlertDialog open={confirmBroadcast} onOpenChange={setConfirmBroadcast}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Broadcast this notification to everyone?</AlertDialogTitle>
+          <AlertDialogTitle>{isAnnouncement ? "Publish this announcement and notify everyone?" : "Broadcast this notification to everyone?"}</AlertDialogTitle>
           <AlertDialogDescription>
-            This notification will be delivered to all non-deleted users in batches, with @quillhive shown as the sender. This action cannot be undone.
+            {isAnnouncement
+              ? "This will publish a QuillHive feed post and queue a notification for all non-deleted users. Interaction settings apply to the post."
+              : "This notification will be delivered to all non-deleted users in batches, with @quillhive shown as the sender. This action cannot be undone."}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="max-h-32 overflow-y-auto rounded-md border border-border bg-muted/30 p-3 text-sm">
+          {isAnnouncement && <p className="mb-2 font-semibold">{title}</p>}
           {content}
         </div>
+        {isAnnouncement && (
+          <p className="text-xs text-muted-foreground">
+            Enabled: {Object.entries(interactions).filter(([, enabled]) => enabled).map(([key]) => ({
+              commentsEnabled: "comments",
+              likesEnabled: "likes",
+              repostsEnabled: "reposts",
+              sharingEnabled: "sharing",
+            }[key])).join(", ") || "no interactions"}
+          </p>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={sending}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             disabled={sending}
             onClick={(event) => {
               event.preventDefault();
-              void send("broadcast");
+              void send(isAnnouncement ? "announcement" : "broadcast");
             }}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className={!isAnnouncement ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
           >
-            {sending ? "Queueing..." : "Confirm broadcast"}
+            {sending ? "Publishing..." : isAnnouncement ? "Publish and notify" : "Confirm broadcast"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

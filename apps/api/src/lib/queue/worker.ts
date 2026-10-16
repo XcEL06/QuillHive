@@ -317,7 +317,7 @@ async function processJob(job: Job): Promise<void> {
     }
 
     case "admin_notification_broadcast": {
-      const { actorId, title, message } =
+      const { actorId, title, message, postId } =
         job.data as JobPayloads["admin_notification_broadcast"];
       try {
         const { db } = await import("@workspace/db");
@@ -348,7 +348,7 @@ async function processJob(job: Job): Promise<void> {
               actorId,
               title,
               message,
-              url: "/notifications",
+              url: postId ? `/post/${postId}` : "/notifications",
             });
           }
 
