@@ -11,8 +11,20 @@ import {
   userTopicAffinityTable,
 } from "@workspace/db/schema";
 import { eq, and, inArray, sql, desc, gt, or } from "drizzle-orm";
+import { logger } from "../../lib/logger";
 
 export const opportunitiesRouter = Router();
+
+function parseAvailableFor(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch (err) {
+    logger.warn({ err }, "Invalid creator availability categories; returning an empty list");
+    return [];
+  }
+}
 
 const listQuerySchema = z.object({
   skill: z.string().max(60).optional(),
@@ -95,15 +107,20 @@ opportunitiesRouter.get(
       ));
 
     // ── 3. Endorsement counts per creator×skill ───────────────────────────────
-    const endorsements = await db
-      .select({
-        toUserId: skillEndorsementsTable.toUserId,
-        skill: skillEndorsementsTable.skill,
-        count: sql<number>`cast(count(*) as int)`,
-      })
-      .from(skillEndorsementsTable)
-      .where(inArray(skillEndorsementsTable.toUserId, userIds))
-      .groupBy(skillEndorsementsTable.toUserId, skillEndorsementsTable.skill);
+    let endorsements: Array<{ toUserId: number; skill: string; count: number }> = [];
+    try {
+      endorsements = await db
+        .select({
+          toUserId: skillEndorsementsTable.toUserId,
+          skill: skillEndorsementsTable.skill,
+          count: sql<number>`cast(count(*) as int)`,
+        })
+        .from(skillEndorsementsTable)
+        .where(inArray(skillEndorsementsTable.toUserId, userIds))
+        .groupBy(skillEndorsementsTable.toUserId, skillEndorsementsTable.skill);
+    } catch (err) {
+      logger.warn({ err }, "Creator endorsements unavailable; listing creators without endorsement counts");
+    }
 
     // Build: userId → { skill → count }
     const endorseMap = new Map<number, Map<string, number>>();
@@ -113,26 +130,39 @@ opportunitiesRouter.get(
     }
 
     // ── 4. Active service listings (first one per creator for card preview) ──
-    const listings = await db
-      .select({
-        creatorId: serviceListingsTable.creatorId,
-        id: serviceListingsTable.id,
-        title: serviceListingsTable.title,
-        category: serviceListingsTable.category,
-        pricingModel: serviceListingsTable.pricingModel,
-        priceFrom: serviceListingsTable.priceFrom,
-        priceTo: serviceListingsTable.priceTo,
-        currency: serviceListingsTable.currency,
-        skills: serviceListingsTable.skills,
-      })
-      .from(serviceListingsTable)
-      .where(
-        and(
+    let listings: Array<{
+      creatorId: number;
+      id: number;
+      title: string;
+      category: string;
+      pricingModel: string;
+      priceFrom: number | null;
+      priceTo: number | null;
+      currency: string;
+      skills: string;
+    }> = [];
+    try {
+      listings = await db
+        .select({
+          creatorId: serviceListingsTable.creatorId,
+          id: serviceListingsTable.id,
+          title: serviceListingsTable.title,
+          category: serviceListingsTable.category,
+          pricingModel: serviceListingsTable.pricingModel,
+          priceFrom: serviceListingsTable.priceFrom,
+          priceTo: serviceListingsTable.priceTo,
+          currency: serviceListingsTable.currency,
+          skills: serviceListingsTable.skills,
+        })
+        .from(serviceListingsTable)
+        .where(and(
           inArray(serviceListingsTable.creatorId, userIds),
           eq(serviceListingsTable.isActive, true),
-        ),
-      )
-      .orderBy(desc(serviceListingsTable.createdAt));
+        ))
+        .orderBy(desc(serviceListingsTable.createdAt));
+    } catch (err) {
+      logger.warn({ err }, "Creator service listings unavailable; continuing without listing previews");
+    }
 
     // Build: creatorId → listing[]
     const listingMap = new Map<number, typeof listings>();
@@ -144,42 +174,39 @@ opportunitiesRouter.get(
     // ── 5. Viewer affinity scores (optional) ─────────────────────────────────
     const affinityMap = new Map<number, number>();
     if (viewerId) {
-      // Get top topic-ids this viewer cares about
-      const viewerAffinity = await db
-        .select({ topicId: userTopicAffinityTable.topicId, score: userTopicAffinityTable.affinityScore })
-        .from(userTopicAffinityTable)
-        .where(
-          and(
+      try {
+        const viewerAffinity = await db
+          .select({ topicId: userTopicAffinityTable.topicId, score: userTopicAffinityTable.affinityScore })
+          .from(userTopicAffinityTable)
+          .where(and(
             eq(userTopicAffinityTable.userId, viewerId),
             gt(userTopicAffinityTable.affinityScore, 0.2),
-          ),
-        )
-        .limit(20);
+          ))
+          .limit(20);
 
-      if (viewerAffinity.length) {
-        const topicIds = viewerAffinity.map((a) => a.topicId);
-        const topicScoreMap = new Map(viewerAffinity.map((a) => [a.topicId, a.score]));
-
-        // Find creators who also have affinity with those topics
-        const creatorAffinity = await db
-          .select({
-            userId: userTopicAffinityTable.userId,
-            topicId: userTopicAffinityTable.topicId,
-            score: userTopicAffinityTable.affinityScore,
-          })
-          .from(userTopicAffinityTable)
-          .where(
-            and(
+        if (viewerAffinity.length) {
+          const topicIds = viewerAffinity.map((a) => a.topicId);
+          const topicScoreMap = new Map(viewerAffinity.map((a) => [a.topicId, a.score]));
+          const creatorAffinity = await db
+            .select({
+              userId: userTopicAffinityTable.userId,
+              topicId: userTopicAffinityTable.topicId,
+              score: userTopicAffinityTable.affinityScore,
+            })
+            .from(userTopicAffinityTable)
+            .where(and(
               inArray(userTopicAffinityTable.userId, userIds),
               inArray(userTopicAffinityTable.topicId, topicIds),
-            ),
-          );
+            ));
 
-        for (const row of creatorAffinity) {
-          const viewerScore = topicScoreMap.get(row.topicId) ?? 0;
-          const overlap = Math.min(row.score, viewerScore);
-          affinityMap.set(row.userId, (affinityMap.get(row.userId) ?? 0) + overlap);
+          for (const row of creatorAffinity) {
+            const viewerScore = topicScoreMap.get(row.topicId) ?? 0;
+            const overlap = Math.min(row.score, viewerScore);
+            affinityMap.set(row.userId, (affinityMap.get(row.userId) ?? 0) + overlap);
+          }
         }
+      } catch (err) {
+        logger.warn({ err }, "Creator affinity unavailable; using endorsement ordering");
       }
     }
 
@@ -210,7 +237,7 @@ opportunitiesRouter.get(
           user: u,
           availability: {
             status: avail.status,
-            availableFor: JSON.parse(avail.availableFor ?? "[]") as string[],
+            availableFor: parseAvailableFor(avail.availableFor),
             hoursPerWeek: avail.hoursPerWeek,
             ratePerHour: avail.ratePerHour,
             currency: avail.currency ?? "USD",

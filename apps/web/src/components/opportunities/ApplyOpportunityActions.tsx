@@ -73,7 +73,7 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => setOpen(true)}>
-            <MessageSquare className="h-4 w-4" /> Apply + message
+            <MessageSquare className="h-4 w-4" /> Apply + discuss fee
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -84,13 +84,13 @@ export function ApplyOpportunityActions({ jobId, title, compact = false, externa
     </div>
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="sm:max-w-lg">
-        <DialogHeader><DialogTitle>Apply and message about {title}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Apply and discuss fee for {title}</DialogTitle></DialogHeader>
         <div className="space-y-4 py-2">
-          <div><Label>Message to the poster</Label><Textarea className="mt-1.5" rows={5} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Introduce yourself and explain why you are a fit..." /></div>
+          <div><Label>Message to the poster</Label><Textarea className="mt-1.5" rows={5} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Introduce yourself, discuss the scope, and ask or propose a fee..." /></div>
           <div className="grid grid-cols-[1fr_5rem] gap-2"><div><Label>Proposed fee or rate</Label><Input className="mt-1.5" type="number" min="0" value={budget} onChange={(event) => setBudget(event.target.value)} placeholder="Optional" /></div><div><Label>Currency</Label><Input className="mt-1.5" maxLength={3} value={currency} onChange={(event) => setCurrency(event.target.value.toUpperCase())} /></div></div>
           <p className="text-xs text-muted-foreground">Use your message to discuss scope, milestones, and payment timing. Your proposed fee will be included in the application.</p>
         </div>
-        <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => void submit("apply_and_message")} disabled={sending || !message.trim()}><MessageSquare className="mr-2 h-4 w-4" />{sending ? "Sending..." : "Apply + message"}</Button></DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button onClick={() => void submit("apply_and_message")} disabled={sending || !message.trim()}><MessageSquare className="mr-2 h-4 w-4" />{sending ? "Sending..." : "Apply + discuss fee"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   </>;

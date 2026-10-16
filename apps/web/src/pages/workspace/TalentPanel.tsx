@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getInitials } from '@/lib/utils';
 import { useLocation } from 'wouter';
 import {
-  Search, Award, Clock, MessageCircle, ChevronRight, Users2, Zap,
+  Search, Award, Clock, MessageCircle, ChevronRight, Users2, Zap, RefreshCw,
 } from 'lucide-react';
 
 interface SkillBadge { skill: string; endorsements: number }
@@ -147,12 +147,14 @@ export function TalentPanel() {
   const [creators, setCreators] = useState<Creator[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [offset, setOffset] = useState(0);
   const LIMIT = 12;
 
   const [skillFilter, setSkillFilter] = useState('');
   const [availableForFilter, setAvailableForFilter] = useState('all');
   const [messagingUserId, setMessagingUserId] = useState<number | null>(null);
+  const requestSequence = useRef(0);
 
   const handleMessage = async (userId: number) => {
     if (!token) {
@@ -179,7 +181,9 @@ export function TalentPanel() {
   };
 
   const fetchCreators = useCallback(async (reset = false) => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
+    setLoadError('');
     const params = new URLSearchParams({
       limit: String(LIMIT),
       offset: String(reset ? 0 : offset),
@@ -191,8 +195,9 @@ export function TalentPanel() {
       const res = await fetch(`/api/opportunities?${params}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error('Failed to load');
-      const data = await res.json();
+      const data = await res.json().catch(() => null) as { creators?: Creator[]; total?: number; error?: string } | null;
+      if (!res.ok) throw new Error(data?.error ?? `Could not load talent (${res.status}).`);
+      if (requestId !== requestSequence.current) return;
       if (reset) {
         setCreators(Array.isArray(data?.creators) ? data.creators : []);
         setOffset(LIMIT);
@@ -200,18 +205,28 @@ export function TalentPanel() {
         setCreators(prev => [...prev, ...(Array.isArray(data?.creators) ? data.creators : [])]);
         setOffset(prev => prev + LIMIT);
       }
-      setTotal(data.total ?? 0);
-    } catch {
-      toast({ title: 'Failed to load talent', variant: 'destructive' });
+      setTotal(data?.total ?? 0);
+    } catch (error) {
+      if (requestId === requestSequence.current) {
+        const message = error instanceof Error ? error.message : 'Could not load talent. Check your connection and try again.';
+        setLoadError(message);
+        toast({ title: 'Failed to load talent', description: message, variant: 'destructive' });
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
   }, [skillFilter, availableForFilter, offset, token]);
 
   useEffect(() => {
+    requestSequence.current += 1;
     setOffset(0);
-    fetchCreators(true);
-  }, [skillFilter, availableForFilter]);
+    setCreators([]);
+    setTotal(0);
+    setLoadError('');
+    setLoading(true);
+    const debounce = window.setTimeout(() => void fetchCreators(true), 250);
+    return () => window.clearTimeout(debounce);
+  }, [skillFilter, availableForFilter, token]);
 
   const hasMore = creators.length < total;
 
@@ -245,6 +260,13 @@ export function TalentPanel() {
         <p className="text-xs text-muted-foreground">{total.toLocaleString()} creators open to opportunities</p>
       )}
 
+      {loadError && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4" role="alert">
+        <p className="text-sm text-destructive">{loadError}</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => void fetchCreators(true)} disabled={loading}>
+          <RefreshCw className={`mr-2 h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />Retry
+        </Button>
+      </div>}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {loading && creators.length === 0
           ? Array.from({ length: 4 }).map((_, i) => <CreatorCardSkeleton key={i} />)
@@ -252,14 +274,14 @@ export function TalentPanel() {
         }
       </div>
 
-      {!loading && creators.length === 0 && (
+      {!loading && !loadError && creators.length === 0 && (
         <div className="text-center py-12">
           <Users2 className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">No creators are open to opportunities yet.</p>
         </div>
       )}
 
-      {hasMore && (
+      {hasMore && !loadError && (
         <div className="text-center pt-2">
           <Button variant="outline" size="sm" onClick={() => fetchCreators(false)} disabled={loading}>
             {loading ? 'Loading…' : 'Load more'}

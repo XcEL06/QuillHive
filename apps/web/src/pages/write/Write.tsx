@@ -930,19 +930,19 @@ export default function Write() {
           </div>
         )}
         {/* Header */}
-        <div className="mb-6 flex flex-col gap-5 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-6 flex flex-col gap-5 rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-sm sm:flex-row sm:items-end sm:justify-between sm:p-7">
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <Badge variant="outline" className="font-medium">
-                {editPostId ? 'Editing' : editingPollId ? 'Poll' : 'New draft'}
+                {editPostId ? 'Editing post' : editingPollId ? 'Editing poll' : 'Create'}
               </Badge>
               {showSaved && <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400" role="status">Saved</span>}
             </div>
             <h1 className="break-words text-3xl font-serif font-bold tracking-tight sm:text-4xl">
-              {editingPollId ? 'Edit poll' : editPostId ? 'Edit post' : t('write.newPiece')}
+              {editingPollId ? 'Edit your poll' : editPostId ? 'Edit your post' : t('write.newPiece', 'Create a post')}
             </h1>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Shape your idea, add the details readers need, then publish when it’s ready.
+              Write something worth reading. Add a clear title and useful details, then save a draft or publish when it is ready.
             </p>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">

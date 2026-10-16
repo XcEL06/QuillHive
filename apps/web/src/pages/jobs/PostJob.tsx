@@ -46,6 +46,7 @@ export default function PostJob() {
   const [budgetMin, setBudgetMin]           = useState('');
   const [budgetMax, setBudgetMax]           = useState('');
   const [currency, setCurrency]             = useState('USD');
+  const [feeDiscussion, setFeeDiscussion]   = useState(false);
   const [feeDetails, setFeeDetails]         = useState('');
   const [expiresAt, setExpiresAt]           = useState(() => toLocalDateTimeValue(new Date(Date.now() + 30 * 24 * 60 * 60_000)));
   const [remote, setRemote]                 = useState(true);
@@ -56,6 +57,7 @@ export default function PostJob() {
   const [skills, setSkills]                 = useState<string[]>([]);
   const [isActive, setIsActive]             = useState(true);
   const [isSubmitting, setIsSubmitting]     = useState(false);
+  const [submitError, setSubmitError]       = useState('');
   const [isLoadingEdit, setIsLoadingEdit]   = useState(Boolean(editId));
 
   useEffect(() => {
@@ -81,7 +83,9 @@ export default function PostJob() {
         setType(job.type ?? 'freelance');
         setCompanyName(job.companyName ?? '');
         setDescription(job.description ?? '');
-        setFeeDetails(job.feeDetails ?? '');
+        const savedFeeDetails = job.feeDetails ?? '';
+        setFeeDiscussion(savedFeeDetails.startsWith('Fee is open to discussion.'));
+        setFeeDetails(savedFeeDetails.replace(/^Fee is open to discussion\.\s*/i, ''));
         if (job.expiresAt) setExpiresAt(toLocalDateTimeValue(new Date(job.expiresAt)));
         setRemote(job.remote ?? true);
         setLocation2(job.location ?? '');
@@ -158,7 +162,11 @@ export default function PostJob() {
     }
 
     setIsSubmitting(true);
+    setSubmitError('');
     try {
+      const savedFeeDetails = feeDiscussion
+        ? `Fee is open to discussion.${feeDetails.trim() ? ` ${feeDetails.trim()}` : ' Applicants are welcome to propose a rate and discuss scope, milestones, and payment timing.'}`
+        : feeDetails.trim() || null;
       const res = await fetch(apiUrl(editId ? `/api/jobs/${editId}` : '/api/jobs'), {
         method: editId ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -168,7 +176,7 @@ export default function PostJob() {
           description:  fullDescription,
           skills,
           compensation: compensationStr ?? null,
-          feeDetails: feeDetails.trim() || null,
+          feeDetails: savedFeeDetails,
           expiresAt: expiryDate.toISOString(),
           budget:       minVal ?? null,
           companyName:  companyName.trim() || null,
@@ -189,7 +197,9 @@ export default function PostJob() {
       });
       setLocation(editId ? '/workspace?tab=work' : '/jobs');
     } catch (err) {
-      toast({ title: err instanceof Error ? err.message : 'Failed to post', variant: 'destructive' });
+      const message = err instanceof Error ? err.message : 'Failed to post your opportunity.';
+      setSubmitError(message);
+      toast({ title: message, variant: 'destructive' });
     } finally {
       setIsSubmitting(false);
     }
@@ -197,26 +207,29 @@ export default function PostJob() {
 
   return (
     <AppLayout>
-      <div className="max-w-2xl mx-auto px-4 py-8">
+      <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
         <BackButton fallback="/workspace?tab=work" />
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-              <Briefcase className="w-5 h-5 text-white" />
+        <div className="mb-7 overflow-hidden rounded-2xl border border-primary/15 bg-gradient-to-br from-primary/10 via-card to-card p-5 shadow-sm sm:p-7">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+              <Briefcase className="h-5 w-5" />
             </div>
-            <h1 className="text-2xl font-bold font-serif">{editId ? 'Edit Opportunity' : 'Post a need'}</h1>
+            <div className="min-w-0">
+              <Badge variant="outline" className="mb-2 border-primary/20 bg-background/70 text-primary">Workspace · Opportunity</Badge>
+              <h1 className="text-2xl font-bold tracking-tight font-serif sm:text-3xl">{editId ? 'Edit opportunity' : 'Post an opportunity'}</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                Set clear expectations for the work, fee, and application deadline so the right people can respond.
+              </p>
+            </div>
           </div>
-          <p className="text-muted-foreground ml-11 text-sm">
-            Reach verified creators - ranked by skill endorsements, creator level, and published proof-of-work.
-          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-6">
-          <section aria-labelledby="opportunity-basics-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
-            <div>
-              <h2 id="opportunity-basics-heading" className="text-base font-semibold">Opportunity basics</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Give your listing a clear title and choose the best fit.</p>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <section aria-labelledby="opportunity-basics-heading" className="space-y-5 rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-7">
+            <div className="border-b border-border/60 pb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">01 · The opportunity</p>
+              <h2 id="opportunity-basics-heading" className="mt-1 text-lg font-semibold">What do you need?</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Start with a specific title and the type of engagement.</p>
             </div>
           {/* Role Title */}
           <div className="space-y-2">
@@ -241,7 +254,7 @@ export default function PostJob() {
                   key={ot.value}
                   type="button"
                   onClick={() => setType(ot.value)}
-                  className={`text-left rounded-xl border p-3 transition-all ${
+                  className={`text-left rounded-xl border p-4 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     type === ot.value
                       ? 'border-primary bg-primary/8 ring-1 ring-primary/20'
                       : 'border-border/60 bg-card hover:border-primary/40'
@@ -256,12 +269,13 @@ export default function PostJob() {
           </section>
 
           {/* Budget / Rate */}
-          <section aria-labelledby="opportunity-compensation-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
-            <div>
+          <section aria-labelledby="opportunity-compensation-heading" className="space-y-5 rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-7">
+            <div className="border-b border-border/60 pb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">02 · Compensation</p>
               <h2 id="opportunity-compensation-heading" className="flex items-center gap-2 text-base font-semibold">
                 <DollarSign className="h-4 w-4 text-muted-foreground" /> Budget and rate
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">Add a range or leave the fields blank if compensation is negotiable.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Share a range, or mark the fee as open for discussion.</p>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button
@@ -308,11 +322,18 @@ export default function PostJob() {
                 className="h-10 flex-1 rounded-xl"
               />
             </div>
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <div>
+                <Label htmlFor="feeDiscussion" className="font-medium">Fee is open to discussion</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Invite applicants to propose a fee and discuss terms with you.</p>
+              </div>
+              <Switch id="feeDiscussion" checked={feeDiscussion} onCheckedChange={setFeeDiscussion} />
+            </div>
             <div className="space-y-2">
-              <Label htmlFor="feeDetails">Fee and payment terms</Label>
+              <Label htmlFor="feeDetails">Additional fee and payment terms <span className="font-normal text-muted-foreground">(optional)</span></Label>
               <Textarea
                 id="feeDetails"
-                maxLength={2000}
+                maxLength={1800}
                 value={feeDetails}
                 onChange={event => setFeeDetails(event.target.value)}
                 placeholder="Describe how the fee is set or negotiated, payment timing, milestones, or revenue-share terms."
@@ -322,9 +343,10 @@ export default function PostJob() {
             </div>
           </section>
 
-          <section aria-labelledby="opportunity-scope-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
-            <div>
-              <h2 id="opportunity-scope-heading" className="text-base font-semibold">Scope and requirements</h2>
+          <section aria-labelledby="opportunity-scope-heading" className="space-y-5 rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-7">
+            <div className="border-b border-border/60 pb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">03 · Scope</p>
+              <h2 id="opportunity-scope-heading" className="mt-1 text-lg font-semibold">Scope and requirements</h2>
               <p className="mt-1 text-sm text-muted-foreground">Explain the work and what applicants need to bring.</p>
             </div>
           {/* Required Skills */}
@@ -388,9 +410,10 @@ export default function PostJob() {
           </div>
           </section>
 
-          <section aria-labelledby="opportunity-arrangement-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
-            <div>
-              <h2 id="opportunity-arrangement-heading" className="text-base font-semibold">Organization and work arrangement</h2>
+          <section aria-labelledby="opportunity-arrangement-heading" className="space-y-5 rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-7">
+            <div className="border-b border-border/60 pb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-primary">04 · Logistics</p>
+              <h2 id="opportunity-arrangement-heading" className="mt-1 text-lg font-semibold">Organization and work arrangement</h2>
               <p className="mt-1 text-sm text-muted-foreground">Add the organization and where the work will take place.</p>
             </div>
           {/* Company */}
@@ -447,9 +470,10 @@ export default function PostJob() {
           </section>
 
           {/* Apply methods */}
-          <section aria-labelledby="opportunity-application-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
-          <div>
-            <h2 id="opportunity-application-heading" className="text-base font-semibold">How to apply</h2>
+          <section aria-labelledby="opportunity-application-heading" className="space-y-5 rounded-2xl border border-border/70 bg-card p-5 shadow-sm sm:p-7">
+          <div className="border-b border-border/60 pb-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">05 · Applications</p>
+            <h2 id="opportunity-application-heading" className="mt-1 text-lg font-semibold">How to apply</h2>
             <p className="mt-1 text-sm text-muted-foreground">Add an external application link, an email address, or both.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -473,15 +497,19 @@ export default function PostJob() {
           </section>
 
           {/* Submit */}
+          {submitError && <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive" role="alert">{submitError}</div>}
+          <div className="flex flex-col-reverse gap-3 border-t border-border/60 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">Your listing will close automatically at its deadline.</p>
           <Button
             type="submit"
             size="lg"
-            className="h-12 w-full rounded-xl font-semibold text-base gap-2 sm:w-auto sm:min-w-48"
+            className="h-12 w-full rounded-xl font-semibold text-base gap-2 shadow-sm sm:w-auto sm:min-w-52"
             disabled={isSubmitting || isLoadingEdit}
           >
             {isSubmitting || isLoadingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <ChevronRight className="w-4 h-4" />}
-            {isLoadingEdit ? 'Loading…' : isSubmitting ? 'Saving…' : editId ? 'Save Changes' : 'Post a need'}
+            {isLoadingEdit ? 'Loading…' : isSubmitting ? 'Saving…' : editId ? 'Save changes' : 'Post opportunity'}
           </Button>
+          </div>
         </form>
       </div>
     </AppLayout>
