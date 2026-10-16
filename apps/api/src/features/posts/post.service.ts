@@ -855,10 +855,19 @@ export async function getComments(postId: number, viewerId: number | null) {
     .where(eq(commentsTable.postId, postId))
     .orderBy(desc(commentsTable.createdAt));
 
+  const likedCommentIds = viewerId !== null && comments.length > 0
+    ? new Set((await db.select({ commentId: commentLikesTable.commentId })
+      .from(commentLikesTable)
+      .where(and(
+        eq(commentLikesTable.userId, viewerId),
+        inArray(commentLikesTable.commentId, comments.map(comment => comment.id)),
+      ))).map(row => row.commentId))
+    : new Set<number>();
+
   const enriched = await Promise.all(
     comments.map(async c => {
       const author = await getUserWithCounts(c.authorId, viewerId);
-      return { ...c, author };
+      return { ...c, author, isLiked: likedCommentIds.has(c.id) };
     })
   );
 

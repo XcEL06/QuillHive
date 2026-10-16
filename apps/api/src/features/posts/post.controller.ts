@@ -85,6 +85,25 @@ async function checkGroupCommentPermission(postId: number, userId: number): Prom
   return null;
 }
 
+async function getAccessibleComment(commentId: number, viewerId: number) {
+  const [comment] = await db.select({
+    id: commentsTable.id,
+    postId: commentsTable.postId,
+    authorId: commentsTable.authorId,
+    parentCommentId: commentsTable.parentCommentId,
+    depth: commentsTable.depth,
+  }).from(commentsTable)
+    .innerJoin(postsTable, eq(postsTable.id, commentsTable.postId))
+    .where(and(
+      eq(commentsTable.id, commentId),
+      eq(postsTable.isPublished, true),
+      eq(postsTable.isDeleted, false),
+      visiblePostExpiryCondition(),
+      postVisibilityCondition(viewerId),
+    ));
+  return comment ?? null;
+}
+
 export const saveDraft = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
@@ -951,7 +970,7 @@ export const replyToComment = async (req: Request, res: Response) => {
   const commentId = parseInt(req.params.id);
   if (isNaN(commentId)) return res.status(400).json({ error: "Invalid comment id" });
 
-  const [parent] = await db.select().from(commentsTable).where(eq(commentsTable.id, commentId));
+  const parent = await getAccessibleComment(commentId, viewerId);
   if (!parent) return res.status(404).json({ error: "Comment not found" });
   const groupCommentError = await checkGroupCommentPermission(parent.postId, viewerId);
   if (groupCommentError) return res.status(groupCommentError.includes("not found") ? 404 : 403).json({ error: groupCommentError });
@@ -988,13 +1007,30 @@ export const replyToComment = async (req: Request, res: Response) => {
     url: `/post/${parent.postId}#comment-${commentId}`,
     digestGroup: `reply:${commentId}`,
   });
-  return res.status(201).json(reply);
+  return res.status(201).json({
+    ...reply,
+    author: await getUserWithCounts(viewerId, viewerId),
+    isLiked: false,
+  });
 };
 
 export const getCommentReplies = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   const commentId = parseInt(req.params.id);
   if (isNaN(commentId)) return res.status(400).json({ error: "Invalid comment id" });
+  const parent = viewerId === null ? null : await getAccessibleComment(commentId, viewerId);
+  const publicParent = viewerId === null
+    ? await db.select({ id: commentsTable.id }).from(commentsTable)
+      .innerJoin(postsTable, eq(postsTable.id, commentsTable.postId))
+      .where(and(
+        eq(commentsTable.id, commentId),
+        eq(postsTable.isPublished, true),
+        eq(postsTable.isDeleted, false),
+        visiblePostExpiryCondition(),
+        postVisibilityCondition(null),
+      )).then(rows => rows[0] ?? null)
+    : parent;
+  if (!publicParent) return res.status(404).json({ error: "Comment not found" });
 
   const replies = await db
     .select()
@@ -1003,9 +1039,18 @@ export const getCommentReplies = async (req: Request, res: Response) => {
     .orderBy(desc(commentsTable.createdAt))
     .limit(50);
 
+  const likedCommentIds = viewerId !== null && replies.length > 0
+    ? new Set((await db.select({ commentId: commentLikesTable.commentId })
+      .from(commentLikesTable)
+      .where(and(
+        eq(commentLikesTable.userId, viewerId),
+        inArray(commentLikesTable.commentId, replies.map(reply => reply.id)),
+      ))).map(row => row.commentId))
+    : new Set<number>();
   const enriched = await Promise.all(replies.map(async reply => ({
     ...reply,
     author: await getUserWithCounts(reply.authorId, viewerId),
+    isLiked: likedCommentIds.has(reply.id),
   })));
   return res.json(enriched);
 };
@@ -1016,6 +1061,11 @@ export const likeComment = async (req: Request, res: Response) => {
 
   const commentId = parseInt(req.params.id);
   if (isNaN(commentId)) return res.status(400).json({ error: "Invalid comment id" });
+
+  const targetComment = await getAccessibleComment(commentId, viewerId);
+  if (!targetComment) return res.status(404).json({ error: "Comment not found" });
+  const groupCommentError = await checkGroupCommentPermission(targetComment.postId, viewerId);
+  if (groupCommentError) return res.status(groupCommentError.includes("not found") ? 404 : 403).json({ error: groupCommentError });
 
   const [existing] = await db
     .select()
@@ -1059,6 +1109,14 @@ export const getTopLevelComments = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   const postId = parseInt(req.params.id);
   if (isNaN(postId)) return res.status(400).json({ error: "Invalid post id" });
+  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(and(
+    eq(postsTable.id, postId),
+    eq(postsTable.isPublished, true),
+    eq(postsTable.isDeleted, false),
+    visiblePostExpiryCondition(),
+    postVisibilityCondition(viewerId),
+  ));
+  if (!post) return res.status(404).json({ error: "Post not found" });
 
   const comments = (await PostService.getComments(postId, viewerId))
     .filter(comment => !comment.parentCommentId)

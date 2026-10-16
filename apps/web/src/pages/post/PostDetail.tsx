@@ -115,6 +115,7 @@ type CommentWithReplies = {
   createdAt: string;
   depth?: number;
   likeCount?: number;
+  isLiked?: boolean;
   replyCount?: number;
   parentCommentId?: number | null;
   replies?: CommentWithReplies[];
@@ -142,15 +143,19 @@ function CommentNode({
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isReplying, setIsReplying] = useState(false);
-  const [liked, setLiked] = useState(false);
+  const [liked, setLiked] = useState(Boolean(comment.isLiked));
+  const [isLiking, setIsLiking] = useState(false);
   const [likeCount, setLikeCount] = useState(comment.likeCount ?? 0);
-  const [showReplies, setShowReplies] = useState(depth < 2 || targetAncestors.has(comment.id));
+  const [showReplies, setShowReplies] = useState(targetAncestors.has(comment.id));
   const [replies, setReplies] = useState<CommentWithReplies[]>(
     Array.isArray(comment.replies) ? comment.replies : []
   );
   const [loadingReplies, setLoadingReplies] = useState(false);
   const [repliesLoaded, setRepliesLoaded] = useState(Array.isArray(comment.replies));
   const targetLoadStarted = useRef(false);
+
+  useEffect(() => setLiked(Boolean(comment.isLiked)), [comment.isLiked]);
+  useEffect(() => setLikeCount(comment.likeCount ?? 0), [comment.likeCount]);
 
   const loadReplies = async () => {
     if (repliesLoaded) { setShowReplies(true); return; }
@@ -186,16 +191,29 @@ function CommentNode({
   }, [comment.id, targetCommentId]);
 
   const handleLike = async () => {
+    if (!user) {
+      toast({ title: 'Sign in to like comments', variant: 'destructive' });
+      return;
+    }
+    if (isLiking) return;
+    setIsLiking(true);
     try {
       const res = await fetch(`/api/comments/${comment.id}/like`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      const data = await res.json();
-      setLiked(data.liked ?? !liked);
-      setLikeCount(data.likeCount ?? (liked ? likeCount - 1 : likeCount + 1));
-    } catch {
-      toast({ title: 'Failed to like comment', variant: 'destructive' });
+      const data = await res.json() as { liked?: boolean; likeCount?: number; error?: string };
+      if (!res.ok) throw new Error(data.error || 'Could not update comment like');
+      setLiked(Boolean(data.liked));
+      setLikeCount(Number(data.likeCount ?? 0));
+    } catch (error) {
+      toast({
+        title: 'Failed to like comment',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLiking(false);
     }
   };
 
@@ -259,8 +277,11 @@ function CommentNode({
           <div className="flex items-center gap-3 mt-1.5 ml-1">
             <button
               onClick={handleLike}
+              disabled={isLiking}
+              aria-label={liked ? 'Unlike comment' : 'Like comment'}
+              aria-pressed={liked}
               className={clsx(
-                'flex items-center gap-1 text-xs font-medium transition-colors',
+                'flex items-center gap-1 text-xs font-medium transition-colors disabled:opacity-60',
                 liked ? 'text-rose-500' : 'text-muted-foreground hover:text-rose-500'
               )}
             >
@@ -419,6 +440,7 @@ export default function PostDetail() {
 
   const handleReplyPosted = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: [`/api/posts/${postId}`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/posts/${postId}/comments`] });
   }, [postId, queryClient]);
 
   if (isLoadingPost) {

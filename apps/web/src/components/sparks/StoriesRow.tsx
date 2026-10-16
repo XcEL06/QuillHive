@@ -66,7 +66,7 @@ export function StoriesRow({ onOpenViewer }: { onOpenViewer: (group: StoryGroup)
           <div
             className={`h-14 w-14 rounded-full p-[2px] ${
               group.hasUnviewed
-                ? "bg-gradient-to-tr from-orange-400 via-pink-500 to-primary"
+                ? "bg-gradient-to-tr from-violet-700 via-primary to-amber-400"
                 : "bg-muted"
             }`}
           >
