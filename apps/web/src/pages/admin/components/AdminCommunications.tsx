@@ -139,7 +139,7 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
         </p>
       </header>
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" role="group" aria-label="Communication type">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-2" role="group" aria-label="Communication type">
         {MODES.map(({ key, label }) => (
           <Button
             key={key}
@@ -151,7 +151,7 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
               setSelectedUser(null);
               setSearch("");
             }}
-            className="h-auto min-h-10 whitespace-normal py-2 text-xs"
+            className="h-auto min-h-10 w-full min-w-0 whitespace-normal break-words px-2 py-2 text-center text-xs leading-snug"
           >
             {label}
           </Button>
@@ -246,14 +246,14 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
             ["repostsEnabled", "Reposts"],
             ["sharingEnabled", "Sharing"],
           ] as const).map(([key, label]) => (
-            <label key={key} className="flex cursor-pointer items-center gap-2 text-sm">
+            <label key={key} className="flex min-w-0 cursor-pointer items-start gap-2 text-sm leading-snug">
               <input
                 type="checkbox"
                 checked={interactions[key]}
                 onChange={(event) => setInteractions(current => ({ ...current, [key]: event.target.checked }))}
-                className="h-4 w-4 accent-primary"
+                className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
               />
-              {label}
+              <span className="min-w-0 break-words">{label}</span>
             </label>
           ))}
         </fieldset>
@@ -261,14 +261,16 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
 
       {isMassCommunication ? (
         <Button
+          type="button"
           onClick={() => setConfirmBroadcast(true)}
           disabled={sending || !content.trim() || (isAnnouncement && !title.trim())}
           variant={isBroadcast ? "destructive" : "default"}
+          className="w-full sm:w-auto"
         >
           <Megaphone className="mr-2 h-4 w-4" />{isAnnouncement ? "Review announcement" : "Review broadcast"}
         </Button>
       ) : (
-        <Button onClick={() => void send(mode)} disabled={sending || !selectedUser || !content.trim()}>
+        <Button type="button" onClick={() => void send(mode)} disabled={sending || !selectedUser || !content.trim()} className="w-full sm:w-auto">
           <Send className="mr-2 h-4 w-4" />
           {sending ? "Sending..." : mode === "message" ? "Send platform message" : "Send notification"}
         </Button>
