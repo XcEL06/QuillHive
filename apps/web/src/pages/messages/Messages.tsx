@@ -72,6 +72,7 @@ interface MessageRequest {
   };
   createdAt: string;
   lastMessageAt: string;
+  contextCard?: { type: string; title: string; url: string } | null;
 }
 
 export default function Messages() {
@@ -373,10 +374,16 @@ export default function Messages() {
 
     void (async () => {
       try {
+        const contextType = params.get('contextType');
+        const contextId = Number(params.get('contextId'));
+        const context = ['post', 'series', 'chain', 'project'].includes(contextType || '')
+          && Number.isInteger(contextId) && contextId > 0
+          ? { type: contextType, id: contextId }
+          : undefined;
         const response = await apiFetch('/api/messages/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: requestedUserId }),
+          body: JSON.stringify({ userId: requestedUserId, ...(context ? { context } : {}) }),
         });
         const result = await response.json().catch(() => null);
         const conversationId = Number(result?.conversationId);
@@ -419,7 +426,7 @@ export default function Messages() {
     handleSelectConv(convId);
   };
 
-  const activeConv = conversationList.find((c) => (c as { id: number }).id === activeConvId) as { id: number; isGroup?: boolean; groupName?: string; participants: Array<{ id: number; displayName?: string; avatarUrl?: string | null; username?: string }> } | undefined;
+  const activeConv = conversationList.find((c) => (c as { id: number }).id === activeConvId) as { id: number; isGroup?: boolean; groupName?: string; contextCard?: { type: string; title: string; url: string } | null; participants: Array<{ id: number; displayName?: string; avatarUrl?: string | null; username?: string }> } | undefined;
   const otherUser = activeConv?.participants.find((p) => p.id !== currentUser?.id);
 
   return (
@@ -506,6 +513,7 @@ export default function Messages() {
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{request.requester.displayName}</p>
                     <p className="text-xs text-muted-foreground">Message request</p>
+                    {request.contextCard && <Link href={request.contextCard.url} className="text-xs text-primary hover:underline" onClick={(event) => event.stopPropagation()}>About: {request.contextCard.title}</Link>}
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <Button size="sm" className="h-8 px-3 text-xs" disabled={respondingRequestId === request.id} onClick={() => void respondToRequest(request.id, 'accept')}>Accept</Button>
@@ -610,6 +618,13 @@ export default function Messages() {
             })}
           </ScrollArea>
         </div>
+
+        {activeConv?.contextCard && (
+          <div className="border-b border-border/50 bg-primary/5 px-6 py-2 text-xs">
+            <span className="text-muted-foreground">Conversation context · </span>
+            <Link href={activeConv.contextCard.url} className="font-medium text-primary hover:underline">{activeConv.contextCard.title}</Link>
+          </div>
+        )}
 
         {/* Chat Area */}
         <div className={`${!activeConvId ? 'hidden md:flex' : 'flex'} flex-1 flex-col bg-background`}>

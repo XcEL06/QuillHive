@@ -341,6 +341,11 @@ export default function ChainView() {
                 <CheckCircle2 className="w-4 h-4" /> You've linked to this chain
               </div>
             )}
+            {user && !isOwner && chain.creatorId && (
+              <Link href={`/messages?userId=${chain.creatorId}&contextType=chain&contextId=${chain.id}`}>
+                <Button type="button" variant="outline" className="rounded-xl">Discuss this Chain</Button>
+              </Link>
+            )}
             {chain.isComplete && !chain.hasJoined && (
               <p className="text-sm text-muted-foreground">This chain is complete.</p>
             )}

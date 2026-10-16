@@ -8,13 +8,25 @@ import { and, eq } from "drizzle-orm";
 
 let io: SocketServer | null = null;
 
-async function isConversationParticipant(conversationId: number, userId: number): Promise<boolean> {
+async function canUseConversation(conversationId: number, userId: number): Promise<boolean> {
   const [participant] = await db
     .select({ id: conversationParticipantsTable.id })
     .from(conversationParticipantsTable)
     .where(and(eq(conversationParticipantsTable.conversationId, conversationId), eq(conversationParticipantsTable.userId, userId)))
     .limit(1);
-  return Boolean(participant);
+  if (!participant) return false;
+  const [conversation] = await db.select({ requestStatus: conversationsTable.requestStatus, isGroup: conversationsTable.isGroup })
+    .from(conversationsTable).where(eq(conversationsTable.id, conversationId)).limit(1);
+  if (conversation?.requestStatus !== "accepted") return false;
+  if (conversation.isGroup) return true;
+  const participants = await db.select({ userId: conversationParticipantsTable.userId })
+    .from(conversationParticipantsTable)
+    .where(eq(conversationParticipantsTable.conversationId, conversationId));
+  const { isBlockedBetween } = await import("../features/safety/blocks.service");
+  for (const participant of participants.filter((entry) => entry.userId !== userId)) {
+    if (await isBlockedBetween(userId, participant.userId)) return false;
+  }
+  return true;
 }
 
 async function canJoinSupportTicket(ticketId: number, userId: number): Promise<boolean> {
@@ -117,7 +129,7 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
     });
 
     socket.on("join:conversation", async (conversationId: number) => {
-      if (!Number.isInteger(conversationId) || !(await isConversationParticipant(conversationId, socket.data.userId))) return;
+      if (!Number.isInteger(conversationId) || !(await canUseConversation(conversationId, socket.data.userId))) return;
       socket.join(`conversation:${conversationId}`);
     });
 
@@ -141,19 +153,24 @@ export function setupSocket(httpServer: HttpServer): SocketServer {
       await publishGroupPresence(groupId);
     });
 
-    socket.on("message:send", async (data: { conversationId: number; message: any }) => {
-      if (!Number.isInteger(data?.conversationId) || !(await isConversationParticipant(data.conversationId, socket.data.userId))) return;
-      io?.to(`conversation:${data.conversationId}`).emit("message:receive", data.message);
+    socket.on("message:send", async (data: { conversationId: number; content: string }) => {
+      if (!Number.isInteger(data?.conversationId) || typeof data.content !== "string" || !data.content.trim() || data.content.length > 5_000) return;
+      try {
+        const { sendMessage } = await import("../features/messaging/messaging.service");
+        await sendMessage(socket.data.userId, { conversationId: data.conversationId, content: data.content });
+      } catch (error) {
+        logger.warn({ err: error, userId: socket.data.userId, conversationId: data.conversationId }, "Socket message rejected");
+      }
     });
 
     socket.on("typing:start", async (data: { conversationId: number; userId: number }) => {
-      if (!Number.isInteger(data?.conversationId) || !(await isConversationParticipant(data.conversationId, socket.data.userId))) return;
-      socket.to(`conversation:${data.conversationId}`).emit("typing:start", data);
+      if (!Number.isInteger(data?.conversationId) || !(await canUseConversation(data.conversationId, socket.data.userId))) return;
+      socket.to(`conversation:${data.conversationId}`).emit("typing:start", { conversationId: data.conversationId, userId: socket.data.userId });
     });
 
     socket.on("typing:stop", async (data: { conversationId: number; userId: number }) => {
-      if (!Number.isInteger(data?.conversationId) || !(await isConversationParticipant(data.conversationId, socket.data.userId))) return;
-      socket.to(`conversation:${data.conversationId}`).emit("typing:stop", data);
+      if (!Number.isInteger(data?.conversationId) || !(await canUseConversation(data.conversationId, socket.data.userId))) return;
+      socket.to(`conversation:${data.conversationId}`).emit("typing:stop", { conversationId: data.conversationId, userId: socket.data.userId });
     });
 
     socket.on("join:support", async (ticketId: number) => {

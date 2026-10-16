@@ -214,7 +214,7 @@ export default function Write() {
         };
         const data = errorObj?.response?.data ?? errorObj?.data;
         const status = errorObj?.response?.status ?? errorObj?.status;
-        if (status === 409 || data?.error === 'DUPLICATE_CONTENT') {
+        if (data?.error === 'DUPLICATE_CONTENT') {
           toast({
             title: t('write.duplicateContent'),
             description: data?.message || t('write.duplicateContentDesc'),

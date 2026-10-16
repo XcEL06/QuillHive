@@ -246,6 +246,13 @@
       "when": 1792224000000,
       "tag": "0038_verified_portfolios_opportunity_rooms",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1792310400000,
+      "tag": "0039_messaging_trust_appeals",
+      "breakpoints": true
     }
   ]
 }

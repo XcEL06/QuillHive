@@ -34,7 +34,30 @@ trustRouter.get("/me", async (req, res) => {
   if (!score) {
     score = await updateUserTrustScore(userId);
   }
-  return res.json(score);
+  return res.json({ ...score, indicators: TRUST_INDICATOR_DEFINITIONS });
+});
+
+const TRUST_INDICATOR_DEFINITIONS = [
+  { key: "cvs", label: "Content value", source: "Published posts; saves, likes, comments and longer comments", criteria: "Weighted rates of saves, substantive discussion, comments and a fixed retention proxy." },
+  { key: "bcs", label: "Consistency", source: "Recent and historical post titles/content", criteria: "Starts at 100 and subtracts a high recent posting-frequency penalty and repeated-text penalty; it is not an originality verdict." },
+  { key: "cts", label: "Community trust", source: "Appreciations, reactions and post types", criteria: "Combines appreciations among reactions and diversity of authored post types; peer signal is currently zero-weighted." },
+  { key: "avgCis", label: "Content impact", source: "Up to 20 published posts; likes, comments and shares", criteria: "Average engagement depth, longevity, spread and discussion score." },
+  { key: "uti", label: "Trust score", source: "CVS 35%, BCS 25%, CTS 20%, average CIS 20%", criteria: "A composite activity signal from 0–100; not proof of trustworthiness or a moderation finding." },
+];
+
+trustRouter.get("/definitions", (_req, res) => res.json(TRUST_INDICATOR_DEFINITIONS));
+
+trustRouter.post("/me/dispute", async (req, res) => {
+  const userId = getViewerId(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  if (reason.length < 10 || reason.length > 2000) return res.status(400).json({ error: "Provide a correction request between 10 and 2000 characters." });
+  const [updated] = await db.update(userTrustScoresTable)
+    .set({ isDisputed: true, disputeReason: reason, disputedAt: new Date() })
+    .where(eq(userTrustScoresTable.userId, userId))
+    .returning({ userId: userTrustScoresTable.userId, isDisputed: userTrustScoresTable.isDisputed, disputedAt: userTrustScoresTable.disputedAt });
+  if (!updated) return res.status(404).json({ error: "Trust record not found" });
+  return res.json(updated);
 });
 
 trustRouter.get("/timeline", async (req, res) => {
@@ -81,7 +104,6 @@ adminTrustRouter.get("/users", requirePermission("view_users"), async (req, res)
       cts: userTrustScoresTable.cts,
       avgCis: userTrustScoresTable.avgCis,
       uti: userTrustScoresTable.uti,
-      isDisputed: userTrustScoresTable.isDisputed,
       visibilityMultiplier: userTrustScoresTable.visibilityMultiplier,
       tier: userTrustScoresTable.tier,
       creatorLevel: userTrustScoresTable.creatorLevel,
@@ -89,6 +111,9 @@ adminTrustRouter.get("/users", requirePermission("view_users"), async (req, res)
       updatedAt: userTrustScoresTable.updatedAt,
       role: usersTable.role,
       isOfficialAccount: usersTable.isOfficialAccount,
+      isDisputed: userTrustScoresTable.isDisputed,
+      disputeReason: userTrustScoresTable.disputeReason,
+      disputeReviewNote: userTrustScoresTable.disputeReviewNote,
     })
     .from(userTrustScoresTable)
     .leftJoin(usersTable, eq(usersTable.id, userTrustScoresTable.userId))
@@ -107,11 +132,35 @@ adminTrustRouter.patch("/users/:userId/dispute", requirePermission("manage_moder
   const userId = Number(req.params.userId);
   if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: "Invalid user id" });
   if (typeof req.body?.isDisputed !== "boolean") return res.status(400).json({ error: "isDisputed must be a boolean" });
+  const disputeReason = typeof req.body.disputeReason === "string" ? req.body.disputeReason.trim().slice(0, 2000) : null;
   const [updated] = await db.update(userTrustScoresTable)
-    .set({ isDisputed: req.body.isDisputed })
+    .set({
+      isDisputed: req.body.isDisputed,
+      disputeReason: req.body.isDisputed ? disputeReason : null,
+      disputeReviewNote: req.body.isDisputed ? null : disputeReason,
+      disputedAt: req.body.isDisputed ? new Date() : null,
+    })
     .where(eq(userTrustScoresTable.userId, userId))
     .returning({ userId: userTrustScoresTable.userId, isDisputed: userTrustScoresTable.isDisputed });
   return updated ? res.json(updated) : res.status(404).json({ error: "Trust score not found" });
+});
+
+adminTrustRouter.patch("/strikes/:strikeId/appeal", requirePermission("manage_moderation"), async (req, res) => {
+  const strikeId = Number(req.params.strikeId);
+  if (!Number.isInteger(strikeId) || strikeId <= 0) return res.status(400).json({ error: "Invalid strike id" });
+  const status = req.body?.status;
+  const note = typeof req.body?.note === "string" ? req.body.note.trim() : "";
+  if (!["upheld", "overturned"].includes(status) || note.length < 5 || note.length > 2000) {
+    return res.status(400).json({ error: "A decision and review note between 5 and 2000 characters are required." });
+  }
+  const [updated] = await db.update(moderationStrikesTable).set({
+    appealStatus: status,
+    appealReviewedBy: getViewerId(req),
+    appealReviewedAt: new Date(),
+    appealReviewNote: note,
+  }).where(and(eq(moderationStrikesTable.id, strikeId), eq(moderationStrikesTable.appealStatus, "pending")))
+    .returning({ id: moderationStrikesTable.id, appealStatus: moderationStrikesTable.appealStatus, appealReviewNote: moderationStrikesTable.appealReviewNote });
+  return updated ? res.json(updated) : res.status(404).json({ error: "Pending appeal not found" });
 });
 
 adminTrustRouter.get("/accounts", requirePermission("view_users"), async (req, res) => {
@@ -127,6 +176,9 @@ adminTrustRouter.get("/accounts", requirePermission("view_users"), async (req, r
       displayName: usersTable.displayName,
       role: usersTable.role,
       isOfficialAccount: usersTable.isOfficialAccount,
+      isDisputed: userTrustScoresTable.isDisputed,
+      disputeReason: userTrustScoresTable.disputeReason,
+      disputeReviewNote: userTrustScoresTable.disputeReviewNote,
       cvs: userTrustScoresTable.cvs,
       bcs: userTrustScoresTable.bcs,
       cts: userTrustScoresTable.cts,
@@ -183,6 +235,9 @@ adminTrustRouter.get("/moderation", requirePermission("view_reports"), async (_r
       userId: moderationStrikesTable.userId,
       reason: moderationStrikesTable.reason,
       severity: moderationStrikesTable.severity,
+      appealText: moderationStrikesTable.appealText,
+      appealStatus: moderationStrikesTable.appealStatus,
+      appealedAt: moderationStrikesTable.appealedAt,
       expiresAt: moderationStrikesTable.expiresAt,
       createdAt: moderationStrikesTable.createdAt,
     }).from(moderationStrikesTable).orderBy(desc(moderationStrikesTable.createdAt)).limit(50),

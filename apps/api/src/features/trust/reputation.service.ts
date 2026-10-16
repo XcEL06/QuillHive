@@ -27,10 +27,17 @@ export async function addReputationEvent(
   userId: number,
   type: ReputationEventType,
   reason: string,
-  customScore?: number
+  customScore?: number,
+  eventKey?: string,
 ): Promise<void> {
   const scoreChange = customScore ?? SCORE_MAP[type] ?? 0;
-  await db.insert(reputationEventsTable).values({ userId, type, scoreChange, reason });
+  await db.insert(reputationEventsTable).values({
+    userId,
+    type,
+    scoreChange,
+    reason,
+    ...(eventKey ? { eventKey } : {}),
+  }).onConflictDoNothing();
 }
 
 export async function getUserReputationTimeline(userId: number) {

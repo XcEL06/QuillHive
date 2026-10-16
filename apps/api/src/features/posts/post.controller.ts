@@ -474,9 +474,9 @@ export const createComment = async (req: Request, res: Response) => {
   const comment = await PostService.createComment(id, viewerId, content);
   const [post] = await db.select({ authorId: postsTable.authorId }).from(postsTable).where(eq(postsTable.id, id));
   refreshTrustForUsers(viewerId, post?.authorId);
-  void addReputationEvent(viewerId, "comment_added", "You added a comment");
+  void addReputationEvent(viewerId, "comment_added", "You added a comment", undefined, `comment:${comment.id}:author`);
   if (post?.authorId && post.authorId !== viewerId) {
-    void addReputationEvent(post.authorId, "comment_added", "Someone commented on your post");
+    void addReputationEvent(post.authorId, "comment_added", "Someone commented on your post", undefined, `comment:${comment.id}:recipient`);
   }
   return res.status(201).json(comment);
 };
@@ -491,7 +491,7 @@ export const likePost = async (req: Request, res: Response) => {
   void deleteCachePattern(`feed:${viewerId}:*`);
   void deleteCachePattern(`trending:*`); memDeletePattern("trending:");
   if (result.liked && post?.authorId && post.authorId !== viewerId) {
-    void addReputationEvent(post.authorId, "post_like", "Someone liked your post");
+    void addReputationEvent(post.authorId, "post_like", "Someone liked your post", undefined, `like:${viewerId}:${id}`);
     // Weighted curation karma: trusted/established curators signal higher-quality content
     db.select({ tier: userTrustScoresTable.tier, creatorLevel: userTrustScoresTable.creatorLevel })
       .from(userTrustScoresTable)
@@ -503,7 +503,7 @@ export const likePost = async (req: Request, res: Response) => {
           curatorScore.tier === "trusted" ||
           ["established", "featured", "luminary"].includes(curatorScore.creatorLevel ?? "");
         if (isHighSignal) {
-          void addReputationEvent(post.authorId!, "post_saved" as any, "Your post was curated by a verified expert");
+          void addReputationEvent(post.authorId!, "post_saved", "Your post was curated by a verified expert", undefined, `curation:${viewerId}:${id}`);
         }
       })
       .catch(() => {});

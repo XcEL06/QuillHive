@@ -7,7 +7,13 @@ import { validateBody, validateParams } from "../../middleware/validate";
 
 const conversationParamsSchema = z.object({ conversationId: z.coerce.number().int().positive() });
 const messageRequestActionSchema = z.object({ action: z.enum(["accept", "decline"]) });
-const startConversationSchema = z.object({ userId: z.coerce.number().int().positive() });
+const startConversationSchema = z.object({
+  userId: z.coerce.number().int().positive(),
+  context: z.object({
+    type: z.enum(["post", "series", "chain", "project"]),
+    id: z.coerce.number().int().positive(),
+  }).optional(),
+});
 const sendMessageSchema = z.object({
   recipientId: z.coerce.number().int().positive().optional(),
   conversationId: z.coerce.number().int().positive().optional(),

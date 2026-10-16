@@ -6,11 +6,80 @@ import {
   usersTable,
   followsTable,
   paymentProposalsTable,
+  postsTable,
+  seriesTable,
+  chainsTable,
+  chainEntriesTable,
+  portfolioItemsTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, ne, isNull, inArray } from "drizzle-orm";
 import { getUserWithCounts } from "../profiles/profile.service";
 import { emitToConversation, emitToUser } from "../../lib/socket";
 import { getOfficialSystemAccountId } from "../../lib/officialSystemAccount";
+import { isBlockedBetween } from "../safety/blocks.service";
+import { postVisibilityCondition } from "../posts/postVisibility";
+import { getPortfolioItems } from "../gallery/gallery.service";
+import { canViewProfile } from "../profiles/profileAccess.service";
+
+type ConversationContext = { type: "post" | "series" | "chain" | "project"; id: number };
+
+export function shouldRequireMessageRequest(allowMessagesFromAnyone: boolean, recipientFollowsSender: boolean) {
+  return !allowMessagesFromAnyone && !recipientFollowsSender;
+}
+
+async function hasBlockedConversationParticipant(viewerId: number, conversationId: number, isGroup: boolean) {
+  if (isGroup) return false;
+  const participants = await db.select({ userId: conversationParticipantsTable.userId })
+    .from(conversationParticipantsTable)
+    .where(eq(conversationParticipantsTable.conversationId, conversationId));
+  const other = participants.find((participant) => participant.userId !== viewerId);
+  return other ? isBlockedBetween(viewerId, other.userId) : false;
+}
+
+async function getVisibleContext(context: ConversationContext | null, viewerId: number, otherUserId: number) {
+  if (!context || await isBlockedBetween(viewerId, otherUserId)) return null;
+  if (context.type === "post") {
+    const [post] = await db.select({ id: postsTable.id, title: postsTable.title })
+      .from(postsTable)
+      .where(and(eq(postsTable.id, context.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false),
+        postVisibilityCondition(viewerId), postVisibilityCondition(otherUserId)));
+    return post ? { type: "post", id: post.id, title: post.title || "Post", url: `/post/${post.id}` } : null;
+  }
+  if (context.type === "project") {
+    const [project] = await db.select({
+      id: portfolioItemsTable.id,
+      userId: portfolioItemsTable.userId,
+      title: portfolioItemsTable.title,
+    }).from(portfolioItemsTable).where(eq(portfolioItemsTable.id, context.id));
+    if (!project) return null;
+    const [viewerItem, participantItem, [owner]] = await Promise.all([
+      getPortfolioItems(project.userId, viewerId),
+      getPortfolioItems(project.userId, otherUserId),
+      db.select().from(usersTable).where(eq(usersTable.id, project.userId)).limit(1),
+    ]);
+    if (!owner || !(await canViewProfile(owner, viewerId)) || !(await canViewProfile(owner, otherUserId))) return null;
+    if (!viewerItem.some(item => item.id === project.id) || !participantItem.some(item => item.id === project.id)) return null;
+    return { type: "project", id: project.id, title: project.title, url: `/portfolio/${encodeURIComponent(owner.username)}` };
+  }
+  if (context.type === "series") {
+    const [series] = await db.select({ id: seriesTable.id, title: seriesTable.title })
+      .from(seriesTable).where(eq(seriesTable.id, context.id));
+    if (!series) return null;
+    const [visiblePost] = await db.select({ id: postsTable.id }).from(postsTable)
+      .where(and(eq(postsTable.seriesId, series.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false),
+        postVisibilityCondition(viewerId), postVisibilityCondition(otherUserId))).limit(1);
+    return visiblePost ? { type: "series", id: series.id, title: series.title, url: `/series/${series.id}` } : null;
+  }
+  const [chain] = await db.select({ id: chainsTable.id, title: chainsTable.title, creatorId: chainsTable.creatorId, isPublic: chainsTable.isPublic })
+    .from(chainsTable).where(eq(chainsTable.id, context.id));
+  if (!chain || !chain.isPublic) return null;
+  const [visibleEntry] = await db.select({ id: chainEntriesTable.id })
+    .from(chainEntriesTable)
+    .innerJoin(postsTable, eq(chainEntriesTable.postId, postsTable.id))
+    .where(and(eq(chainEntriesTable.chainId, chain.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false),
+      postVisibilityCondition(viewerId), postVisibilityCondition(otherUserId))).limit(1);
+  return visibleEntry ? { type: "chain", id: chain.id, title: chain.title, url: `/chains/${chain.id}` } : null;
+}
 
 export async function getConversations(viewerId: number) {
   const participations = await db
@@ -31,6 +100,7 @@ export async function getConversations(viewerId: number) {
         .select()
         .from(conversationParticipantsTable)
         .where(eq(conversationParticipantsTable.conversationId, conv.id));
+      if (participants.length === 2 && await hasBlockedConversationParticipant(viewerId, conv.id, conv.isGroup)) return null;
 
       const participantUsers = await Promise.all(
         participants.filter(p2 => p2.userId !== viewerId).map(p2 => getUserWithCounts(p2.userId, viewerId))
@@ -54,6 +124,13 @@ export async function getConversations(viewerId: number) {
         participants: participantUsers.filter(Boolean),
         lastMessage: enrichedLastMessage,
         unreadCount: p.unreadCount,
+        contextCard: participants.length === 2
+          ? await getVisibleContext(
+            conv.contextType && conv.contextId ? { type: conv.contextType as ConversationContext["type"], id: conv.contextId } : null,
+            viewerId,
+            participants.find(p2 => p2.userId !== viewerId)!.userId,
+          )
+          : null,
       };
     })
   );
@@ -79,6 +156,7 @@ export async function getMessageRequests(viewerId: number) {
       .where(eq(conversationParticipantsTable.conversationId, conv.id));
     const requesterId = participants.find(participant => participant.userId !== viewerId)?.userId;
     if (!requesterId) return null;
+    if (await isBlockedBetween(viewerId, requesterId)) return null;
     const requester = await getUserWithCounts(requesterId, viewerId);
     const [lastMessage] = await db
       .select({ createdAt: messagesTable.createdAt })
@@ -86,11 +164,19 @@ export async function getMessageRequests(viewerId: number) {
       .where(eq(messagesTable.conversationId, conv.id))
       .orderBy(desc(messagesTable.createdAt))
       .limit(1);
+    const otherUserId = participants.find(participant => participant.userId !== viewerId)?.userId;
     return {
       id: conv.id,
       requester,
       createdAt: conv.createdAt,
       lastMessageAt: lastMessage?.createdAt ?? conv.createdAt,
+      contextCard: otherUserId
+        ? await getVisibleContext(
+          conv.contextType && conv.contextId ? { type: conv.contextType as ConversationContext["type"], id: conv.contextId } : null,
+          viewerId,
+          otherUserId,
+        )
+        : null,
     };
   }));
   return requests
@@ -103,7 +189,7 @@ async function getRequestRecipientId(senderId: number, recipientId: number) {
     .select({ allowMessagesFromAnyone: usersTable.allowMessagesFromAnyone })
     .from(usersTable)
     .where(eq(usersTable.id, recipientId));
-  if (!recipient || recipient.allowMessagesFromAnyone) return null;
+  if (!recipient) return null;
 
   const [followsSender] = await db
     .select({ id: followsTable.followerId })
@@ -112,10 +198,18 @@ async function getRequestRecipientId(senderId: number, recipientId: number) {
       eq(followsTable.followerId, recipientId),
       eq(followsTable.followingId, senderId),
     ));
-  return followsSender ? null : recipientId;
+  return shouldRequireMessageRequest(recipient.allowMessagesFromAnyone, Boolean(followsSender)) ? recipientId : null;
 }
 
-export async function startConversation(viewerId: number, targetUserId: number) {
+export async function startConversation(viewerId: number, targetUserId: number, context?: ConversationContext) {
+  if (viewerId === targetUserId) throw new Error("Forbidden");
+  const [target] = await db.select({ id: usersTable.id, isDeleted: usersTable.isDeleted })
+    .from(usersTable).where(eq(usersTable.id, targetUserId));
+  if (!target || target.isDeleted) throw new Error("Not found");
+  if (await isBlockedBetween(viewerId, targetUserId)) throw new Error("Forbidden");
+  const contextCard = context ? await getVisibleContext(context, viewerId, targetUserId) : null;
+  if (context && !contextCard) throw new Error("Not found");
+  const requestRecipientId = await getRequestRecipientId(viewerId, targetUserId);
   const myParticipations = await db
     .select()
     .from(conversationParticipantsTable)
@@ -135,6 +229,13 @@ export async function startConversation(viewerId: number, targetUserId: number) 
 
     const ids = participants.map(p2 => p2.userId);
     if (ids.includes(viewerId) && ids.includes(targetUserId) && participants.length === 2) {
+      if (context && !conv.contextId) {
+        await db.update(conversationsTable).set({
+          contextType: context.type,
+          contextId: context.id,
+          updatedAt: new Date(),
+        }).where(eq(conversationsTable.id, conv.id));
+      }
       return {
         conversationId: conv.id,
         existing: true,
@@ -144,7 +245,13 @@ export async function startConversation(viewerId: number, targetUserId: number) 
     }
   }
 
-  const [newConv] = await db.insert(conversationsTable).values({ isGroup: false }).returning();
+  const [newConv] = await db.insert(conversationsTable).values({
+    isGroup: false,
+    requestStatus: requestRecipientId ? "pending_request" : "accepted",
+    requestRecipientId,
+    contextType: contextCard?.type ?? null,
+    contextId: contextCard?.id ?? null,
+  }).returning();
   await db.insert(conversationParticipantsTable).values([
     { conversationId: newConv.id, userId: viewerId, unreadCount: 0 },
     { conversationId: newConv.id, userId: targetUserId, unreadCount: 0 },
@@ -178,6 +285,7 @@ export async function getConversationMessages(convId: number, viewerId: number) 
     conversation?.requestRecipientId === viewerId
     && conversation.requestStatus !== "accepted"
   ) throw new Error("RequestPending");
+  if (conversation && await hasBlockedConversationParticipant(viewerId, convId, conversation.isGroup)) throw new Error("Forbidden");
 
   const messages = await db
     .select()
@@ -247,6 +355,7 @@ export async function markConversationSeen(convId: number, viewerId: number) {
     conversation?.requestRecipientId === viewerId
     && conversation.requestStatus !== "accepted"
   ) throw new Error("RequestPending");
+  if (conversation && await hasBlockedConversationParticipant(viewerId, convId, conversation.isGroup)) throw new Error("Forbidden");
 
   const now = new Date();
 
@@ -318,6 +427,11 @@ export async function sendMessage(
       .from(conversationsTable)
       .where(eq(conversationsTable.id, convId));
     if (!conversation) throw new Error("Forbidden");
+    if (!conversation.isGroup) {
+      for (const participant of participants.filter((entry) => entry.userId !== viewerId)) {
+        if (await isBlockedBetween(viewerId, participant.userId)) throw new Error("Forbidden");
+      }
+    }
 
     const [existingMessage] = await db
       .select({ id: messagesTable.id })
@@ -443,10 +557,15 @@ async function requireConversationParticipant(conversationId: number, userId: nu
   const [conversation] = await db.select().from(conversationsTable)
     .where(eq(conversationsTable.id, conversationId));
   if (conversation?.requestStatus !== "accepted") throw new Error("RequestPending");
+  if (conversation && await hasBlockedConversationParticipant(userId, conversationId, conversation.isGroup)) throw new Error("Forbidden");
   return participants;
 }
 
 export async function respondToMessageRequest(conversationId: number, recipientId: number, action: "accept" | "decline") {
+  const participants = await db.select({ userId: conversationParticipantsTable.userId })
+    .from(conversationParticipantsTable).where(eq(conversationParticipantsTable.conversationId, conversationId));
+  const requesterId = participants.find((participant) => participant.userId !== recipientId)?.userId;
+  if (!requesterId || await isBlockedBetween(recipientId, requesterId)) throw new Error("Forbidden");
   const nextStatus = action === "accept" ? "accepted" : "declined";
   const [updated] = await db
     .update(conversationsTable)
@@ -459,10 +578,6 @@ export async function respondToMessageRequest(conversationId: number, recipientI
     .returning({ id: conversationsTable.id, requestStatus: conversationsTable.requestStatus });
   if (!updated) throw new Error("Not found");
 
-  const participants = await db
-    .select({ userId: conversationParticipantsTable.userId })
-    .from(conversationParticipantsTable)
-    .where(eq(conversationParticipantsTable.conversationId, conversationId));
   if (action === "accept") {
     for (const participant of participants) {
       emitToUser(participant.userId, "message:request-updated", { conversationId, requestStatus: nextStatus });

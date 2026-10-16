@@ -8,7 +8,7 @@ type Similar = {
   similarity: number;
   post: { id: number; title: string | null; slug: string | null; authorUsername: string | null; authorDisplayName: string | null } | null;
 };
-type Result = { status: "original" | "near_duplicate" | "duplicate" | "insufficient_text"; score: number; similar: Similar[] };
+type Result = { status: "original" | "near_duplicate" | "duplicate" | "insufficient_text"; score: number; topSimilarity?: number; interpretation?: string; method?: string; similar: Similar[] };
 
 export function OriginalityPanel({ postId }: { postId: number }) {
   const [data, setData] = useState<Result | null>(null);
@@ -40,10 +40,10 @@ export function OriginalityPanel({ postId }: { postId: number }) {
   const isDup = data.status === "duplicate";
   const Icon = isOriginal ? ShieldCheck : AlertTriangle;
   const label = isOriginal
-    ? "Looks original"
+    ? "No close indexed match"
     : isDup
-      ? "Possible duplicate detected"
-      : "Near-duplicate detected";
+      ? "Potential substantial text overlap"
+      : "Potential text overlap";
   const tone = isOriginal
     ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
     : isDup
@@ -55,11 +55,12 @@ export function OriginalityPanel({ postId }: { postId: number }) {
       <div className="flex items-center gap-2 font-medium text-sm">
         <Icon className="w-4 h-4" />
         <span>{label}</span>
-        <span className="ml-2 text-[11px] opacity-80">Originality score {(data.score * 100).toFixed(0)}%</span>
+        <span className="ml-2 text-[11px] opacity-80">Top text overlap {((data.topSimilarity ?? 1 - data.score) * 100).toFixed(0)}%</span>
       </div>
+      <p className="mt-2 text-xs opacity-80">{data.interpretation || "Automated text similarity is a review signal, not proof of plagiarism or originality."} {data.method ? `Method: ${data.method}.` : ""}</p>
       {!isOriginal && data.similar.length > 0 && (
         <div className="mt-3 space-y-1.5 border-t border-current/10 pt-3 text-xs">
-          <p className="opacity-80">Closest matches (visible only to you, the author):</p>
+          <p className="opacity-80">Potentially similar indexed posts (visible only to you, the author):</p>
           {data.similar.slice(0, 5).map((s) => (
             <div key={s.postId} className="flex items-center justify-between gap-3">
               <Link href={`/post/${s.postId}`} className="underline truncate">

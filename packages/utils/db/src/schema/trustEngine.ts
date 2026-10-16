@@ -11,6 +11,9 @@ export const userTrustScoresTable = pgTable("user_trust_scores", {
   avgCis: real("avg_cis").notNull().default(0),
   uti: real("uti").notNull().default(0),
   isDisputed: boolean("is_disputed").notNull().default(false),
+  disputeReason: text("dispute_reason"),
+  disputeReviewNote: text("dispute_review_note"),
+  disputedAt: timestamp("disputed_at"),
   visibilityMultiplier: real("visibility_multiplier").notNull().default(0.3),
   // Deprecated compatibility field. Use creatorLevel for display and logic.
   tier: text("tier").notNull().default("restricted"),
@@ -46,6 +49,7 @@ export const reputationEventsTable = pgTable("reputation_events", {
   type: text("type").notNull(),
   scoreChange: real("score_change").notNull().default(0),
   reason: text("reason").notNull(),
+  eventKey: text("event_key"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

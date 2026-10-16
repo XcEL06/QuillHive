@@ -1,10 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { seriesTable, postsTable } from "@workspace/db/schema";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { seriesTable, postsTable, seriesFollowsTable, usersTable, readingProgressTable } from "@workspace/db/schema";
+import { eq, and, desc, asc, count, gte, lt } from "drizzle-orm";
 import { requireAuth } from "../../middleware/admin";
 import { validateBody, validateParams, validateQuery } from "../../middleware/validate";
+import { getViewerId } from "../../lib/auth-types";
+import { postVisibilityCondition } from "../posts/postVisibility";
+import { canViewProfile } from "../profiles/profileAccess.service";
 
 export const seriesRouter = Router();
 
@@ -29,23 +32,77 @@ seriesRouter.get("/", requireAuth, async (req: any, res) => {
 });
 
 seriesRouter.get("/user/:username", async (req, res) => {
-  const { db: _db } = await import("@workspace/db");
-  const { usersTable } = await import("@workspace/db/schema");
-  const [user] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.username, req.params.username));
+  const viewerId = getViewerId(req);
+  const [user] = await db.select().from(usersTable).where(and(eq(usersTable.username, req.params.username), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
-  const rows = await db.select().from(seriesTable).where(eq(seriesTable.userId, user.id)).orderBy(desc(seriesTable.createdAt));
-  return res.json(rows);
+  if (!(await canViewProfile(user, viewerId))) return res.status(404).json({ error: "User not found" });
+  const allRows = await db.select().from(seriesTable).where(eq(seriesTable.userId, user.id)).orderBy(desc(seriesTable.createdAt));
+  const rows = await Promise.all(allRows.map(async (series) => {
+    const [visible] = await db.select({ id: postsTable.id }).from(postsTable)
+      .where(and(eq(postsTable.seriesId, series.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId)))
+      .limit(1);
+    return visible || viewerId === user.id ? series : null;
+  }));
+  return res.json(rows.filter(Boolean));
 });
 
 seriesRouter.get("/:id", validateParams(idParams), async (req, res) => {
+  const viewerId = getViewerId(req);
   const [series] = await db.select().from(seriesTable).where(eq(seriesTable.id, Number(req.params.id)));
   if (!series) return res.status(404).json({ error: "Series not found" });
   const posts = await db
-    .select()
+    .select({ id: postsTable.id, title: postsTable.title, excerpt: postsTable.excerpt, seriesOrder: postsTable.seriesOrder })
     .from(postsTable)
-    .where(and(eq(postsTable.seriesId, series.id), eq(postsTable.isDeleted, false), eq(postsTable.isPublished, true)))
-    .orderBy(asc(postsTable.seriesOrder));
-  return res.json({ ...series, posts });
+    .where(and(eq(postsTable.seriesId, series.id), eq(postsTable.isDeleted, false), eq(postsTable.isPublished, true), postVisibilityCondition(viewerId)))
+    .orderBy(asc(postsTable.seriesOrder), asc(postsTable.id));
+  if (!posts.length && viewerId !== series.userId) return res.status(404).json({ error: "Series not found" });
+  const [follow] = viewerId
+    ? await db.select({ id: seriesFollowsTable.id }).from(seriesFollowsTable)
+      .where(and(eq(seriesFollowsTable.seriesId, series.id), eq(seriesFollowsTable.followerId, viewerId))).limit(1)
+    : [];
+  const [followers] = await db.select({ total: count() }).from(seriesFollowsTable).where(eq(seriesFollowsTable.seriesId, series.id));
+  const [resumePost] = viewerId && posts.length
+    ? await db.select({
+      id: postsTable.id,
+      title: postsTable.title,
+      percent: readingProgressTable.percent,
+    }).from(readingProgressTable)
+      .innerJoin(postsTable, eq(readingProgressTable.postId, postsTable.id))
+      .where(and(
+        eq(readingProgressTable.userId, viewerId),
+        eq(postsTable.seriesId, series.id),
+        gte(readingProgressTable.percent, 1),
+        lt(readingProgressTable.percent, 95),
+        eq(postsTable.isPublished, true),
+        eq(postsTable.isDeleted, false),
+        postVisibilityCondition(viewerId),
+      ))
+      .orderBy(desc(readingProgressTable.lastReadAt))
+      .limit(1)
+    : [];
+  return res.json({ ...series, posts, resumePost: resumePost ?? null, isFollowing: Boolean(follow), followerCount: followers?.total ?? 0 });
+});
+
+seriesRouter.post("/:id/follow", requireAuth, validateParams(idParams), async (req: any, res) => {
+  const seriesId = Number(req.params.id);
+  const viewerId = req.currentUser.id;
+  const [series] = await db.select({ id: seriesTable.id, userId: seriesTable.userId }).from(seriesTable).where(eq(seriesTable.id, seriesId));
+  if (!series) return res.status(404).json({ error: "Series not found" });
+  if (series.userId === viewerId) return res.status(400).json({ error: "You already own this series." });
+  const [visiblePost] = await db.select({ id: postsTable.id }).from(postsTable)
+    .where(and(eq(postsTable.seriesId, seriesId), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId)))
+    .limit(1);
+  if (!visiblePost) return res.status(404).json({ error: "Series not found" });
+  await db.insert(seriesFollowsTable).values({ seriesId, followerId: viewerId }).onConflictDoNothing();
+  return res.json({ following: true });
+});
+
+seriesRouter.delete("/:id/follow", requireAuth, validateParams(idParams), async (req: any, res) => {
+  await db.delete(seriesFollowsTable).where(and(
+    eq(seriesFollowsTable.seriesId, Number(req.params.id)),
+    eq(seriesFollowsTable.followerId, req.currentUser.id),
+  ));
+  return res.json({ following: false });
 });
 
 seriesRouter.post("/", requireAuth, validateBody(createSeriesSchema), async (req: any, res) => {

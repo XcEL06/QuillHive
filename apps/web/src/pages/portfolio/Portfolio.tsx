@@ -345,6 +345,7 @@ export default function Portfolio() {
                       <h3 className="font-semibold">{item.title}</h3>
                       {item.description && <p className="text-sm text-muted-foreground">{item.description}</p>}
                       {isMe && item.evidenceUrl && <a href={item.evidenceUrl} target="_blank" rel="noreferrer" className="text-xs text-primary underline">View your supporting evidence</a>}
+                      {!isMe && viewer && <Link href={`/messages?userId=${user.id}&contextType=project&contextId=${item.id}`}><Button type="button" size="sm" variant="outline">Discuss this project</Button></Link>}
                     </div>
                   </article>
                 ))}

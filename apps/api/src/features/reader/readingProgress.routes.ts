@@ -97,6 +97,7 @@ readingProgressRouter.get("/", async (req, res) => {
         lt(readingProgressTable.percent, 95),
         eq(postsTable.isPublished, true),
         eq(postsTable.isDeleted, false),
+        postVisibilityCondition(userId),
       ),
     )
     .orderBy(desc(readingProgressTable.lastReadAt))

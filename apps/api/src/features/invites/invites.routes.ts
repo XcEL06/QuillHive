@@ -175,7 +175,7 @@ export async function consumeInvite(code: string, newUserId: number): Promise<nu
         const { updateUserTrustScore } = await import("../trust/trust.service");
         const averageTrustScore = Number(averageTrust) || 0;
         const bonus = Math.min(10, Math.max(1, referralCount + averageTrustScore / 20));
-        await addReputationEvent(invite.createdBy, "milestone", "referral_reward", bonus);
+        await addReputationEvent(invite.createdBy, "milestone", "referral_reward", bonus, `referral:${invite.id}:${newUserId}`);
         await updateUserTrustScore(invite.createdBy);
       }
 

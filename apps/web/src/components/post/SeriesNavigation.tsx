@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, ChevronRight, Library } from "lucide-react";
+import { getStoredToken } from "@/lib/api";
 
 interface SeriesNavData {
   series: { id: number; title: string } | null;
@@ -21,7 +22,8 @@ export function SeriesNavigation({ postId }: SeriesNavigationProps) {
     let aborted = false;
     (async () => {
       try {
-        const res = await fetch(`/api/posts/${postId}/series-nav`);
+        const token = getStoredToken();
+        const res = await fetch(`/api/posts/${postId}/series-nav`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
         if (!res.ok) return;
         const json = (await res.json()) as SeriesNavData;
         if (!aborted) setData(json);

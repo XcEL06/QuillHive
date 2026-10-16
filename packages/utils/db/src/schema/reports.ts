@@ -26,6 +26,12 @@ export const moderationStrikesTable = pgTable("moderation_strikes", {
   issuedBy: integer("issued_by").references(() => usersTable.id),
   expiresAt: timestamp("expires_at"),
   acknowledgedAt: timestamp("acknowledged_at"),
+  appealText: text("appeal_text"),
+  appealStatus: text("appeal_status").notNull().default("none"),
+  appealedAt: timestamp("appealed_at"),
+  appealReviewedBy: integer("appeal_reviewed_by").references(() => usersTable.id),
+  appealReviewedAt: timestamp("appeal_reviewed_at"),
+  appealReviewNote: text("appeal_review_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

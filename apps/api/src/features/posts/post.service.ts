@@ -498,28 +498,6 @@ export async function createPost(
     if (!quotedPost) throw new Error("Quoted post not found");
   }
 
-  // Originality check (only for published long-form posts, never for official posts).
-  // Throws a typed error caught by the controller and surfaced as 409.
-  if (!data.isOfficialPost && (data.isPublished ?? true) && !isSpark && cleanContent.length >= 200) {
-    const { findSimilarPosts } = await import("../safety/originality.service");
-    const matches = await findSimilarPosts(cleanContent, null, 0.85, 5, authorId);
-    if (matches.length > 0) {
-      const err = new Error(
-        "This post is very similar to existing content. Try rewriting for originality."
-      ) as Error & {
-        code: string;
-        status: number;
-        similarPostIds: number[];
-        topSimilarity: number;
-      };
-      err.code = "DUPLICATE_CONTENT";
-      err.status = 409;
-      err.similarPostIds = matches.map((m) => m.postId);
-      err.topSimilarity = matches[0]?.similarity ?? 0;
-      throw err;
-    }
-  }
-
   const [post] = await db
     .insert(postsTable)
     .values({

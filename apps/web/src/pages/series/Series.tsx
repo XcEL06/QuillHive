@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthStore } from '@/store/auth';
 import { useT } from '@/lib/i18n';
 import { getStoredToken } from '@/lib/api';
 import { BookOpen, Plus, Trash2, Loader2, Library } from 'lucide-react';
@@ -21,6 +22,10 @@ type SeriesItem = {
   coverImage?: string;
   createdAt: string;
   postCount?: number;
+  userId?: number;
+  isFollowing?: boolean;
+  followerCount?: number;
+  resumePost?: { id: number; title: string | null; percent: number } | null;
   posts?: Array<{ id: number; title: string }>;
 };
 
@@ -28,6 +33,7 @@ export default function Series() {
   const { toast } = useToast();
   const t = useT();
   const token = getStoredToken();
+  const { user } = useAuthStore();
   const [seriesList, setSeriesList] = useState<SeriesItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -64,7 +70,7 @@ export default function Series() {
     let cancelled = false;
     setLoadError('');
     setSelectedSeries(null);
-    fetch(`/api/series/${seriesRouteParams.id}`)
+    fetch(`/api/series/${seriesRouteParams.id}`, { headers: authHeaders })
       .then(async res => {
         if (!res.ok) throw new Error(`Request failed (${res.status})`);
         return res.json();
@@ -73,6 +79,23 @@ export default function Series() {
       .catch(error => { if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Request failed'); });
     return () => { cancelled = true; };
   }, [seriesRoute, seriesRouteParams?.id]);
+
+  const toggleSeriesFollow = async () => {
+    if (!selectedSeries || !token) return;
+    try {
+      const method = selectedSeries.isFollowing ? "DELETE" : "POST";
+      const response = await fetch(`/api/series/${selectedSeries.id}/follow`, { method, headers: authHeaders });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Could not update series subscription.");
+      setSelectedSeries((current) => current ? {
+        ...current,
+        isFollowing: Boolean(result.following),
+        followerCount: Math.max(0, (current.followerCount ?? 0) + (result.following ? 1 : -1)),
+      } : current);
+    } catch (error) {
+      toast({ title: "Could not update series subscription", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    }
+  };
 
   const handleCreate = async () => {
     if (!title.trim()) { toast({ title: 'Title is required', variant: 'destructive' }); return; }
@@ -119,9 +142,29 @@ export default function Series() {
           <BackButton />
           {loadError ? <p role="alert" className="text-destructive">{loadError}</p> : selectedSeries ? (
             <>
-              <div>
-                <h1 className="text-3xl font-serif font-bold">{selectedSeries.title}</h1>
-                {selectedSeries.description && <p className="text-muted-foreground mt-2">{selectedSeries.description}</p>}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="text-3xl font-serif font-bold">{selectedSeries.title}</h1>
+                  {selectedSeries.description && <p className="text-muted-foreground mt-2">{selectedSeries.description}</p>}
+                  <p className="mt-2 text-xs text-muted-foreground">{selectedSeries.followerCount ?? 0} followers · {selectedSeries.posts?.length ?? 0} visible parts</p>
+                </div>
+                <div className="flex shrink-0 flex-col gap-2">
+                  {selectedSeries.resumePost && (
+                    <Link href={`/post/${selectedSeries.resumePost.id}#resume`}>
+                      <Button type="button" variant="secondary">Resume · {Math.round(selectedSeries.resumePost.percent)}%</Button>
+                    </Link>
+                  )}
+                  {token && selectedSeries.userId !== user?.id && (
+                    <Button type="button" variant="outline" onClick={() => void toggleSeriesFollow()}>
+                      {selectedSeries.isFollowing ? "Following" : "Follow series"}
+                    </Button>
+                  )}
+                  {user && selectedSeries.userId !== undefined && selectedSeries.userId !== user.id && (
+                    <Link href={`/messages?userId=${selectedSeries.userId}&contextType=series&contextId=${selectedSeries.id}`}>
+                      <Button type="button" variant="ghost" size="sm">Discuss this series</Button>
+                    </Link>
+                  )}
+                </div>
               </div>
               <div className="space-y-3">
                 {selectedSeries.posts?.map(post => (

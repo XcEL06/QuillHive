@@ -650,7 +650,7 @@ router.post("/:id/posts/:postId/best-answer", async (req, res) => {
   const question = { isAnswered: true, bestAnswerId: commentId };
   await db.update(groupPostDetailsTable).set({ question }).where(eq(groupPostDetailsTable.id, details.id));
   const { addReputationEvent } = await import("../features/trust/reputation.service");
-  await addReputationEvent(comment.authorId, "milestone", "Your reply was marked as the best answer", 5);
+  await addReputationEvent(comment.authorId, "milestone", "Your reply was marked as the best answer", 5, `best-answer:${commentId}`);
   return res.json({ question });
 });
 

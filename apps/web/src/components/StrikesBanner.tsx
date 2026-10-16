@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuthStore } from "@/store/auth";
 import { useT } from "@/lib/i18n";
 
@@ -10,6 +11,7 @@ interface Strike {
   severity: number;
   createdAt: string;
   acknowledgedAt: string | null;
+  appealStatus: string;
 }
 
 export function StrikesBanner() {
@@ -17,6 +19,8 @@ export function StrikesBanner() {
   const { token } = useAuthStore();
   const [strikes, setStrikes] = useState<Strike[]>([]);
   const [loading, setLoading] = useState(false);
+  const [appealText, setAppealText] = useState("");
+  const [appealError, setAppealError] = useState("");
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -46,6 +50,30 @@ export function StrikesBanner() {
     }
   }, [token]);
 
+  const submitAppeal = useCallback(async (id: number) => {
+    if (!token || appealText.trim().length < 10) {
+      setAppealError("Please explain your appeal in at least 10 characters.");
+      return;
+    }
+    setLoading(true);
+    setAppealError("");
+    try {
+      const response = await fetch(`/api/strikes/${id}/appeal`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ appealText }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Could not submit appeal.");
+      setStrikes((current) => current.map((strike) => strike.id === id ? { ...strike, appealStatus: "pending" } : strike));
+      setAppealText("");
+    } catch (error) {
+      setAppealError(error instanceof Error ? error.message : "Could not submit appeal.");
+    } finally {
+      setLoading(false);
+    }
+  }, [appealText, token]);
+
   if (strikes.length === 0) return null;
   const top = strikes[0];
 
@@ -60,6 +88,24 @@ export function StrikesBanner() {
               : t("strikes.bannerSingle")}
           </p>
           <p className="text-amber-800 dark:text-amber-300/90 mt-0.5 line-clamp-2">{top.reason}</p>
+          {top.appealStatus === "none" ? (
+            <div className="mt-3 max-w-2xl space-y-2">
+              <Textarea
+                value={appealText}
+                onChange={(event) => setAppealText(event.target.value)}
+                maxLength={2000}
+                rows={2}
+                aria-label="Appeal this moderation strike"
+                placeholder="Explain why this strike should be reviewed"
+              />
+              {appealError && <p role="alert" className="text-xs text-destructive">{appealError}</p>}
+              <Button type="button" size="sm" variant="outline" disabled={loading} onClick={() => void submitAppeal(top.id)}>
+                Submit appeal
+              </Button>
+            </div>
+          ) : (
+            <p className="mt-2 text-xs">Appeal status: {top.appealStatus.replace(/_/g, " ")}</p>
+          )}
         </div>
         <Button
           size="sm"

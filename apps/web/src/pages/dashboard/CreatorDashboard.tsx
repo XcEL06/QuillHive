@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import { BarChart3, Eye, Heart, MessageCircle, TrendingUp, Users, ArrowUpRight, Zap, ShieldCheck, RefreshCw, Activity, Target, Globe, DollarSign, Rocket, Clock, Check, Trophy, Flag, Star, Lock, PenLine } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { getStoredToken } from "@/lib/api";
@@ -30,6 +31,9 @@ type TrustScore = {
   tier: string;
   visibilityMultiplier: number;
   creatorLevel: string;
+  isDisputed?: boolean;
+  disputeReason?: string | null;
+  indicators?: Array<{ key: string; label: string; source: string; criteria: string }>;
 };
 
 type DailyPoint = { date: string; count: number };
@@ -119,6 +123,8 @@ export default function CreatorDashboard() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [recalculating, setRecalculating] = useState(false);
+  const [trustCorrection, setTrustCorrection] = useState("");
+  const [trustCorrectionStatus, setTrustCorrectionStatus] = useState("");
   const { user } = useAuthStore();
   const t = useT();
   const creatorIncomeEnabled = useFeature("creator_income_enabled");
@@ -144,6 +150,28 @@ export default function CreatorDashboard() {
     } finally {
       setRecalculating(false);
     }
+  };
+
+  const submitTrustCorrection = async () => {
+    const token = getStoredToken();
+    const reason = trustCorrection.trim();
+    if (reason.length < 10) {
+      setTrustCorrectionStatus("Please describe the correction in at least 10 characters.");
+      return;
+    }
+    const response = await fetch("/api/trust/me/dispute", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ reason }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      setTrustCorrectionStatus(result?.error || "Could not submit the correction request.");
+      return;
+    }
+    setTrust((current) => current ? { ...current, isDisputed: true, disputeReason: reason } : current);
+    setTrustCorrectionStatus("Correction request submitted for review.");
+    setTrustCorrection("");
   };
 
   useEffect(() => {
@@ -616,12 +644,29 @@ export default function CreatorDashboard() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <p className="text-xs text-muted-foreground">A living signal of the quality and consistency behind your work. Stronger trust makes your profile more credible when opportunity seekers find you.</p>
+                    <p className="text-xs text-muted-foreground">An explainable activity composite from platform records; it is not proof of authorship, character, or trustworthiness and does not itself change reach or marketplace fees.</p>
+                    <details className="rounded-lg border border-border/60 p-3 text-xs">
+                      <summary className="cursor-pointer font-medium">How the indicators are calculated</summary>
+                      <ul className="mt-2 space-y-2 text-muted-foreground">
+                        {trust.indicators?.map((indicator) => <li key={indicator.key}><strong className="text-foreground">{indicator.label}:</strong> {indicator.criteria} Source: {indicator.source}.</li>)}
+                      </ul>
+                    </details>
                     <div className="flex items-center gap-4">
                       <div className="text-center">
                         <p className="text-4xl font-bold text-foreground">{Math.round(trust.uti)}</p>
                         <p className="text-xs text-muted-foreground">{t("dashboard.of100", "/100")}</p>
                       </div>
+                      {trust.isDisputed ? (
+                        <p className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
+                          Your correction request is marked for review{trust.disputeReason ? `: ${trust.disputeReason}` : ""}.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          <Textarea value={trustCorrection} onChange={(event) => setTrustCorrection(event.target.value)} maxLength={2000} rows={2} placeholder="Request a correction to your trust indicators" aria-label="Request trust score correction" />
+                          <Button type="button" size="sm" variant="outline" onClick={() => void submitTrustCorrection()}>Request a correction</Button>
+                          {trustCorrectionStatus && <p role="status" className="text-xs text-muted-foreground">{trustCorrectionStatus}</p>}
+                        </div>
+                      )}
                       <div className="flex-1">
                         <Progress value={trust.uti} className="h-2 mb-2" />
                         <div className="flex items-center gap-2">

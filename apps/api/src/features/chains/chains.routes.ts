@@ -5,6 +5,7 @@ import { chainsTable, chainEntriesTable, postsTable, usersTable } from "@workspa
 import { and, eq, desc, sql, ne } from "drizzle-orm";
 import { requireAuth } from "../../middleware/admin";
 import { getViewerId } from "../../lib/auth-types";
+import { postVisibilityCondition } from "../posts/postVisibility";
 
 export const chainsRouter = Router();
 
@@ -63,8 +64,8 @@ async function getChainWithEntries(chainId: number, viewerId: number | null) {
     .from(chainEntriesTable)
     .leftJoin(postsTable, eq(chainEntriesTable.postId, postsTable.id))
     .leftJoin(usersTable, eq(chainEntriesTable.authorId, usersTable.id))
-    .where(eq(chainEntriesTable.chainId, chainId))
-    .orderBy(chainEntriesTable.position);
+    .where(and(eq(chainEntriesTable.chainId, chainId), eq(postsTable.isDeleted, false), eq(postsTable.isPublished, true), postVisibilityCondition(viewerId)))
+    .orderBy(chainEntriesTable.position, chainEntriesTable.id);
 
   const myEntryIds = viewerId
     ? entries.filter((e) => e.authorId === viewerId).map((e) => e.postId)

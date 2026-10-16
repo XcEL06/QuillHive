@@ -2,10 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { postsTable } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getViewerId } from "../../lib/auth-types";
 import { findSimilarPosts } from "./originality.service";
 import { aiTextScore } from "./aiText.service";
+import { postVisibilityCondition } from "../posts/postVisibility";
 
 export const safetyRouter: Router = Router();
 
@@ -31,17 +32,24 @@ safetyRouter.post("/check", async (req, res) => {
     const rows = await db
       .select({ id: postsTable.id, title: postsTable.title, authorId: postsTable.authorId })
       .from(postsTable)
-      .where(eq(postsTable.id, similar[0].postId));
+      .where(and(
+        inArray(postsTable.id, similar.map((match) => match.postId)),
+        eq(postsTable.isDeleted, false),
+        eq(postsTable.isPublished, true),
+        postVisibilityCondition(viewerId),
+      ));
     for (const s of similar) {
       const r = rows.find((x) => x.id === s.postId);
       if (r) similarPosts.push({ ...r, similarity: s.similarity });
     }
   }
+  const visibleTopSimilarity = similarPosts[0]?.similarity ?? 0;
 
   return res.json({
     aiTextScore: aiScore,
     aiTextLikely: aiScore >= 0.55,
     similarPosts,
-    duplicateLikely: similar.length > 0 && similar[0].similarity >= 0.85,
+    duplicateLikely: visibleTopSimilarity >= 0.85,
+    originalityDisclaimer: "Text overlap is an advisory signal and is not proof of plagiarism or authorship.",
   });
 });

@@ -3,9 +3,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 export type TrustTier = 'high' | 'medium' | 'low';
 
 const TIER_STYLES: Record<TrustTier, { dot: string; label: string }> = {
-  high: { dot: 'bg-emerald-500', label: 'High quality & originality' },
-  medium: { dot: 'bg-yellow-500', label: 'Average quality & originality' },
-  low: { dot: 'bg-rose-500', label: 'Lower quality or originality' },
+  high: { dot: 'bg-emerald-500', label: 'Strong engagement signal' },
+  medium: { dot: 'bg-yellow-500', label: 'Typical engagement signal' },
+  low: { dot: 'bg-rose-500', label: 'Limited engagement signal' },
 };
 
 export function TrustIndicator({ tier }: { tier?: TrustTier | null }) {
@@ -23,7 +23,7 @@ export function TrustIndicator({ tier }: { tier?: TrustTier | null }) {
         </span>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-xs">
-        Content quality &amp; originality score: {s.label}
+        Community engagement indicator: {s.label}. This is not an originality or authorship finding.
       </TooltipContent>
     </Tooltip>
   );

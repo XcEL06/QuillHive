@@ -28,8 +28,14 @@ export const startConversation = async (req: Request, res: Response) => {
   if (!targetUserId) return res.status(400).json({ error: "userId is required" });
   const targetId = Number(targetUserId);
 
-  const result = await MessagingService.startConversation(viewerId, targetId);
-  return res.json(result);
+  try {
+    const result = await MessagingService.startConversation(viewerId, targetId, req.body.context);
+    return res.json(result);
+  } catch (error: any) {
+    if (error?.message === "Forbidden") return res.status(403).json({ error: "You cannot start this conversation." });
+    if (error?.message === "Not found") return res.status(404).json({ error: "User or context not found." });
+    throw error;
+  }
 };
 
 export const respondToMessageRequest = async (req: Request, res: Response) => {
@@ -44,6 +50,7 @@ export const respondToMessageRequest = async (req: Request, res: Response) => {
     return res.json(result);
   } catch (error: any) {
     if (error?.message === "Not found") return res.status(404).json({ error: error.message });
+    if (error?.message === "Forbidden") return res.status(403).json({ error: "This message request is no longer available." });
     throw error;
   }
 };

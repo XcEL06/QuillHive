@@ -47,6 +47,36 @@ export default function AdminTrust({ token, toast }: AdminProps) {
   const reportedPosts = Array.isArray(insights?.mostReportedPosts) ? insights.mostReportedPosts : [];
   const trendingTopics = Array.isArray(insights?.trendingTopics) ? insights.trendingTopics : [];
 
+  const reviewStrikeAppeal = async (strikeId: number, status: "upheld" | "overturned") => {
+    const note = window.prompt("Enter a review note (at least 5 characters):")?.trim();
+    if (!note || note.length < 5) return;
+    try {
+      await fetchAdmin(`/api/admin/trust/strikes/${strikeId}/appeal`, {
+        method: "PATCH",
+        body: JSON.stringify({ status, note }),
+      });
+      toast({ title: "Appeal reviewed" });
+      setLoadAttempt((attempt) => attempt + 1);
+    } catch (error) {
+      toast({ title: "Could not review appeal", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    }
+  };
+
+  const resolveTrustCorrection = async (userId: number) => {
+    const note = window.prompt("Enter a correction review note (at least 5 characters):")?.trim();
+    if (!note || note.length < 5) return;
+    try {
+      await fetchAdmin(`/api/admin/trust/users/${userId}/dispute`, {
+        method: "PATCH",
+        body: JSON.stringify({ isDisputed: false, disputeReason: note }),
+      });
+      toast({ title: "Trust correction request resolved" });
+      setLoadAttempt((attempt) => attempt + 1);
+    } catch (error) {
+      toast({ title: "Could not resolve correction request", description: error instanceof Error ? error.message : "Please try again.", variant: "destructive" });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <header>
@@ -70,7 +100,7 @@ export default function AdminTrust({ token, toast }: AdminProps) {
             return <><p className="text-sm font-medium">{row.reason || "Report submitted"} <span className="font-normal text-muted-foreground">· {String(row.category || "other").replace(/_/g, " ")}</span></p><p className="mt-1 text-xs text-muted-foreground">Reported {row.targetType} {row.target?.title ? `“${row.target.title}”` : `#${row.targetId}`} · {row.priority} priority</p>{targetHref && <a className="mt-1 inline-block text-xs font-medium text-primary hover:underline" href={targetHref} target="_blank" rel="noreferrer">Open {row.targetType}</a>}</>;
           }} />
           <ModerationList title="Open spam & scam flags" empty="No heuristic flags are waiting for review." rows={moderation?.spamFlags} render={(row: any) => <><p className="text-sm font-medium">{row.reason}</p><p className="mt-1 text-xs capitalize text-muted-foreground">{row.ruleKey.replace(/_/g, " ")} · {row.user?.displayName || `Account #${row.userId}`}</p>{row.user?.username && <a className="mt-1 inline-block text-xs font-medium text-primary hover:underline" href={`/profile/${encodeURIComponent(row.user.username)}`} target="_blank" rel="noreferrer">Open profile</a>}</>} />
-          <ModerationList title="Recent strikes" empty="No moderation strikes have been issued." rows={moderation?.strikes} render={(row: any) => <><p className="text-sm font-medium">{row.reason}</p><p className="mt-1 text-xs text-muted-foreground">{row.user?.displayName || `Account #${row.userId}`} · severity {row.severity}/10 · issued <Timestamp value={row.createdAt} mode="datetime" /></p>{row.user?.username && <a className="mt-1 inline-block text-xs font-medium text-primary hover:underline" href={`/profile/${encodeURIComponent(row.user.username)}`} target="_blank" rel="noreferrer">Open profile</a>}</>} />
+          <ModerationList title="Recent strikes" empty="No moderation strikes have been issued." rows={moderation?.strikes} render={(row: any) => <><p className="text-sm font-medium">{row.reason}</p><p className="mt-1 text-xs text-muted-foreground">{row.user?.displayName || `Account #${row.userId}`} · severity {row.severity}/10 · issued <Timestamp value={row.createdAt} mode="datetime" /></p>{row.appealText && <div className="mt-2 rounded-md bg-muted/40 p-2 text-xs"><p className="font-medium">Appeal · {row.appealStatus}</p><p className="mt-1 whitespace-pre-wrap">{row.appealText}</p>{row.appealStatus === "pending" && <div className="mt-2 flex gap-2"><Button size="sm" variant="outline" onClick={() => void reviewStrikeAppeal(row.id, "upheld")}>Uphold</Button><Button size="sm" onClick={() => void reviewStrikeAppeal(row.id, "overturned")}>Overturn</Button></div>}</div>}{row.user?.username && <a className="mt-1 inline-block text-xs font-medium text-primary hover:underline" href={`/profile/${encodeURIComponent(row.user.username)}`} target="_blank" rel="noreferrer">Open profile</a>}</>} />
           <ModerationList title="Banned accounts" empty="No currently banned accounts." rows={moderation?.bannedUsers} render={(row: any) => <><p className="text-sm font-medium">{row.displayName || `Account #${row.id}`} <span className="font-normal text-muted-foreground">@{row.username}</span></p><p className="mt-1 text-xs text-muted-foreground">Banned <Timestamp value={row.bannedAt} mode="datetime" /></p><a className="mt-1 inline-block text-xs font-medium text-primary hover:underline" href={`/profile/${encodeURIComponent(row.username)}`} target="_blank" rel="noreferrer">Open profile</a></>} />
           <ModerationList title="Trust signals" empty="No recent behavior or trust signals." rows={moderation?.trustSignals} render={(row: any) => <><p className="text-sm font-medium capitalize">{row.label}</p><p className="mt-1 text-xs text-muted-foreground">{row.user?.displayName || `Account #${row.userId}`} · {row.detail} · <Timestamp value={row.createdAt} mode="datetime" /></p>{row.user?.username && <a className="mt-1 inline-block text-xs font-medium text-primary hover:underline" href={`/profile/${encodeURIComponent(row.user.username)}`} target="_blank" rel="noreferrer">Open profile</a>}</>} />
         </div>
@@ -123,6 +153,7 @@ export default function AdminTrust({ token, toast }: AdminProps) {
               <thead className="bg-muted/30 text-muted-foreground"><tr>
                 <th className="px-3 py-2">Account</th><th className="px-3 py-2">Trust score</th><th className="px-3 py-2">Creator level</th>
                 <th className="px-3 py-2">Content value</th><th className="px-3 py-2">Consistency</th><th className="px-3 py-2">Community trust</th><th className="px-3 py-2">Content impact</th>
+                <th className="px-3 py-2">Correction</th>
               </tr></thead>
               <tbody className="divide-y divide-border/60">
                 {scores.map((score) => {
@@ -136,9 +167,10 @@ export default function AdminTrust({ token, toast }: AdminProps) {
                     <td className="px-3 py-2 tabular-nums">{Math.round(score.bcs ?? 0)}</td>
                     <td className="px-3 py-2 tabular-nums">{Math.round(score.cts ?? 0)}</td>
                     <td className="px-3 py-2 tabular-nums">{Math.round(score.avgCis ?? 0)}</td>
+                    <td className="px-3 py-2">{score.isDisputed ? <div><p className="max-w-48 text-[10px] text-muted-foreground">{score.disputeReason || "Correction requested"}</p><Button type="button" size="sm" variant="outline" className="mt-1 h-7" onClick={() => void resolveTrustCorrection(score.userId)}>Resolve</Button></div> : "—"}</td>
                   </tr>;
                 })}
-                {scores.length === 0 && <tr><td colSpan={7}><EmptyState>No trust scores are available.</EmptyState></td></tr>}
+                {scores.length === 0 && <tr><td colSpan={8}><EmptyState>No trust scores are available.</EmptyState></td></tr>}
               </tbody>
             </table>
           </div>

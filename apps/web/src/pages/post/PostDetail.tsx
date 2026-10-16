@@ -492,7 +492,7 @@ export default function PostDetail() {
           )}
           {post.title && <h1 className="text-4xl md:text-5xl font-serif font-bold text-foreground mb-6 leading-tight">{post.title}</h1>}
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <Link href={`/u/${encodeURIComponent(post.author.username)}`} className="flex items-center gap-4 group">
               <Avatar className="h-12 w-12 border-2 border-transparent group-hover:border-primary transition-colors">
                 <AvatarImage src={post.author.avatarUrl || ''} />
@@ -536,6 +536,11 @@ export default function PostDetail() {
                 </p>
               </div>
             </Link>
+            {user && !isOwner && (
+              <Link href={`/messages?userId=${post.author.id}&contextType=post&contextId=${post.id}`}>
+                <Button type="button" size="sm" variant="outline" className="shrink-0">Message about this post</Button>
+              </Link>
+            )}
 
             <div className="flex gap-2 items-center flex-wrap justify-end">
               <ReaderModeToggle active={readerMode} onToggle={() => setReaderMode((v) => !v)} />
