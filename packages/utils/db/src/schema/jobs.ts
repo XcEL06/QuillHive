@@ -11,6 +11,7 @@ export const jobsTable = pgTable("jobs", {
   type: text("type").notNull().default("job"),
   skills: text("skills").notNull().default("[]"),
   compensation: text("compensation"),
+  feeDetails: text("fee_details"),
   remote: boolean("remote").notNull().default(true),
   location: text("location"),
   isPaid: boolean("is_paid").notNull().default(false),

@@ -13,9 +13,13 @@ import { apiUrl, getApiErrorMessage, getStoredToken } from '@/lib/api';
 import { useAuthStore } from '@/store/auth';
 import { BackButton } from '@/components/ui/BackButton';
 import {
-  Briefcase, DollarSign, Tag, FileCheck, Plus, X,
+  Briefcase, Calendar, DollarSign, Tag, FileCheck, Plus, X,
   Globe, MapPin, Mail, Link as LinkIcon, ChevronRight, Loader2, Sparkles
 } from 'lucide-react';
+
+function toLocalDateTimeValue(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
 
 const OPPORTUNITY_TYPES = [
   { value: 'freelance',          label: 'Freelance',          desc: 'Short or long-term project work' },
@@ -42,6 +46,8 @@ export default function PostJob() {
   const [budgetMin, setBudgetMin]           = useState('');
   const [budgetMax, setBudgetMax]           = useState('');
   const [currency, setCurrency]             = useState('USD');
+  const [feeDetails, setFeeDetails]         = useState('');
+  const [expiresAt, setExpiresAt]           = useState(() => toLocalDateTimeValue(new Date(Date.now() + 30 * 24 * 60 * 60_000)));
   const [remote, setRemote]                 = useState(true);
   const [location, setLocation2]            = useState('');
   const [applyUrl, setApplyUrl]             = useState('');
@@ -65,7 +71,7 @@ export default function PostJob() {
           title?: string; type?: string; companyName?: string | null; description?: string;
           budget?: number | string | null; compensation?: string | null; remote?: boolean;
           location?: string | null; applyUrl?: string | null; applyEmail?: string | null; skills?: string[];
-          isActive?: boolean;
+          isActive?: boolean; feeDetails?: string | null; expiresAt?: string | null;
         } = await res.json();
         if (cancelled) return;
         if (!user || Number(job.authorId ?? job.author?.id) !== Number(user.id)) {
@@ -75,6 +81,8 @@ export default function PostJob() {
         setType(job.type ?? 'freelance');
         setCompanyName(job.companyName ?? '');
         setDescription(job.description ?? '');
+        setFeeDetails(job.feeDetails ?? '');
+        if (job.expiresAt) setExpiresAt(toLocalDateTimeValue(new Date(job.expiresAt)));
         setRemote(job.remote ?? true);
         setLocation2(job.location ?? '');
         setApplyUrl(job.applyUrl ?? '');
@@ -114,6 +122,11 @@ export default function PostJob() {
     if (!token) { toast({ title: 'Sign in to post', variant: 'destructive' }); return; }
     if (!title.trim()) { toast({ title: 'Role title is required', variant: 'destructive' }); return; }
     if (!description.trim()) { toast({ title: 'Description is required', variant: 'destructive' }); return; }
+    const expiryDate = new Date(expiresAt);
+    if (!expiresAt || Number.isNaN(expiryDate.getTime()) || expiryDate <= new Date()) {
+      toast({ title: 'Choose a future end date', description: 'This opportunity will close automatically at the selected date and time.', variant: 'destructive' });
+      return;
+    }
 
     const minVal = budgetMin ? parseFloat(budgetMin) : null;
     const maxVal = budgetMax ? parseFloat(budgetMax) : null;
@@ -155,6 +168,8 @@ export default function PostJob() {
           description:  fullDescription,
           skills,
           compensation: compensationStr ?? null,
+          feeDetails: feeDetails.trim() || null,
+          expiresAt: expiryDate.toISOString(),
           budget:       minVal ?? null,
           companyName:  companyName.trim() || null,
           remote,
@@ -293,6 +308,18 @@ export default function PostJob() {
                 className="h-10 flex-1 rounded-xl"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="feeDetails">Fee and payment terms</Label>
+              <Textarea
+                id="feeDetails"
+                maxLength={2000}
+                value={feeDetails}
+                onChange={event => setFeeDetails(event.target.value)}
+                placeholder="Describe how the fee is set or negotiated, payment timing, milestones, or revenue-share terms."
+                className="min-h-[90px] rounded-xl text-sm"
+              />
+              <p className="text-xs text-muted-foreground">Applicants can include a proposed fee when they message you. QuillHive does not process or hold payments.</p>
+            </div>
           </section>
 
           <section aria-labelledby="opportunity-scope-heading" className="space-y-4 rounded-xl border border-border/60 p-4 sm:p-5">
@@ -401,6 +428,21 @@ export default function PostJob() {
               <p className="text-xs text-muted-foreground">Inactive opportunities are visible only to you.</p>
             </div>
             <Switch checked={isActive} onCheckedChange={setIsActive} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="expiresAt" className="flex items-center gap-1.5 text-sm font-semibold">
+              <Calendar className="h-4 w-4" /> Opportunity end date and time
+            </Label>
+            <Input
+              id="expiresAt"
+              type="datetime-local"
+              min={toLocalDateTimeValue(new Date(Date.now() + 60_000))}
+              value={expiresAt}
+              onChange={event => setExpiresAt(event.target.value)}
+              required
+              className="h-10 rounded-xl"
+            />
+            <p className="text-xs text-muted-foreground">Applications close automatically when this time is reached. The default is 30 days from now.</p>
           </div>
           </section>
 

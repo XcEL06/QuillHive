@@ -1,5 +1,5 @@
 import { db } from "@workspace/db";
-import { postsTable, usersTable, boostRequestsTable } from "@workspace/db/schema";
+import { postsTable, usersTable, boostRequestsTable, jobsTable } from "@workspace/db/schema";
 import { and, eq, lte, isNotNull, lt, isNull, or, inArray, sql } from "drizzle-orm";
 import { logger } from "../../lib/logger";
 import { runScheduledJob } from "./scheduledJobRunner";
@@ -7,6 +7,7 @@ import { addJob } from "../../lib/queue/queue";
 import { expireHighlights } from "../highlights/highlights.routes";
 import { SPARK_LIFETIME_MS } from "../posts/postExpiry";
 import { getWeeklyDigestIntervalMs } from "../email/emailSendGuard";
+import { DEFAULT_OPPORTUNITY_LIFETIME_MS } from "../creator-economy/opportunityWorkflow";
 
 export async function publishDuePosts(): Promise<void> {
   try {
@@ -87,6 +88,29 @@ export async function expireBoostCampaigns(): Promise<void> {
     }
   } catch (err) {
     logger.warn({ err }, "expireBoostCampaigns attempt failed");
+    throw err;
+  }
+}
+
+export async function expireOpportunities(): Promise<void> {
+  try {
+    const now = new Date();
+    const legacyExpiryCutoff = new Date(now.getTime() - DEFAULT_OPPORTUNITY_LIFETIME_MS);
+    const expired = await db.update(jobsTable)
+      .set({ isActive: false })
+      .where(and(
+        eq(jobsTable.isActive, true),
+        or(
+          and(isNotNull(jobsTable.expiresAt), lte(jobsTable.expiresAt, now)),
+          and(isNull(jobsTable.expiresAt), lte(jobsTable.createdAt, legacyExpiryCutoff)),
+        ),
+      ))
+      .returning({ id: jobsTable.id });
+    if (expired.length > 0) {
+      logger.info({ count: expired.length }, "Expired opportunities closed");
+    }
+  } catch (err) {
+    logger.warn({ err }, "expireOpportunities attempt failed");
     throw err;
   }
 }
@@ -870,6 +894,7 @@ export function startScheduling(): void {
   schedulingTimer = setInterval(() => {
     scheduleJob("publishDuePosts", publishDuePosts);
     scheduleJob("expireBoostCampaigns", expireBoostCampaigns);
+    scheduleJob("expireOpportunities", expireOpportunities);
     const now = Date.now();
     if (now - lastSparkExpiry > 60 * 60 * 1000) {
       lastSparkExpiry = now;
@@ -914,6 +939,7 @@ export function startScheduling(): void {
     }
   }, 60_000);
   scheduleJob("publishDuePosts", publishDuePosts);
+  scheduleJob("expireOpportunities", expireOpportunities);
 
   const WEEK_MS = weeklyDigestIntervalMs;
   digestTimer = setInterval(() => { scheduleJob("sendWeeklyDigests", sendWeeklyDigests); }, WEEK_MS);

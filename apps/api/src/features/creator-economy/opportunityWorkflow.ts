@@ -1,6 +1,16 @@
 export type OpportunityApplicationStatus = "pending" | "accepted" | "rejected" | "cancelled" | "completed";
 export type ApplicationDecision = "accepted" | "rejected" | "cancelled";
 
+export const DEFAULT_OPPORTUNITY_LIFETIME_MS = 30 * 24 * 60 * 60_000;
+
+export function getOpportunityExpiry(expiresAt: Date | null, createdAt: Date): Date {
+  return expiresAt ?? new Date(createdAt.getTime() + DEFAULT_OPPORTUNITY_LIFETIME_MS);
+}
+
+export function isOpportunityExpired(expiresAt: Date | null, createdAt: Date, now = new Date()): boolean {
+  return getOpportunityExpiry(expiresAt, createdAt) <= now;
+}
+
 export function decideOpportunityApplication(input: {
   status: string;
   action: ApplicationDecision;

@@ -306,6 +306,7 @@ export function JobsPanel() {
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{job.description}</p>
+                {j.feeDetails && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">Fee terms:</span> {j.feeDetails}</p>}
 
                 <div className="flex items-center gap-3 text-xs text-muted-foreground mt-2 flex-wrap">
                   {j.compensation && <span className="text-foreground font-medium flex items-center gap-0.5"><DollarSign className="w-3 h-3" />{j.compensation}</span>}

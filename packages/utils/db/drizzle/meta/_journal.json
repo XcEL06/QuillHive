@@ -274,6 +274,13 @@
       "when": 1792310400003,
       "tag": "0042_post_archiving",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1792310400004,
+      "tag": "0043_job_fee_details",
+      "breakpoints": true
     }
   ]
 }

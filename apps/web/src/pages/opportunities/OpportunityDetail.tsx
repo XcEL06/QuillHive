@@ -8,7 +8,7 @@ import { ApplyOpportunityActions } from '@/components/opportunities/ApplyOpportu
 import { OpportunityShareDialog } from '@/components/opportunities/OpportunityShareDialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { apiUrl, getStoredToken } from '@/lib/api';
-import { ArrowLeft, Briefcase, Clock, DollarSign, MapPin, Check, X, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Briefcase, Calendar, Clock, DollarSign, MapPin, Check, X, CheckCircle2 } from 'lucide-react';
 import { Timestamp } from '@/lib/postTimestamp';
 import { useAuthStore } from '@/store/auth';
 
@@ -19,6 +19,8 @@ type Opportunity = {
   type: string;
   skills: string[];
   compensation?: string | null;
+  feeDetails?: string | null;
+  expiresAt?: string | null;
   remote?: boolean;
   location?: string | null;
   companyName?: string | null;
@@ -144,6 +146,7 @@ export default function OpportunityDetail() {
             <header className="border-b border-border/70 pb-6">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="capitalize">{opportunity.type}</Badge>
+                {!opportunity.isActive && <Badge variant="secondary">Closed</Badge>}
                 {opportunity.companyName && <span className="text-sm text-muted-foreground">at {opportunity.companyName}</span>}
               </div>
               <h1 className="text-3xl font-semibold text-foreground">{opportunity.title}</h1>
@@ -151,12 +154,18 @@ export default function OpportunityDetail() {
                 {opportunity.compensation && <span className="flex items-center gap-1.5"><DollarSign className="h-4 w-4" />{opportunity.compensation}</span>}
                 <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" />{opportunity.remote ? 'Remote' : opportunity.location || 'Location not specified'}</span>
                 <span className="flex items-center gap-1.5"><Clock className="h-4 w-4" /><Timestamp value={opportunity.createdAt} /></span>
+                {opportunity.expiresAt && <span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" />Application deadline: {new Date(opportunity.expiresAt).toLocaleString()}</span>}
               </div>
             </header>
             <section>
               <h2 className="mb-2 text-sm font-semibold">About this opportunity</h2>
               <p className="whitespace-pre-wrap text-sm leading-7 text-foreground/85">{opportunity.description}</p>
             </section>
+            {opportunity.feeDetails && <section className="rounded-xl border border-border/70 bg-muted/20 p-4">
+              <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><DollarSign className="h-4 w-4" />Fee and payment terms</h2>
+              <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/85">{opportunity.feeDetails}</p>
+              <p className="mt-3 text-xs text-muted-foreground">Discuss and agree on payment directly with the other participant. QuillHive does not process or hold payments.</p>
+            </section>}
             {(isOwner || applications.some(application => application.isMine)) && <section className="space-y-3 border-t border-border/70 pt-5">
               <h2 className="text-sm font-semibold">{isOwner ? `Applications (${applications.length})` : 'Your application'}</h2>
               {applicationsLoading ? <Skeleton className="h-20 w-full" /> : applicationsError ? (

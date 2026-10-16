@@ -10,7 +10,13 @@ import { z } from "zod";
 import { getSessionUserId } from "../lib/auth";
 import { getUserWithCounts } from "../features/profiles/profile.service";
 import { notify } from "../features/notifications/notification.service";
-import { decideOpportunityApplication, resolveCompletionAction } from "../features/creator-economy/opportunityWorkflow";
+import {
+  DEFAULT_OPPORTUNITY_LIFETIME_MS,
+  decideOpportunityApplication,
+  getOpportunityExpiry,
+  isOpportunityExpired,
+  resolveCompletionAction,
+} from "../features/creator-economy/opportunityWorkflow";
 
 const SCAM_PATTERNS = [
   /registration\s*fee/i,
@@ -129,8 +135,11 @@ async function enrichJob(job: any, viewerId: number | null) {
     .limit(1);
   const joinedAt = author?.createdAt ? new Date(author.createdAt).getTime() : 0;
   const isNewAccount = joinedAt > 0 && Date.now() - joinedAt < 14 * 24 * 60 * 60 * 1000 && (trust?.uti ?? 50) <= 50;
+  const effectiveExpiry = getOpportunityExpiry(job.expiresAt, new Date(job.createdAt));
   return {
     ...job,
+    expiresAt: effectiveExpiry,
+    isActive: Boolean(job.isActive) && !isOpportunityExpired(job.expiresAt, new Date(job.createdAt)),
     skills: normalizeSkills(job.skills),
     author: author ? {
       id: author.id,
@@ -157,7 +166,10 @@ router.get("/", async (req, res) => {
     eq(jobsTable.isActive, true),
     eq(jobsTable.isApproved, true),
     eq(jobsTable.moderationStatus, "published"),
-    or(isNull(jobsTable.expiresAt), gt(jobsTable.expiresAt, now)),
+    or(
+      gt(jobsTable.expiresAt, now),
+      and(isNull(jobsTable.expiresAt), gt(jobsTable.createdAt, new Date(now.getTime() - DEFAULT_OPPORTUNITY_LIFETIME_MS))),
+    ),
   );
   const conds = viewerId
     ? [or(publicListing, eq(jobsTable.authorId, viewerId))!]
@@ -187,6 +199,8 @@ const jobInputSchema = z.object({
   type: z.string().trim().min(1).max(50),
   skills: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
   compensation: z.string().max(200).nullable().optional(),
+  feeDetails: z.string().trim().max(2_000).nullable().optional(),
+  expiresAt: z.string().datetime().optional(),
   remote: z.boolean().optional(),
   location: z.string().max(200).nullable().optional(),
   isPaid: z.boolean().optional(),
@@ -212,9 +226,12 @@ router.post("/", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid opportunity" });
   const data = parsed.data;
   const { title, description, type, skills, compensation, remote, location,
-    isPaid, budget, companyName, applyUrl, applyEmail, category, isActive } = data;
+    feeDetails, expiresAt: requestedExpiry, isPaid, budget, companyName, applyUrl, applyEmail, category, isActive } = data;
 
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60_000);
+  const expiresAt = requestedExpiry
+    ? new Date(requestedExpiry)
+    : new Date(Date.now() + DEFAULT_OPPORTUNITY_LIFETIME_MS);
+  if (expiresAt <= new Date()) return res.status(400).json({ error: "The opportunity end date must be in the future" });
   const isSuspicious = SCAM_PATTERNS.some((pattern) => pattern.test(`${title} ${description}`));
 
   const [job] = await db.insert(jobsTable).values({
@@ -224,6 +241,7 @@ router.post("/", async (req, res) => {
     type,
     skills: JSON.stringify(normalizeSkills(skills)),
     compensation: compensation || null,
+    feeDetails: feeDetails || null,
     remote: remote ?? true,
     location: location || null,
     isPaid: isPaid ?? false,
@@ -284,9 +302,17 @@ router.patch("/:id", async (req, res) => {
   if (job.authorId !== viewerId) return res.status(403).json({ error: "Forbidden" });
 
   const data = parsed.data;
-  const { skills, ...jobFields } = data;
+  const nextExpiry = data.expiresAt ? new Date(data.expiresAt) : job.expiresAt;
+  if (data.expiresAt && (!nextExpiry || nextExpiry <= new Date())) {
+    return res.status(400).json({ error: "The opportunity end date must be in the future" });
+  }
+  if (data.isActive === true && (!nextExpiry || nextExpiry <= new Date())) {
+    return res.status(400).json({ error: "Choose a future end date before reopening this opportunity" });
+  }
+  const { skills, expiresAt: requestedExpiry, ...jobFields } = data;
   const update: Partial<typeof jobsTable.$inferInsert> = {
     ...jobFields,
+    ...(requestedExpiry ? { expiresAt: new Date(requestedExpiry) } : {}),
     ...(skills ? { skills: JSON.stringify(skills) } : {}),
   };
   const nextTitle = data.title ?? job.title;
@@ -338,7 +364,17 @@ router.post("/:id/apply", async (req, res) => {
   const parsed = applyOpportunitySchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid application" });
   const data = parsed.data;
-  const [job] = await db.select().from(jobsTable).where(and(eq(jobsTable.id, id), eq(jobsTable.isActive, true)));
+  const now = new Date();
+  const [job] = await db.select().from(jobsTable).where(and(
+    eq(jobsTable.id, id),
+    eq(jobsTable.isActive, true),
+    eq(jobsTable.isApproved, true),
+    eq(jobsTable.moderationStatus, "published"),
+    or(
+      gt(jobsTable.expiresAt, now),
+      and(isNull(jobsTable.expiresAt), gt(jobsTable.createdAt, new Date(now.getTime() - DEFAULT_OPPORTUNITY_LIFETIME_MS))),
+    ),
+  ));
   if (!job) return res.status(404).json({ error: "Opportunity not found" });
   if (job.authorId === viewerId) return res.status(400).json({ error: "You cannot apply to your own opportunity" });
 
@@ -472,7 +508,8 @@ router.patch("/applications/:applicationId", async (req, res) => {
       return { kind: "conflict" as const };
     }
     if (application.status !== "pending") return { kind: "conflict" as const };
-    if (action === "accepted" && (!job.isActive || !job.isApproved || job.moderationStatus !== "published")) {
+    if (action === "accepted" && (!job.isActive || !job.isApproved || job.moderationStatus !== "published" ||
+      isOpportunityExpired(job.expiresAt, job.createdAt))) {
       return { kind: "opportunity_closed" as const };
     }
 
@@ -489,6 +526,10 @@ router.patch("/applications/:applicationId", async (req, res) => {
     const brief = [
       `Opportunity: ${job.title}`,
       job.description,
+      job.feeDetails?.trim() ? `Fee and payment terms: ${job.feeDetails.trim()}` : "",
+      application.proposedBudget !== null
+        ? `Applicant's proposed fee: ${application.proposedCurrency} ${application.proposedBudget}`
+        : "",
       application.message?.trim() ? `Applicant note: ${application.message.trim()}` : "",
     ].filter(Boolean).join("\n\n");
     await tx.insert(collaborationRoomsTable).values({
@@ -617,7 +658,10 @@ router.get("/my-matches", async (req, res) => {
   const jobs = await db.select().from(jobsTable)
     .where(and(eq(jobsTable.isActive, true), eq(jobsTable.isApproved, true),
       eq(jobsTable.moderationStatus, "published"),
-      or(isNull(jobsTable.expiresAt), gt(jobsTable.expiresAt, now))))
+      or(
+        gt(jobsTable.expiresAt, now),
+        and(isNull(jobsTable.expiresAt), gt(jobsTable.createdAt, new Date(now.getTime() - DEFAULT_OPPORTUNITY_LIFETIME_MS))),
+      )))
     .orderBy(desc(jobsTable.createdAt))
     .limit(50);
 

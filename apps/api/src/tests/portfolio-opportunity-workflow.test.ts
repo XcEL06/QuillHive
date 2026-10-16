@@ -3,12 +3,24 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   canAccessOpportunityWorkspace,
+  DEFAULT_OPPORTUNITY_LIFETIME_MS,
   decideOpportunityApplication,
+  getOpportunityExpiry,
+  isOpportunityExpired,
   resolveCompletionAction,
 } from "../features/creator-economy/opportunityWorkflow";
 import { canViewProfileWithSignals } from "../features/profiles/profileAccessPolicy";
 
 describe("opportunity application workspace policy", () => {
+  it("expires opportunities at their configured deadline and gives legacy listings a finite default", () => {
+    const createdAt = new Date("2026-01-01T00:00:00.000Z");
+    const deadline = new Date("2026-01-05T12:00:00.000Z");
+    expect(isOpportunityExpired(deadline, createdAt, new Date("2026-01-05T11:59:59.999Z"))).toBe(false);
+    expect(isOpportunityExpired(deadline, createdAt, deadline)).toBe(true);
+    expect(getOpportunityExpiry(null, createdAt).getTime()).toBe(createdAt.getTime() + DEFAULT_OPPORTUNITY_LIFETIME_MS);
+    expect(isOpportunityExpired(null, createdAt, new Date(createdAt.getTime() + DEFAULT_OPPORTUNITY_LIFETIME_MS))).toBe(true);
+  });
+
   it("only lets the opportunity owner accept or reject a pending application", () => {
     expect(decideOpportunityApplication({
       status: "pending",
@@ -143,5 +155,18 @@ describe("portfolio and opportunity workspace migration", () => {
     expect(migration).toContain('"opportunity_application_id" integer');
     expect(migration).toContain("collaboration_rooms_opportunity_application_unique");
     expect(journal.entries.some(entry => entry.tag === "0038_verified_portfolios_opportunity_rooms")).toBe(true);
+  });
+
+  it("adds a dedicated field for opportunity fee and payment terms", () => {
+    const migration = readFileSync(
+      fileURLToPath(new URL("../../../../packages/utils/db/drizzle/0043_job_fee_details.sql", import.meta.url)),
+      "utf8",
+    );
+    const journal = JSON.parse(readFileSync(
+      fileURLToPath(new URL("../../../../packages/utils/db/drizzle/meta/_journal.json", import.meta.url)),
+      "utf8",
+    )) as { entries: Array<{ tag: string }> };
+    expect(migration).toContain('ADD COLUMN "fee_details" text');
+    expect(journal.entries.some(entry => entry.tag === "0043_job_fee_details")).toBe(true);
   });
 });
