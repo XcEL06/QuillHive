@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import {
-  usersTable, postsTable, reportsTable, moderationStrikesTable, adminLogsTable, systemSettingsTable, followsTable,
+  usersTable, postsTable, likesTable, commentsTable, postSharesTable, repostsTable,
+  reportsTable, moderationStrikesTable, adminLogsTable, systemSettingsTable, followsTable,
   userTrustScoresTable, topicsTable, moderationRulesTable, adminNotesTable,
   behaviorEventsTable, reputationEventsTable, blockedEmailAttemptsTable, translationCacheTable,
   boostRequestsTable, challengesTable,
@@ -572,6 +573,78 @@ router.get("/posts/:id", async (req, res) => {
     .where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
   if (!post) return res.status(404).json({ error: "Post not found" });
   return res.json(post);
+});
+
+router.get("/posts/:id/engagement", requireSuperAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid post id" });
+  const [post] = await db.select({ id: postsTable.id })
+    .from(postsTable)
+    .where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
+  if (!post) return res.status(404).json({ error: "Post not found" });
+
+  const [likes, comments, shares, reposts, likeTotal, commentTotal, shareTotal, repostTotal] = await Promise.all([
+    db.select({
+      userId: usersTable.id,
+      username: usersTable.username,
+      displayName: usersTable.displayName,
+      avatarUrl: usersTable.avatarUrl,
+      createdAt: likesTable.createdAt,
+    }).from(likesTable)
+      .innerJoin(usersTable, eq(usersTable.id, likesTable.userId))
+      .where(eq(likesTable.postId, id))
+      .orderBy(desc(likesTable.createdAt))
+      .limit(100),
+    db.select({
+      id: commentsTable.id,
+      content: commentsTable.content,
+      parentCommentId: commentsTable.parentCommentId,
+      likeCount: commentsTable.likeCount,
+      createdAt: commentsTable.createdAt,
+      userId: usersTable.id,
+      username: usersTable.username,
+      displayName: usersTable.displayName,
+      avatarUrl: usersTable.avatarUrl,
+    }).from(commentsTable)
+      .innerJoin(usersTable, eq(usersTable.id, commentsTable.authorId))
+      .where(eq(commentsTable.postId, id))
+      .orderBy(desc(commentsTable.createdAt))
+      .limit(100),
+    db.select({
+      userId: usersTable.id,
+      username: usersTable.username,
+      displayName: usersTable.displayName,
+      source: postSharesTable.source,
+      clickCount: postSharesTable.clickCount,
+      createdAt: postSharesTable.createdAt,
+    }).from(postSharesTable)
+      .leftJoin(usersTable, eq(usersTable.id, postSharesTable.userId))
+      .where(eq(postSharesTable.postId, id))
+      .orderBy(desc(postSharesTable.createdAt))
+      .limit(100),
+    db.select({
+      userId: usersTable.id,
+      username: usersTable.username,
+      displayName: usersTable.displayName,
+      avatarUrl: usersTable.avatarUrl,
+      createdAt: repostsTable.createdAt,
+    }).from(repostsTable)
+      .innerJoin(usersTable, eq(usersTable.id, repostsTable.userId))
+      .where(eq(repostsTable.postId, id))
+      .orderBy(desc(repostsTable.createdAt))
+      .limit(100),
+    db.select({ total: count() }).from(likesTable).where(eq(likesTable.postId, id)),
+    db.select({ total: count() }).from(commentsTable).where(eq(commentsTable.postId, id)),
+    db.select({ total: count() }).from(postSharesTable).where(eq(postSharesTable.postId, id)),
+    db.select({ total: count() }).from(repostsTable).where(eq(repostsTable.postId, id)),
+  ]);
+
+  return res.json({
+    likes: { total: likeTotal[0]?.total ?? 0, users: likes },
+    comments: { total: commentTotal[0]?.total ?? 0, items: comments },
+    shares: { total: shareTotal[0]?.total ?? 0, items: shares },
+    reposts: { total: repostTotal[0]?.total ?? 0, users: reposts },
+  });
 });
 
 router.post("/posts/:id/grant-boost", requirePermission("manage_boosts"), async (req: any, res) => {

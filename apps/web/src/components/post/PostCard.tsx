@@ -33,6 +33,7 @@ type CtaButton = { label: string; url: string; style: 'primary' | 'secondary' | 
 type EnrichedPost = Post & {
   repostsCount?: number;
   isReposted?: boolean;
+  repostedBy?: { id: number; username: string; displayName: string; avatarUrl?: string | null };
   isSaved?: boolean;
   authorTrustTier?: string;
   authorIsOfficial?: boolean;
@@ -386,6 +387,8 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
   const token = getStoredToken();
   const t = useT();
   const { lang } = useI18n();
+
+  useEffect(() => setPost(initialPost), [initialPost]);
 
   useEffect(() => {
     if (!post.isBoosted || !post.boostEndsAt) {
@@ -818,6 +821,16 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
         {post.isOfficialPost && <OfficialPostBanner category={post.postCategory} />}
 
         {post.groupId != null && <GroupPostAttribution groupId={post.groupId} />}
+
+        {post.repostedBy && (
+          <div className="mb-2 flex items-center gap-1.5 pl-1 text-xs text-muted-foreground">
+            <Repeat2 className="h-3.5 w-3.5" />
+            <Link href={`/u/${encodeURIComponent(post.repostedBy.username)}`} className="font-medium hover:text-primary hover:underline">
+              {post.repostedBy.displayName || `@${post.repostedBy.username}`}
+            </Link>
+            <span>reshared</span>
+          </div>
+        )}
 
         {/* Header */}
         <div className={`flex min-w-0 items-center gap-3 ${feedStyle ? 'mb-3' : 'mb-4'}`}>

@@ -1,4 +1,5 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Copy, Twitter, Facebook, Linkedin, MessageCircle, Check, Repeat2, Send, Pencil } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { copyTextToClipboard, getPostShareUrl } from "@/lib/api";
 interface ShareSheetProps {
   postId: number;
   title?: string;
+  isReposted?: boolean;
   trigger: React.ReactNode;
 }
 
@@ -17,16 +19,19 @@ interface ConvSummary {
   participantName: string;
 }
 
-export function ShareSheet({ postId, title, trigger }: ShareSheetProps) {
+export function ShareSheet({ postId, title, isReposted = false, trigger }: ShareSheetProps) {
   const { toast } = useToast();
   const { token } = useAuthStore();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [reposted, setReposted] = useState(false);
+  const [reposted, setReposted] = useState(isReposted);
   const [reposting, setReposting] = useState(false);
   const [showMessagePicker, setShowMessagePicker] = useState(false);
   const [conversations, setConversations] = useState<ConvSummary[]>([]);
   const [messageSent, setMessageSent] = useState(false);
+
+  useEffect(() => setReposted(isReposted), [isReposted, postId]);
 
   const url = getPostShareUrl(postId);
   const shareText = title ? `${title} - via QuillHive` : "Read this on QuillHive";
@@ -68,15 +73,19 @@ export function ShareSheet({ postId, title, trigger }: ShareSheetProps) {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error();
-      setReposted(true);
-      toast({ title: "Reposted to your feed ✓" });
-    } catch {
-      toast({ title: "Could not repost", variant: "destructive" });
+      const data = await res.json() as { isReposted?: boolean; error?: string };
+      if (!res.ok) throw new Error(data.error || "Could not repost");
+      const isNowReposted = Boolean(data.isReposted);
+      setReposted(isNowReposted);
+      toast({ title: isNowReposted ? "Reposted to your feed ✓" : "Repost removed" });
+      void queryClient.invalidateQueries({ queryKey: ["/api/posts"] });
+      void queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
+    } catch (error) {
+      toast({ title: "Could not repost", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
     } finally {
       setReposting(false);
     }
-  }, [token, postId, toast]);
+  }, [token, postId, toast, queryClient]);
 
   const loadConversations = useCallback(async () => {
     if (!token || conversations.length > 0) return;
@@ -143,7 +152,8 @@ export function ShareSheet({ postId, title, trigger }: ShareSheetProps) {
           {token && (
             <button
               onClick={() => void repost()}
-              disabled={reposting || reposted}
+              disabled={reposting}
+              aria-pressed={reposted}
               className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors text-left disabled:opacity-60"
               data-testid="button-share-repost"
             >
@@ -151,8 +161,8 @@ export function ShareSheet({ postId, title, trigger }: ShareSheetProps) {
                 {reposted ? <Check className="w-4 h-4 text-primary" /> : <Repeat2 className="w-4 h-4 text-primary" />}
               </div>
               <div>
-                <p className="text-sm font-medium">{reposted ? "Reposted ✓" : "Repost to feed"}</p>
-                <p className="text-xs text-muted-foreground">Share with your followers</p>
+                <p className="text-sm font-medium">{reposted ? "Undo repost" : "Repost to feed"}</p>
+                <p className="text-xs text-muted-foreground">{reposted ? "Remove this from your followers' feed" : "Share with your followers"}</p>
               </div>
             </button>
           )}

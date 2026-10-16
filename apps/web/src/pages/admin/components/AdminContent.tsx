@@ -22,6 +22,9 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
   const [boostPost, setBoostPost] = useState<any | null>(null);
   const [previewPost, setPreviewPost] = useState<any | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [engagement, setEngagement] = useState<any | null>(null);
+  const [engagementLoading, setEngagementLoading] = useState(false);
+  const [engagementError, setEngagementError] = useState<string | null>(null);
   const [plan, setPlan] = useState<"starter" | "growth" | "spotlight">("starter");
   const [reason, setReason] = useState("");
   const [granting, setGranting] = useState(false);
@@ -42,9 +45,22 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
   };
   const openPostPreview = async (post: any) => {
     setPreviewPost(post);
+    setEngagement(null);
+    setEngagementError(null);
     setPreviewLoading(true);
     try {
-      setPreviewPost(await fetchAdmin(`/api/admin/posts/${post.id}`));
+      const loadedPost = await fetchAdmin(`/api/admin/posts/${post.id}`);
+      setPreviewPost(loadedPost);
+      if (currentUser.role === "super_admin") {
+        setEngagementLoading(true);
+        try {
+          setEngagement(await fetchAdmin(`/api/admin/posts/${post.id}/engagement`));
+        } catch (err) {
+          setEngagementError(err instanceof Error ? err.message : "Could not load post engagement");
+        } finally {
+          setEngagementLoading(false);
+        }
+      }
     } catch (err) {
       setPreviewPost(null);
       toast({ title: "Could not load post", description: err instanceof Error ? err.message : "Request failed", variant: "destructive" });
@@ -97,6 +113,30 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
                 ))}
               </div>
             )}
+            {currentUser.role === "super_admin" && (
+              <section className="space-y-4 border-t border-border pt-4" aria-label="Post engagement details">
+                <h3 className="text-sm font-semibold">Engagement details</h3>
+                <p className="text-xs text-muted-foreground">Totals include all activity; each section shows the latest 100 entries.</p>
+                {engagementLoading && <p className="text-sm text-muted-foreground">Loading likes, comments, shares, and reposts…</p>}
+                {engagementError && <p className="text-sm text-destructive">{engagementError}</p>}
+                {engagement && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <EngagementList title={`Likes (${engagement.likes.total})`} rows={engagement.likes.users} empty="No likes yet." render={(row: any) => (
+                      <>{row.displayName || `@${row.username}`} <span className="text-muted-foreground">· {new Date(row.createdAt).toLocaleString()}</span></>
+                    )} />
+                    <EngagementList title={`Reposts (${engagement.reposts.total})`} rows={engagement.reposts.users} empty="No reposts yet." render={(row: any) => (
+                      <>{row.displayName || `@${row.username}`} <span className="text-muted-foreground">· {new Date(row.createdAt).toLocaleString()}</span></>
+                    )} />
+                    <EngagementList title={`Comments (${engagement.comments.total})`} rows={engagement.comments.items} empty="No comments yet." render={(row: any) => (
+                      <><span className="font-medium">{row.displayName || `@${row.username}`}</span>{row.parentCommentId && <span className="text-muted-foreground"> · reply</span>}<p className="mt-1 whitespace-pre-wrap break-words">{row.content}</p><span className="text-muted-foreground">{new Date(row.createdAt).toLocaleString()} · {row.likeCount} likes</span></>
+                    )} />
+                    <EngagementList title={`Share events (${engagement.shares.total})`} rows={engagement.shares.items} empty="No tracked shares yet." render={(row: any) => (
+                      <>{row.displayName || (row.username ? `@${row.username}` : "Anonymous link share")}<span className="text-muted-foreground"> · {row.source || "direct"} · {row.clickCount} click{row.clickCount === 1 ? "" : "s"} · {new Date(row.createdAt).toLocaleString()}</span></>
+                    )} />
+                  </div>
+                )}
+              </section>
+            )}
           </div>
         )}
         <DialogFooter>
@@ -106,6 +146,16 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
       </DialogContent>
     </Dialog>
   </>;
+}
+function EngagementList({ title, rows, empty, render }: { title: string; rows: any[]; empty: string; render: (row: any) => React.ReactNode }) {
+  return <section className="min-w-0 rounded-lg border border-border/70 p-3">
+    <h4 className="mb-2 text-xs font-semibold">{title}</h4>
+    {rows.length === 0 ? <p className="text-xs text-muted-foreground">{empty}</p> : (
+      <ul className="max-h-56 space-y-2 overflow-y-auto text-xs">
+        {rows.map((row, index) => <li key={row.id ?? `${row.userId}-${row.createdAt}-${index}`} className="break-words border-t border-border/50 pt-2 first:border-0 first:pt-0">{render(row)}</li>)}
+      </ul>
+    )}
+  </section>;
 }
 function List({ title, rows, label, actionLabel, onAction, inspectLabel, onInspect }: { title: string; rows: any[]; label: (row: any) => string; actionLabel?: string; onAction?: (row: any) => void; inspectLabel?: string; onInspect?: (row: any) => void }) {
   return <section className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm"><div className="border-b border-border/70 px-5 py-4"><h2 className="text-sm font-semibold">{title}</h2></div><div className="divide-y divide-border/60">{rows.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">Nothing needs attention here.</p> : rows.slice(0, 8).map((row) => { const href = row.targetType === "post" ? `/post/${row.targetId}` : row.targetType === "user" && row.target?.username ? `/profile/${row.target.username}` : `/post/${row.id}`; const authorUsername = row.authorUsername || row.target?.username; const status = row.status || (typeof row.isPublished === "boolean" ? row.isPublished ? "published" : "draft" : "published"); return <div key={row.id} className="flex items-center gap-3 px-5 py-3.5"><div className="min-w-0 flex-1"><Link href={href} target="_blank" rel="noreferrer" className="block hover:underline"><p className="truncate text-sm font-medium">{label(row)}</p></Link>{authorUsername ? <Link href={`/profile/${encodeURIComponent(authorUsername)}`} target="_blank" rel="noreferrer" className="mt-0.5 block truncate text-xs text-muted-foreground hover:text-primary hover:underline">Open @{authorUsername}</Link> : <p className="truncate text-xs text-muted-foreground">{row.authorDisplayName || row.category || "Awaiting review"}</p>}</div><Badge variant={status === "pending" || status === "draft" ? "secondary" : "outline"} className="text-[10px] capitalize">{status}</Badge>{inspectLabel && onInspect && <Button variant="ghost" size="sm" onClick={() => onInspect(row)} title={inspectLabel}><Eye className="h-4 w-4" /><span className="sr-only">{inspectLabel}</span></Button>}{actionLabel && onAction && <Button variant="outline" size="sm" onClick={() => onAction(row)}><Zap className="mr-1.5 h-3.5 w-3.5" />{actionLabel}</Button>}</div>; })}</div></section>;

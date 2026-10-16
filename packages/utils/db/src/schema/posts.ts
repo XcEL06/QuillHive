@@ -121,6 +121,7 @@ export const repostsTable = pgTable("reposts", {
 }, (t) => ({
   idxRepostsPostId: index("idx_reposts_post_id").on(t.postId),
   idxRepostsUserId: index("idx_reposts_user_id").on(t.userId),
+  uniqueRepostPerUserPost: uniqueIndex("reposts_user_post_unique").on(t.postId, t.userId),
 }));
 
 export const savedPostsTable = pgTable("saved_posts", {

@@ -585,6 +585,7 @@ export default function PostDetail() {
               <ShareSheet
                 postId={post.id}
                 title={post.title || undefined}
+                isReposted={Boolean((post as typeof post & { isReposted?: boolean }).isReposted)}
                 trigger={
                   <Button size="icon" variant="ghost" className="text-muted-foreground hover:text-foreground" data-testid="button-open-share-sheet">
                     <Share2 className="w-5 h-5" />

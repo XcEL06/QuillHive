@@ -779,7 +779,13 @@ export const sharePost = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const id = parseInt(req.params.id);
-  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, id));
+  const [post] = await db.select().from(postsTable).where(and(
+    eq(postsTable.id, id),
+    eq(postsTable.isPublished, true),
+    eq(postsTable.isDeleted, false),
+    visiblePostExpiryCondition(),
+    postVisibilityCondition(viewerId),
+  ));
   if (!post) return res.status(404).json({ error: "Post not found" });
   const existing = await db.select().from(postSharesTable).where(and(eq(postSharesTable.postId, id), eq(postSharesTable.userId, viewerId)));
   if (existing.length === 0) {
@@ -825,7 +831,9 @@ export const repostPost = async (req: Request, res: Response) => {
     await db.delete(repostsTable).where(and(eq(repostsTable.postId, id), eq(repostsTable.userId, viewerId)));
     isReposted = false;
   } else {
-    await db.insert(repostsTable).values({ postId: id, userId: viewerId });
+    await db.insert(repostsTable)
+      .values({ postId: id, userId: viewerId })
+      .onConflictDoNothing({ target: [repostsTable.postId, repostsTable.userId] });
     isReposted = true;
   }
   refreshTrustForUsers(viewerId, post.authorId);
@@ -840,6 +848,15 @@ export const repostPost = async (req: Request, res: Response) => {
 
 export const getReposts = async (req: Request, res: Response) => {
   const id = parseInt(req.params.id);
+  const viewerId = getViewerId(req);
+  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(and(
+    eq(postsTable.id, id),
+    eq(postsTable.isPublished, true),
+    eq(postsTable.isDeleted, false),
+    visiblePostExpiryCondition(),
+    postVisibilityCondition(viewerId),
+  ));
+  if (!post) return res.status(404).json({ error: "Post not found" });
   const reposts = await db
     .select({ userId: repostsTable.userId, createdAt: repostsTable.createdAt })
     .from(repostsTable)

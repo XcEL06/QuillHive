@@ -204,7 +204,12 @@ export async function listPosts(
   if (feed === "following" && viewerId) {
     const followingFiltered = followingIds.filter(id => !hiddenAuthorIds.includes(id));
     if (followingFiltered.length === 0) return { posts: [], total: 0, page, limit };
-    conds.push(inArray(postsTable.authorId, followingFiltered));
+    conds.push(or(
+      inArray(postsTable.authorId, followingFiltered),
+      inArray(postsTable.id, db.select({ postId: repostsTable.postId })
+        .from(repostsTable)
+        .where(inArray(repostsTable.userId, followingFiltered))),
+    )!);
   }
   if (type) conds.push(eq(postsTable.type, type));
   else conds.push(ne(postsTable.type, "spark"));
@@ -426,6 +431,40 @@ export async function listPosts(
       ...(reasonDetails ? { reasonDetails } : {}),
     };
   }));
+  if (feed === "following" && viewerId && enriched.length > 0) {
+    const followingIdsVisible = followingIds.filter(id => !hiddenAuthorIds.includes(id));
+    const repostRows = await db.select({
+      postId: repostsTable.postId,
+      createdAt: repostsTable.createdAt,
+      username: usersTable.username,
+      displayName: usersTable.displayName,
+      avatarUrl: usersTable.avatarUrl,
+      userId: usersTable.id,
+    }).from(repostsTable)
+      .innerJoin(usersTable, eq(usersTable.id, repostsTable.userId))
+      .where(and(
+        inArray(repostsTable.postId, enriched.map(post => post.id)),
+        inArray(repostsTable.userId, followingIdsVisible),
+      ))
+      .orderBy(desc(repostsTable.createdAt));
+    const repostedByPost = new Map<number, (typeof repostRows)[number]>();
+    for (const row of repostRows) {
+      if (!repostedByPost.has(row.postId)) repostedByPost.set(row.postId, row);
+    }
+    for (const post of enriched) {
+      const reposter = repostedByPost.get(post.id);
+      if (reposter) {
+        Object.assign(post, {
+          repostedBy: {
+            id: reposter.userId,
+            username: reposter.username,
+            displayName: reposter.displayName,
+            avatarUrl: reposter.avatarUrl,
+          },
+        });
+      }
+    }
+  }
   return { posts: enriched, total: enriched.length, page, limit };
 }
 
