@@ -273,7 +273,7 @@ export default function Write() {
     onUpdate: ({ editor: updatedEditor }) => setContent(updatedEditor.getHTML()),
     editorProps: {
       attributes: {
-        class: 'qh-editor focus:outline-none min-h-[40vh] max-w-none px-4 py-8',
+        class: 'qh-editor mx-auto min-h-[50vh] w-full max-w-[72ch] px-5 py-8 text-base leading-8 focus:outline-none sm:px-8 sm:py-12 sm:text-lg',
       },
     },
   });
@@ -896,11 +896,13 @@ export default function Write() {
     setAiResult('');
   };
 
+  const wordCount = editor?.getText().trim().split(/\s+/).filter(Boolean).length ?? 0;
+
   if (!editor) return null;
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto px-4 md:px-0 pb-20">
+      <div className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:px-8">
         <BackButton />
 
         {quotedPost && (
@@ -917,7 +919,7 @@ export default function Write() {
         )}
 
         {hasDraft && !draftRestored && (
-          <div className="mb-4 p-4 rounded-xl border border-amber-300/40 bg-amber-50 dark:bg-amber-950/20 flex items-center justify-between gap-3">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300/40 bg-amber-50 p-4 dark:bg-amber-950/20">
             <p className="text-sm text-amber-900 dark:text-amber-200">
               <Save className="w-4 h-4 inline mr-1" /> {t('write.unsavedDraft')}
             </p>
@@ -928,24 +930,38 @@ export default function Write() {
           </div>
         )}
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <h1 className="text-3xl font-serif font-bold">{editingPollId ? 'Edit poll' : editPostId ? 'Edit post' : t('write.newPiece')}</h1>
-          <div className="flex items-center gap-3">
-            {showSaved && <span className="text-xs text-emerald-600 dark:text-emerald-400 animate-in fade-in duration-300">Saved</span>}
+        <div className="mb-6 flex flex-col gap-5 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <Badge variant="outline" className="font-medium">
+                {editPostId ? 'Editing' : editingPollId ? 'Poll' : 'New draft'}
+              </Badge>
+              {showSaved && <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400" role="status">Saved</span>}
+            </div>
+            <h1 className="break-words text-3xl font-serif font-bold tracking-tight sm:text-4xl">
+              {editingPollId ? 'Edit poll' : editPostId ? 'Edit post' : t('write.newPiece')}
+            </h1>
+            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+              Shape your idea, add the details readers need, then publish when it’s ready.
+            </p>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             {!editPostId && (
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => handlePublish(false)}
                 disabled={isCreating || isUploadingImage || isUploadingAttachments}
-                className="rounded-xl"
+                className="min-w-0 flex-1 rounded-xl sm:flex-none"
               >
                 <Save className="w-4 h-4 mr-2" /> {t('write.draft')}
               </Button>
             )}
             <Button
+              type="button"
               onClick={() => handlePublish(true)}
               disabled={isCreating || isSavingEdit || isLoadingEdit || isUploadingImage || isUploadingAttachments || (!editPostId && enableSchedule && !scheduledAt)}
-              className="rounded-xl bg-gradient-to-r from-primary to-violet-500 text-white border-0 shadow-lg"
+              className="min-w-0 flex-1 rounded-xl bg-gradient-to-r from-primary to-violet-500 text-white shadow-lg sm:flex-none"
             >
               {isCreating || isSavingEdit || isLoadingEdit
                 ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -955,20 +971,23 @@ export default function Write() {
           </div>
         </div>
 
-        <div className="bg-card border border-border/60 rounded-3xl shadow-sm overflow-hidden mb-8">
+        <div className="mb-8 overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm sm:rounded-3xl">
           {isLoadingEdit && <div className="p-6 text-sm text-muted-foreground">Loading post editor...</div>}
 
           {/* Metadata */}
-          {!editingPollId && !isLoadingEdit && <div className="p-6 bg-muted/30 border-b border-border/60 grid grid-cols-1 md:grid-cols-2 gap-6">
+          {!editingPollId && !isLoadingEdit && <div className="grid grid-cols-1 gap-x-8 gap-y-6 border-b border-border/60 bg-card p-4 sm:p-7 md:grid-cols-2">
 
             {/* Type */}
-            <div className="space-y-2 col-span-1 md:col-span-2">
-              <Label>{t('write.typeLabel')}</Label>
+            <div className="col-span-1 space-y-3 md:col-span-2">
+              <div>
+                <Label className="text-sm font-semibold">{t('write.typeLabel')}</Label>
+                <p className="mt-1 text-xs text-muted-foreground">Choose the format that best fits what you’re sharing.</p>
+              </div>
               {editPostId ? (
                 <p className="text-sm capitalize text-muted-foreground">{type.replace(/_/g, ' ')}</p>
               ) : (
               <>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
                 {PRIMARY_POST_TYPES.map(pt => {
                   const Icon = pt.icon;
                   const isActive = type === pt.value;
@@ -977,11 +996,18 @@ export default function Write() {
                       key={pt.value}
                       type="button"
                       onClick={() => setType(pt.value)}
-                      className={`rounded-xl border p-3 text-left transition-all ${isActive ? pt.activeBg : `bg-background border-border/60 hover:${pt.bg}`}`}
+                      aria-pressed={isActive}
+                      className={`flex min-w-0 items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
+                        isActive
+                          ? `${pt.activeBg} shadow-sm`
+                          : 'border-border/70 bg-background hover:border-primary/40 hover:bg-muted/30'
+                      }`}
                     >
-                      <Icon className={`w-5 h-5 mb-1.5 ${isActive ? pt.color : 'text-muted-foreground'}`} />
-                      <p className={`font-semibold text-sm ${isActive ? pt.color : 'text-foreground'}`}>{pt.label}</p>
-                      <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{pt.desc}</p>
+                      <Icon className={`mt-0.5 h-5 w-5 shrink-0 ${isActive ? pt.color : 'text-muted-foreground'}`} />
+                      <span className="min-w-0">
+                        <span className={`block break-words text-sm font-semibold ${isActive ? pt.color : 'text-foreground'}`}>{pt.label}</span>
+                        <span className="mt-1 block break-words text-xs leading-relaxed text-muted-foreground">{pt.desc}</span>
+                      </span>
                     </button>
                   );
                 })}
@@ -1021,10 +1047,13 @@ export default function Write() {
             </div>
 
             {/* Title / A-B Testing */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>{t('write.titleLabel')} {enableAB ? t('write.abTestSuffix') : t('write.optionalSuffix')}</Label>
-                {!editPostId && <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <div className="col-span-1 min-w-0 space-y-3 md:col-span-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <Label className="text-sm font-semibold">{t('write.titleLabel')} {enableAB ? t('write.abTestSuffix') : t('write.optionalSuffix')}</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">A strong title helps people decide to read.</p>
+                </div>
+                {!editPostId && <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                   <FlaskConical className="w-3 h-3" />
                   <span>{t('write.abTest')}</span>
                   <Switch checked={enableAB} onCheckedChange={setEnableAB} />
@@ -1032,36 +1061,38 @@ export default function Write() {
               </div>
               {enableAB ? (
                 <div className="space-y-2">
-                  <Input placeholder={t('write.titleAPlaceholder')} value={titleA} onChange={e => setTitleA(e.target.value)} className="font-serif text-base rounded-xl bg-background" />
-                  <Input placeholder={t('write.titleBPlaceholder')} value={titleB} onChange={e => setTitleB(e.target.value)} className="font-serif text-base rounded-xl bg-background" />
+                  <Input aria-label="Title A" placeholder={t('write.titleAPlaceholder')} value={titleA} onChange={e => setTitleA(e.target.value)} className="h-12 rounded-xl bg-background font-serif text-lg" />
+                  <Input aria-label="Title B" placeholder={t('write.titleBPlaceholder')} value={titleB} onChange={e => setTitleB(e.target.value)} className="h-12 rounded-xl bg-background font-serif text-lg" />
                   <p className="text-xs text-muted-foreground">{t('write.abTestHint')}</p>
                 </div>
               ) : (
                 <Input
+                  aria-label={t('write.titleLabel')}
                   placeholder={t('write.titlePlaceholder')}
                   value={title}
                   onChange={e => setTitle(e.target.value)}
-                  className="font-serif text-lg rounded-xl bg-background"
+                  className="h-14 rounded-xl bg-background px-4 font-serif text-xl sm:text-2xl"
                 />
               )}
             </div>
 
             {/* Tags */}
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <Label className="flex items-center gap-2">
-                <Tags className="w-4 h-4" /> {t('write.tagsLabel')}
+                <Tags className="w-4 h-4" /> {t('write.tags', 'Tags')}
               </Label>
               <Input
                 placeholder={t('write.tagsInputPlaceholder')}
                 value={tagsStr}
                 onChange={e => setTagsStr(e.target.value)}
-                className="rounded-xl bg-background"
+                className="h-11 rounded-xl bg-background"
               />
+              <p className="text-xs leading-relaxed text-muted-foreground">Add a few relevant topics, separated by commas.</p>
             </div>
 
             {/* Series */}
             {!editPostId && mySeries.length > 0 && (
-              <div className="space-y-2">
+              <div className="min-w-0 space-y-2">
                 <Label className="flex items-center gap-2">
                   <BookOpen className="w-4 h-4" /> Add to Series
                 </Label>
@@ -1081,14 +1112,14 @@ export default function Write() {
             )}
 
             {/* Cover image */}
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2 rounded-xl border border-border/60 bg-muted/20 p-4">
               <Label className="flex items-center gap-2">
-                <ImageIcon className="w-4 h-4" /> {t('write.coverImageLabel')}
+                <ImageIcon className="w-4 h-4" /> {t('write.coverImage', 'Cover image')}
               </Label>
               <ImageUploadField value={imageUrl} onChange={setImageUrl} onUploadingChange={setIsUploadingImage} category="post" label={t('write.chooseCoverImage', 'Choose cover image')} />
             </div>
             {/* Attachments */}
-            <div className="space-y-2 col-span-1 md:col-span-2">
+            <div className="col-span-1 min-w-0 space-y-2 rounded-xl border border-border/60 bg-muted/20 p-4 md:col-span-2">
               <Label className="flex items-center gap-2">
                 <ImageIcon className="w-4 h-4" /> {t('write.attachFilesLabel')}
               </Label>
@@ -1096,7 +1127,7 @@ export default function Write() {
                 attachments={postAttachments}
                 onChange={setPostAttachments}
                 onUploadingChange={setIsUploadingAttachments}
-                max={20}
+                max={10}
                 label={t('write.addFiles')}
               />
               <p className="text-xs text-muted-foreground">{t('write.attachFilesHint')}</p>
@@ -1135,34 +1166,34 @@ export default function Write() {
 
           {!editingPollId && !isLoadingEdit && <>
           {/* Toolbar */}
-          <div className="border-b border-border/60 bg-card p-2 flex flex-wrap items-center gap-1 sticky top-16 z-30 shadow-sm">
-            <Button size="icon" variant="ghost" onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive('bold') ? 'bg-muted' : ''}>
+          <div className="sticky top-16 z-30 flex flex-wrap items-center gap-1 border-b border-border/60 bg-background/95 p-2 shadow-sm backdrop-blur">
+            <Button type="button" size="icon" variant="ghost" aria-label="Bold" title="Bold" onClick={() => editor.chain().focus().toggleBold().run()} className={editor.isActive('bold') ? 'bg-muted' : ''}>
               <Bold className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="ghost" onClick={() => editor.chain().focus().toggleItalic().run()} className={editor.isActive('italic') ? 'bg-muted' : ''}>
+            <Button type="button" size="icon" variant="ghost" aria-label="Italic" title="Italic" onClick={() => editor.chain().focus().toggleItalic().run()} className={editor.isActive('italic') ? 'bg-muted' : ''}>
               <Italic className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="ghost" onClick={() => editor.chain().focus().toggleUnderline().run()} className={editor.isActive('underline') ? 'bg-muted' : ''}>
+            <Button type="button" size="icon" variant="ghost" aria-label="Underline" title="Underline" onClick={() => editor.chain().focus().toggleUnderline().run()} className={editor.isActive('underline') ? 'bg-muted' : ''}>
               <UnderlineIcon className="w-4 h-4" />
             </Button>
             <div className="w-px h-6 bg-border mx-2" />
-            <Button size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={editor.isActive('heading', { level: 1 }) ? 'bg-muted' : ''}>
+            <Button type="button" size="sm" variant="ghost" aria-label="Heading 1" title="Heading 1" onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} className={editor.isActive('heading', { level: 1 }) ? 'bg-muted' : ''}>
               <Heading1 className="w-4 h-4" />
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={editor.isActive('heading', { level: 2 }) ? 'bg-muted' : ''}>
+            <Button type="button" size="sm" variant="ghost" aria-label="Heading 2" title="Heading 2" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} className={editor.isActive('heading', { level: 2 }) ? 'bg-muted' : ''}>
               <Heading2 className="w-4 h-4" />
             </Button>
             <div className="w-px h-6 bg-border mx-2" />
-            <Button size="icon" variant="ghost" onClick={() => editor.chain().focus().toggleBulletList().run()} className={editor.isActive('bulletList') ? 'bg-muted' : ''}>
+            <Button type="button" size="icon" variant="ghost" aria-label="Bulleted list" title="Bulleted list" onClick={() => editor.chain().focus().toggleBulletList().run()} className={editor.isActive('bulletList') ? 'bg-muted' : ''}>
               <List className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="ghost" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={editor.isActive('orderedList') ? 'bg-muted' : ''}>
+            <Button type="button" size="icon" variant="ghost" aria-label="Numbered list" title="Numbered list" onClick={() => editor.chain().focus().toggleOrderedList().run()} className={editor.isActive('orderedList') ? 'bg-muted' : ''}>
               <ListOrdered className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="ghost" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={editor.isActive('blockquote') ? 'bg-muted' : ''}>
+            <Button type="button" size="icon" variant="ghost" aria-label="Quote" title="Quote" onClick={() => editor.chain().focus().toggleBlockquote().run()} className={editor.isActive('blockquote') ? 'bg-muted' : ''}>
               <Quote className="w-4 h-4" />
             </Button>
-            {aiToolsAvailable && <div className="ml-auto flex items-center gap-1 flex-wrap">
+            {aiToolsAvailable && <div className="flex w-full flex-wrap items-center gap-1 border-t border-border/60 pt-2 sm:ml-auto sm:w-auto sm:border-0 sm:pt-0">
               <Button size="sm" variant="ghost" onClick={() => { setAiPanel('titles'); setAiResult(''); }} className="rounded-full text-xs gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30">
                 <Type className="w-3.5 h-3.5" /> {t('write.aiTitles', 'Titles')}
               </Button>
@@ -1204,6 +1235,10 @@ export default function Write() {
                 )}
               </div>
             )}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 bg-muted/20 px-5 py-3 text-xs text-muted-foreground sm:px-8">
+            <span>{wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}</span>
+            <span>{showSaved ? 'Draft saved to your account' : lastSavedAt ? 'Local draft saved' : 'Local autosave runs every 30 seconds'}</span>
           </div>
           </>}
         </div>
