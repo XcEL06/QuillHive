@@ -197,7 +197,7 @@ export default function SupportHub() {
         {selectedTicket && <Card className="rounded-2xl">
           <CardHeader><CardTitle>{selectedTicket.subject}</CardTitle><p className="text-xs text-muted-foreground">Status: {selectedTicket.status}</p></CardHeader>
           <CardContent className="space-y-3">
-            {ticketMessages.map(item => <div key={item.id} className="rounded-xl border border-border/60 p-3"><p className="whitespace-pre-wrap text-sm">{item.message}</p><p className="mt-2 text-xs text-muted-foreground"><Timestamp value={item.createdAt} mode="datetime" /></p></div>)}
+            {ticketMessages.map(item => <div key={item.id} className="rounded-xl border border-border/60 p-3"><p className="whitespace-pre-wrap text-sm">{item.message}</p><p className="mt-2 text-xs text-muted-foreground">{item.senderLabel || (item.userId === selectedTicket.userId ? "You" : "QuillHive Support")} · <Timestamp value={item.createdAt} mode="datetime" /></p></div>)}
             <Textarea value={ticketReply} onChange={event => setTicketReply(event.target.value)} placeholder="Reply to support..." rows={3} />
             <Button onClick={() => void replyToTicket()} disabled={sendingReply || !ticketReply.trim()}>Send Reply</Button>
           </CardContent>

@@ -14,6 +14,45 @@ import { sendEmail } from "../email/email.service";
 export const supportRouter = Router();
 supportRouter.use(requireAuth);
 
+const SUPPORT_STAFF_ROLES = new Set(["moderator", "admin", "super_admin"]);
+
+function getSupportSenderLabel(
+  message: { userId: number; message: string },
+  ticket: { userId: number },
+  sender: { role: string; displayName: string | null; username: string },
+) {
+  const publicIntake = ticket.userId === message.userId
+    && SUPPORT_STAFF_ROLES.has(sender.role)
+    && /^(Name:|APPEAL\b|DMCA TAKEDOWN\b)/i.test(message.message);
+  if (publicIntake) {
+    const name = message.message.match(/^Name:\s*(.+)$/im)?.[1]?.trim();
+    return name ? `${name} (Customer)` : "Customer";
+  }
+  if (SUPPORT_STAFF_ROLES.has(sender.role)) return "QuillHive Support";
+  return sender.displayName || sender.username || `User #${message.userId}`;
+}
+
+async function getTicketMessages(ticket: { id: number; userId: number }) {
+  const rows = await db.select({
+    message: supportMessagesTable,
+    senderRole: usersTable.role,
+    senderDisplayName: usersTable.displayName,
+    senderUsername: usersTable.username,
+  })
+    .from(supportMessagesTable)
+    .innerJoin(usersTable, eq(usersTable.id, supportMessagesTable.userId))
+    .where(eq(supportMessagesTable.ticketId, ticket.id))
+    .orderBy(supportMessagesTable.createdAt);
+  return rows.map(({ message, senderRole, senderDisplayName, senderUsername }) => ({
+    ...message,
+    senderLabel: getSupportSenderLabel(message, ticket, {
+      role: senderRole,
+      displayName: senderDisplayName,
+      username: senderUsername,
+    }),
+  }));
+}
+
 supportRouter.get("/tickets", async (req: any, res) => {
   const tickets = await db
     .select()
@@ -47,7 +86,7 @@ supportRouter.get("/admin/tickets", requirePermission("manage_support"), async (
 supportRouter.get("/admin/tickets/:id/messages", requirePermission("manage_support"), validateParams(z.object({ id: z.coerce.number().int().positive() })), async (req: any, res) => {
   const [ticket] = await db.select().from(supportTicketsTable).where(eq(supportTicketsTable.id, Number(req.params.id)));
   if (!ticket) return res.status(404).json({ error: "Ticket not found" });
-  const messages = await db.select().from(supportMessagesTable).where(eq(supportMessagesTable.ticketId, ticket.id)).orderBy(supportMessagesTable.createdAt);
+  const messages = await getTicketMessages(ticket);
   return res.json({ ticket, messages });
 });
 
@@ -55,11 +94,12 @@ supportRouter.post("/admin/tickets/:id/message", requirePermission("manage_suppo
   const [ticket] = await db.select().from(supportTicketsTable).where(eq(supportTicketsTable.id, Number(req.params.id)));
   if (!ticket) return res.status(404).json({ error: "Ticket not found" });
   const [message] = await db.insert(supportMessagesTable).values({ ticketId: ticket.id, userId: req.currentUser.id, message: req.body.message, fileId: null }).returning();
+  const labeledMessage = { ...message, senderLabel: "QuillHive Support" };
   await db.update(supportTicketsTable).set({ status: "open", updatedAt: new Date() }).where(eq(supportTicketsTable.id, ticket.id));
   await notify({ userId: ticket.userId, actorId: req.currentUser.id, type: "admin_action", title: "Support replied", message: req.body.message.slice(0, 160), url: "/support" });
-  emitToSupportTicket(ticket.id, "support:message", { ticketId: ticket.id, message });
-  emitToUser(ticket.userId, "support:message", { ticketId: ticket.id, message });
-  return res.status(201).json(message);
+  emitToSupportTicket(ticket.id, "support:message", { ticketId: ticket.id, message: labeledMessage });
+  emitToUser(ticket.userId, "support:message", { ticketId: ticket.id, message: labeledMessage });
+  return res.status(201).json(labeledMessage);
 });
 
 supportRouter.patch("/admin/tickets/:id", requirePermission("manage_support"), validateParams(z.object({ id: z.coerce.number().int().positive() })), validateBody(z.object({ status: z.enum(["open", "pending", "resolved", "closed"]) })), async (req: any, res) => {
@@ -93,7 +133,13 @@ supportRouter.post("/tickets", preventSpam("support-tickets", { max: 5, windowMs
       message: req.body.message,
       fileId: req.body.fileId ?? null,
     }).returning();
-    return { ticket: createdTicket, message: createdMessage };
+    return {
+      ticket: createdTicket,
+      message: {
+        ...createdMessage,
+        senderLabel: req.currentUser.displayName || req.currentUser.username || `User #${req.currentUser.id}`,
+      },
+    };
   });
   const { sendEmail } = await import("../email/email.service");
   const ownerEmail = process.env.OWNER_EMAIL;
@@ -125,7 +171,7 @@ supportRouter.post("/tickets", preventSpam("support-tickets", { max: 5, windowMs
 supportRouter.get("/tickets/:id/messages", validateParams(z.object({ id: z.coerce.number().int().positive() })), async (req: any, res) => {
   const [ticket] = await db.select().from(supportTicketsTable).where(and(eq(supportTicketsTable.id, Number(req.params.id)), eq(supportTicketsTable.userId, req.currentUser.id)));
   if (!ticket) return res.status(404).json({ error: "Ticket not found" });
-  const messages = await db.select().from(supportMessagesTable).where(eq(supportMessagesTable.ticketId, ticket.id)).orderBy(supportMessagesTable.createdAt);
+  const messages = await getTicketMessages(ticket);
   return res.json({ ticket, messages });
 });
 
@@ -141,14 +187,18 @@ supportRouter.post("/tickets/:id/message", validateParams(z.object({ id: z.coerc
     message: req.body.message,
     fileId: req.body.fileId ?? null,
   }).returning();
+  const labeledMessage = {
+    ...message,
+    senderLabel: req.currentUser.displayName || req.currentUser.username || `User #${req.currentUser.id}`,
+  };
   await db.update(supportTicketsTable).set({ updatedAt: new Date() }).where(eq(supportTicketsTable.id, ticket.id));
   const [supportOwner] = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.role, "super_admin")).limit(1);
   if (supportOwner && supportOwner.id !== req.currentUser.id) {
     void notify({ userId: supportOwner.id, actorId: req.currentUser.id, type: "system", title: "Support ticket updated", message: `${req.currentUser.displayName ?? req.currentUser.username ?? "A member"} replied to ${ticket.subject}`, url: "/admin" }).catch(() => {});
   }
-  emitToSupportTicket(ticket.id, "support:message", { ticketId: ticket.id, message });
-  emitToUser(req.currentUser.id, "support:message", { ticketId: ticket.id, message });
-  return res.status(201).json(message);
+  emitToSupportTicket(ticket.id, "support:message", { ticketId: ticket.id, message: labeledMessage });
+  emitToUser(req.currentUser.id, "support:message", { ticketId: ticket.id, message: labeledMessage });
+  return res.status(201).json(labeledMessage);
 });
 
 supportRouter.post("/report", preventSpam("reports", { max: 8, windowMs: 60_000, contentField: "reason" }), validateBody(z.object({
