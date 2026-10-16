@@ -240,6 +240,7 @@ export const listPosts = async (req: Request, res: Response) => {
       .where(and(
         eq(postsTable.authorId, viewerId),
         eq(postsTable.isPublished, true),
+        eq(postsTable.isArchived, false),
         eq(postsTable.isDeleted, false),
         visiblePostExpiryCondition(),
         postVisibilityCondition(viewerId),
@@ -251,6 +252,67 @@ export const listPosts = async (req: Request, res: Response) => {
 
   const result = await PostService.listPosts(viewerId, { type, feed, page, limit });
   return res.json(result);
+};
+
+export const listArchivedPosts = async (req: Request, res: Response) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const page = Math.max(1, Number.parseInt(req.query.page as string, 10) || 1);
+  const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit as string, 10) || 20));
+  const [viewer] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, viewerId));
+  const conditions = [
+    eq(postsTable.isArchived, true),
+    eq(postsTable.isDeleted, false),
+    viewer?.role === "super_admin" ? sql`TRUE` : eq(postsTable.authorId, viewerId),
+  ];
+  const [{ total } = { total: 0 }] = await db.select({ total: sql<number>`count(*)::int` })
+    .from(postsTable).where(and(...conditions));
+  const rows = await db.select(PostService.stablePostSelection).from(postsTable)
+    .where(and(...conditions))
+    .orderBy(desc(postsTable.updatedAt), desc(postsTable.createdAt))
+    .limit(limit).offset((page - 1) * limit);
+  const posts = await Promise.all(rows.map(post => enrichPost(post as typeof postsTable.$inferSelect, viewerId)));
+  return res.json({ posts, total, page, limit });
+};
+
+export const updatePostArchive = async (req: Request, res: Response) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const postId = Number(req.params.id);
+  const archived = req.method === "POST";
+  const [post] = await db.select({
+    id: postsTable.id,
+    authorId: postsTable.authorId,
+    groupId: postsTable.groupId,
+    isDeleted: postsTable.isDeleted,
+    archiveType: postsTable.archiveType,
+  }).from(postsTable).where(eq(postsTable.id, postId));
+  if (!post || post.isDeleted) return res.status(404).json({ error: "Post not found" });
+  const [viewer] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, viewerId));
+  const isSuperAdmin = viewer?.role === "super_admin";
+  const isOwner = post.authorId === viewerId;
+  let canModerateGroup = false;
+  if (post.groupId !== null) {
+    const [group] = await db.select({ creatorId: groupsTable.creatorId }).from(groupsTable).where(eq(groupsTable.id, post.groupId));
+    if (group?.creatorId === viewerId) canModerateGroup = true;
+    if (!canModerateGroup) {
+      const [membership] = await db.select({ role: groupMembersTable.role, status: groupMembersTable.status })
+        .from(groupMembersTable).where(and(eq(groupMembersTable.groupId, post.groupId), eq(groupMembersTable.userId, viewerId)));
+      canModerateGroup = ["admin", "moderator"].includes(membership?.role ?? "") && ["active", "muted"].includes(membership?.status ?? "");
+    }
+  }
+  if (archived && !isOwner && !isSuperAdmin) return res.status(403).json({ error: "Only the author can archive this post" });
+  if (!archived && !isSuperAdmin && !(isOwner && post.archiveType === "owner") && !(canModerateGroup && post.archiveType === "moderation")) {
+    return res.status(403).json({ error: "You cannot restore this archived post" });
+  }
+  await db.update(postsTable).set({
+    isArchived: archived,
+    archiveType: archived ? "owner" : post.archiveType,
+    updatedAt: new Date(),
+  }).where(eq(postsTable.id, postId));
+  await deleteCachePattern("feed:*");
+  await memDeletePattern("feed:*");
+  return res.json({ archived, postId });
 };
 
 export const listRecentSparks = async (req: Request, res: Response) => {
@@ -595,6 +657,7 @@ export const getFeed = async (req: Request, res: Response) => {
     .where(and(
       ne(postsTable.type, "spark"),
       eq(postsTable.isPublished, true),
+      eq(postsTable.isArchived, false),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
       postVisibilityCondition(viewerId),

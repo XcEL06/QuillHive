@@ -47,6 +47,8 @@ type EnrichedPost = Post & {
   isEdited?: boolean;
   trustScore?: { cis: number; retention: number; tier: TrustTier } | null;
   groupId?: number | null;
+  isArchived?: boolean;
+  archiveType?: string;
   authorGroupRole?: 'owner' | 'admin' | 'moderator' | 'member' | null;
   titleA?: string | null;
   titleB?: string | null;
@@ -744,8 +746,22 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
         toast({ title: 'Comment settings updated' });
         break;
       case 'archive':
-        toast({ title: 'Archive is unavailable for this post', variant: 'destructive' });
+      case 'restore': {
+        const archived = action === 'archive';
+        const response = await fetch(apiUrl(`/api/posts/${post.id}/archive`), {
+          method: archived ? 'POST' : 'DELETE',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        if (!response.ok) throw new Error(result?.error ?? `Could not ${archived ? 'archive' : 'restore'} this post.`);
+        setPost(current => ({ ...current, isArchived: archived }));
+        if (archived) setIsHidden(true);
+        window.dispatchEvent(new CustomEvent('quillhive:post-archive-changed'));
+        await queryClient.invalidateQueries({ queryKey: ['/api/feed'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
+        toast({ title: archived ? 'Post archived' : 'Post restored', description: archived ? 'You can find it in your archive.' : 'The post is visible again.' });
         break;
+      }
       default:
         toast({ title: 'Action saved', description: 'Your preference has been updated.' });
     }
@@ -760,6 +776,8 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
       ? (post as EnrichedPost & { status: PostOptionPost['status'] }).status
       : 'active'),
     authorId: post.author.id,
+    isArchived: Boolean(post.isArchived),
+    archiveType: post.archiveType,
   };
 
   if (isHidden) return null;
@@ -880,6 +898,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
               post={optionPost}
               currentUserId={currentUser?.id}
               isOwner={isOwner}
+              canRestore={Boolean(post.isArchived && ((isOwner && post.archiveType !== 'moderation') || currentUser?.role === 'super_admin'))}
               isSaved={post.isSaved}
               sharingEnabled={post.sharingEnabled !== false}
               hideAnalytics={hideAnalytics}

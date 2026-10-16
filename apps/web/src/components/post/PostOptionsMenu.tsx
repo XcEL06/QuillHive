@@ -64,6 +64,8 @@ export type PostOptionPost = {
   type: 'article' | 'update' | 'portfolio' | 'job' | 'gig' | 'group_post';
   status: 'active' | 'filled' | 'closed' | 'completed' | 'archived';
   authorId: number | string;
+  isArchived?: boolean;
+  archiveType?: string;
 };
 
 export type PostOptionAction =
@@ -74,6 +76,7 @@ export type PostOptionAction =
   | 'boost'
   | 'toggle-comments'
   | 'archive'
+  | 'restore'
   | 'filled'
   | 'completed'
   | 'closed'
@@ -100,6 +103,7 @@ export type PostOptionsMenuProps = {
   post: PostOptionPost;
   currentUserId?: number | string | null;
   isOwner: boolean;
+  canRestore?: boolean;
   isPinned?: boolean;
   commentsEnabled?: boolean;
   sharingEnabled?: boolean;
@@ -137,6 +141,7 @@ export function PostOptionsMenu({
   post,
   currentUserId,
   isOwner,
+  canRestore = false,
   isPinned = false,
   commentsEnabled = true,
   sharingEnabled = true,
@@ -217,7 +222,9 @@ export function PostOptionsMenu({
       label: 'Visibility',
       items: [
         { label: commentsEnabled ? 'Turn Off Comments' : 'Turn On Comments', action: 'toggle-comments', icon: MessageCircleOff },
-        { label: 'Archive Post', action: 'archive' as const, icon: Archive },
+        ...(post.isArchived
+          ? canRestore ? [{ label: 'Restore Post', action: 'restore' as const, icon: Redo2 }] : []
+          : [{ label: 'Archive Post', action: 'archive' as const, icon: Archive }]),
         { label: 'Delete Post', action: 'delete' as const, icon: Trash2, destructive: true },
         ...(post.type === 'job' ? [
           ...(post.status === 'active' ? [
@@ -259,6 +266,13 @@ export function PostOptionsMenu({
       items: [],
     },
   ];
+
+  if (canRestore && post.isArchived) {
+    viewerSections.unshift({
+      label: 'Archived post',
+      items: [{ label: 'Restore Post', action: 'restore', icon: Redo2 }],
+    });
+  }
 
   if (!isOwner && post.type === 'job') {
     viewerSections.splice(1, 0, {

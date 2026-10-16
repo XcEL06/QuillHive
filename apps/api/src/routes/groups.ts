@@ -824,7 +824,7 @@ router.get("/:id/posts", async (req, res) => {
     }
   }
 
-  const visibility = and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId, isSuperAdmin));
+  const visibility = and(eq(postsTable.groupId, id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), eq(postsTable.isArchived, false), postVisibilityCondition(viewerId, isSuperAdmin));
   const [totalResult] = await db.select({ count: sql<number>`count(*)::int` }).from(postsTable).where(visibility);
   const posts = await db.select({ post: postsTable, groupDetails: groupPostDetailsTable }).from(postsTable)
     .leftJoin(groupPostDetailsTable, eq(groupPostDetailsTable.postId, postsTable.id))

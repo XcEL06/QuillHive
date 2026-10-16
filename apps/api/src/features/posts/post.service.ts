@@ -88,6 +88,8 @@ export const stablePostSelection = {
   editedCount: postsTable.editedCount,
   isDeleted: postsTable.isDeleted,
   deletedAt: postsTable.deletedAt,
+  isArchived: postsTable.isArchived,
+  archiveType: postsTable.archiveType,
   createdAt: postsTable.createdAt,
   updatedAt: postsTable.updatedAt,
 };
@@ -198,6 +200,7 @@ export async function listPosts(
 
   const conds = [
     eq(postsTable.isPublished, true),
+    eq(postsTable.isArchived, false),
     visiblePostExpiryCondition(),
     postVisibilityCondition(viewerId),
   ];

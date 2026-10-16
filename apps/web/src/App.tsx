@@ -34,6 +34,7 @@ const Admin = lazy(() => import("@/pages/admin/Admin"));
 const CreatorDashboard = lazy(() => import("@/pages/dashboard/CreatorDashboard"));
 const ProfileViewers = lazy(() => import("@/pages/profile/ProfileViewers"));
 const Saved = lazy(() => import("@/pages/saved/Saved"));
+const Archive = lazy(() => import("@/pages/archive/Archive"));
 const Trending = lazy(() => import("@/pages/trending/Trending"));
 const UploadCenter = lazy(() => import("@/pages/upload/UploadCenter"));
 const SupportHub = lazy(() => import("@/pages/support/SupportHub"));
@@ -351,6 +352,9 @@ function Router() {
       </Route>
       <Route path="/saved">
         <AuthGuard><Saved /></AuthGuard>
+      </Route>
+      <Route path="/archive">
+        <AuthGuard><Archive /></AuthGuard>
       </Route>
       <Route path="/drafts">
         <AuthGuard><Drafts /></AuthGuard>

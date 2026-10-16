@@ -76,5 +76,6 @@ export function postVisibilityCondition(viewerId: number | null, isSuperAdmin = 
             )
           )
       )`;
-  return and(postTypeVisibility, groupVisibility, authorAudienceVisibility)!;
+  const audienceVisibility = or(sql`${postsTable.groupId} IS NOT NULL`, authorAudienceVisibility)!;
+  return and(postTypeVisibility, groupVisibility, audienceVisibility)!;
 }

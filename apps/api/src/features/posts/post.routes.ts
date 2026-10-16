@@ -107,7 +107,10 @@ const draftBodySchema = z.object({
 export const postsRouter = Router();
 postsRouter.param("id", resolvePostPublicId);
 postsRouter.get("/my-drafts", PostController.listMyDrafts);
+postsRouter.get("/archived", requireAuth, PostController.listArchivedPosts);
 postsRouter.post("/draft", validateBody(draftBodySchema), PostController.saveDraft);
+postsRouter.post("/:id/archive", requireAuth, validateParams(idParamsSchema), PostController.updatePostArchive);
+postsRouter.delete("/:id/archive", requireAuth, validateParams(idParamsSchema), PostController.updatePostArchive);
 postsRouter.get("/draft/:id", validateParams(idParamsSchema), PostController.getDraft);
 postsRouter.delete("/draft/:id", validateParams(idParamsSchema), PostController.deleteDraft);
 postsRouter.get("/", optionalAuth, validateQuery(listPostsQuerySchema), PostController.listPosts);

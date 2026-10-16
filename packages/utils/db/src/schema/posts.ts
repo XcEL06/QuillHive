@@ -47,6 +47,8 @@ export const postsTable = pgTable("posts", {
   sponsorUrl: text("sponsor_url"),
   isDeleted: boolean("is_deleted").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
+  isArchived: boolean("is_archived").notNull().default(false),
+  archiveType: text("archive_type").notNull().default("owner"),
   isOfficialPost: boolean("is_official_post").notNull().default(false),
   postCategory: text("post_category"),
   officialPostPriority: integer("official_post_priority").notNull().default(0),

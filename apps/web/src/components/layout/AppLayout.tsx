@@ -6,7 +6,7 @@ import {
   Compass, PenLine, MessageCircle, User as UserIcon,
   Bell, Moon, Sun, LogOut, Briefcase, Film, Settings, ShieldCheck,
   BarChart3, BookOpen, Users, Users2, Handshake,
-  Bookmark, FileText, Star, Sparkles, Link2, LifeBuoy,
+  Bookmark, FileText, Star, Sparkles, Link2, LifeBuoy, Archive,
 } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { useTheme } from "@/hooks/use-theme";
@@ -154,6 +154,7 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
     { href: "/workspace?tab=collaborate", icon: Handshake, label: "Exchange" },
     { href: "/library", icon: BookOpen, label: "Library" },
     { href: "/saved", icon: Bookmark, label: "Saved" },
+    { href: "/archive", icon: Archive, label: "Archive" },
   ];
   const avatarUrl = mediaUrl(user?.avatarUrl);
 
@@ -298,6 +299,9 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
                   <DropdownMenuItem asChild>
                     <Link href="/saved" className="cursor-pointer w-full flex items-center gap-2">
                       <Bookmark className="w-4 h-4" /> Saved Posts
+                    </Link>
+                    <Link href="/archive" className="cursor-pointer w-full flex items-center gap-2">
+                      <Archive className="w-4 h-4" /> Your Archive
                     </Link>
                   </DropdownMenuItem>
                   {canAccessStudio && (
