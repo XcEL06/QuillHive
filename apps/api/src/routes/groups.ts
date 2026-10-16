@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { NextFunction, Request, Response } from "express";
 import { db } from "@workspace/db";
 import { groupsTable, groupMembersTable, groupJoinRequestsTable, groupBansTable, groupPostDetailsTable, groupPinnedPostsTable, groupActivityLogsTable, postsTable, jobsTable, userTrustScoresTable, commentsTable, reportsTable, usersTable } from "@workspace/db/schema";
-import { eq, and, sql, ilike, desc, inArray, gte } from "drizzle-orm";
+import { eq, and, sql, ilike, desc, inArray, gte, ne, or } from "drizzle-orm";
 import { getSessionUserId } from "../lib/auth";
 import { loadCurrentUser } from "../lib/auth-types";
 import { enrichPost } from "../features/profiles/profile.service";
@@ -183,33 +183,61 @@ async function enrichGroup(group: any, viewerId: number | null, isSuperAdmin = f
 router.get("/", async (req, res) => {
   const viewer = await loadCurrentUser(req);
   const viewerId = viewer?.id ?? null;
-  const search = req.query.search as string | undefined;
-  const page = parseInt(req.query.page as string) || 1;
+  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+  const category = typeof req.query.category === "string" ? req.query.category.trim() : "";
+  const scope = req.query.scope === "joined" ? "joined" : "discover";
+  const requestedPage = Number.parseInt(req.query.page as string, 10);
+  const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1;
   const limit = 20;
+  const membershipRows = viewerId
+    ? await db.select({ groupId: groupMembersTable.groupId }).from(groupMembersTable)
+      .where(and(eq(groupMembersTable.userId, viewerId), inArray(groupMembersTable.status, ["active", "muted"])))
+    : [];
+  const memberGroupIds = [...new Set(membershipRows.map(row => row.groupId))];
+  const conditions = [
+    eq(groupsTable.isDeleted, false),
+    eq(groupsTable.isArchived, false),
+  ];
+  if (search) {
+    const searchPattern = `%${search}%`;
+    conditions.push(or(
+      ilike(groupsTable.name, searchPattern),
+      ilike(groupsTable.description, searchPattern),
+      ilike(groupsTable.category, searchPattern),
+      sql`coalesce(array_to_string(${groupsTable.tags}, ' '), '') ilike ${searchPattern}`,
+    )!);
+  }
+  if (category) conditions.push(ilike(groupsTable.category, category));
+  if (scope === "joined") {
+    if (!viewerId) return res.json({ groups: [], total: 0, page });
+    const joinedConditions = [
+      memberGroupIds.length > 0 ? inArray(groupsTable.id, memberGroupIds) : undefined,
+      eq(groupsTable.creatorId, viewerId),
+    ].filter((condition): condition is NonNullable<typeof condition> => condition !== undefined);
+    conditions.push(or(...joinedConditions)!);
+  }
+  if (viewer?.role !== "super_admin") {
+    const visibilityConditions = [
+      and(ne(groupsTable.privacy, "private"), ne(groupsTable.type, "secret")),
+      viewerId ? eq(groupsTable.creatorId, viewerId) : undefined,
+      memberGroupIds.length > 0 ? inArray(groupsTable.id, memberGroupIds) : undefined,
+    ].filter((condition): condition is NonNullable<typeof condition> => condition !== undefined);
+    if (visibilityConditions.length) conditions.push(or(...visibilityConditions)!);
+  }
 
-  let query = db.select().from(groupsTable).where(search
-    ? and(eq(groupsTable.isDeleted, false), eq(groupsTable.isArchived, false), ilike(groupsTable.name, `%${search}%`))
-    : and(eq(groupsTable.isDeleted, false), eq(groupsTable.isArchived, false))).$dynamic();
-
-  const groups = await query
+  const [{ total } = { total: 0 }] = await db.select({ total: sql<number>`count(*)::int` })
+    .from(groupsTable)
+    .where(and(...conditions));
+  const groups = await db.select().from(groupsTable).where(and(...conditions))
     .orderBy(
       sql`(case when ${groupsTable.isPromoted} = true and (${groupsTable.promotedUntil} is null or ${groupsTable.promotedUntil} > now()) then 0 else 1 end)`,
       desc(groupsTable.createdAt),
     )
     .limit(limit)
     .offset((page - 1) * limit);
-  const secretGroups = viewerId
-    ? await db.select({ groupId: groupMembersTable.groupId }).from(groupMembersTable)
-      .where(and(eq(groupMembersTable.userId, viewerId), inArray(groupMembersTable.status, ["active", "muted"])))
-    : [];
-  const memberGroupIds = new Set(secretGroups.map((row) => row.groupId));
-  const visibleGroups = groups.filter((group) => viewer?.role === "super_admin"
-    || (group.privacy !== "private" && group.type !== "secret")
-    || group.creatorId === viewerId
-    || memberGroupIds.has(group.id));
-  const enriched = await Promise.all(visibleGroups.map(g => enrichGroup(g, viewerId)));
+  const enriched = await Promise.all(groups.map(g => enrichGroup(g, viewerId, viewer?.role === "super_admin")));
 
-  return res.json({ groups: enriched, total: enriched.length, page });
+  return res.json({ groups: enriched, total, page, limit });
 });
 
 router.post("/", async (req, res) => {

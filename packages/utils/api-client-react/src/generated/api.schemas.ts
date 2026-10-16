@@ -286,6 +286,7 @@ export interface GroupsListResponse {
   groups: Group[];
   total: number;
   page: number;
+  limit?: number;
 }
 
 export interface JoinGroupResponse {
@@ -459,6 +460,14 @@ export type GetGroupsParams = {
    * @nullable
    */
   page?: number | null;
+  /**
+   * @nullable
+   */
+  scope?: "discover" | "joined" | null;
+  /**
+   * @nullable
+   */
+  category?: string | null;
 };
 
 export type GetGroupPostsParams = {

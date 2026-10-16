@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2, Send, Share2, MoreHorizontal, Copy, LogOut, UserPlus, CircleDot, MessageSquare, BarChart3, Bold, Italic, List, ListOrdered, ImagePlus, AtSign, Pin, Archive, MessageCircleOff, Flag, Check, X } from 'lucide-react';
+import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2, Send, Share2, MoreHorizontal, Copy, LogOut, UserPlus, CircleDot, MessageSquare, BarChart3, Bold, Italic, List, ListOrdered, ImagePlus, AtSign, Pin, Archive, MessageCircleOff, Flag, Check, X, Compass } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useT } from '@/lib/i18n';
 
@@ -1140,13 +1140,30 @@ function GroupsList() {
   const { token } = useAuthStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
+  const [scope, setScope] = useState<'discover' | 'joined'>('discover');
+  const [category, setCategory] = useState('');
+  const [page, setPage] = useState(1);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', category: 'general', privacy: 'open', coverUrl: '', iconUrl: '', tags: '', rules: '', isAnnouncementOnly: false });
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [isUploadingIcon, setIsUploadingIcon] = useState(false);
 
-  const { data, isLoading, isError, refetch } = useGetGroups({ search: search || undefined });
+  const { data, isLoading, isError, refetch } = useGetGroups({
+    search: search.trim() || undefined,
+    scope,
+    category: category || undefined,
+    page,
+  });
   const groups = Array.isArray(data?.groups) ? data.groups : [];
+  const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.limit ?? 20)));
+
+  useEffect(() => {
+    const current = groups.map(group => group.category?.trim()).filter((value): value is string => Boolean(value));
+    if (current.length) {
+      setCategoryOptions(options => [...new Map([...options, ...current].map(value => [value.toLocaleLowerCase(), value])).values()].sort((a, b) => a.localeCompare(b)));
+    }
+  }, [groups]);
 
   const { mutate: createGroup, isPending: isCreating } = useCreateGroup({
     mutation: {
@@ -1196,25 +1213,51 @@ function GroupsList() {
   return (
     <AppLayout>
       <div className="max-w-5xl mx-auto px-4 md:px-0 py-4">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-serif font-bold">{t('groups.title', 'Groups & Communities')}</h1>
-            <p className="text-muted-foreground mt-1">{t('groups.subtitle', 'Find your people and shared interests')}</p>
+        <section className="relative mb-7 overflow-hidden rounded-3xl border border-primary/15 bg-gradient-to-br from-primary/10 via-card to-accent/10 p-5 sm:p-8">
+          <div className="pointer-events-none absolute -right-10 -top-16 h-56 w-56 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="max-w-xl">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/70 px-3 py-1 text-xs font-medium text-primary">
+                <Users className="h-3.5 w-3.5" /> Community, built around what you care about
+              </div>
+              <h1 className="text-3xl font-serif font-bold tracking-tight sm:text-4xl">{t('groups.title', 'Groups & Communities')}</h1>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:text-base">{t('groups.subtitle', 'Find your people and shared interests')}</p>
+            </div>
+            <Button onClick={() => setCreateOpen(true)} className="shrink-0 gap-2 rounded-xl">
+              <Plus className="h-4 w-4" /> {t('groups.createGroup', 'Create Group')}
+            </Button>
           </div>
-          <Button onClick={() => setCreateOpen(true)} className="rounded-xl bg-primary text-primary-foreground gap-2">
-            <Plus className="w-4 h-4" /> {t('groups.createGroup', 'Create Group')}
-          </Button>
+        </section>
+
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search names, topics, tags, or descriptions"
+              aria-label="Search groups by name, topic, tag, or description"
+              className="h-11 rounded-xl border-border/60 bg-card pl-11"
+            />
+          </div>
+          <div className="flex shrink-0 gap-2" role="group" aria-label="Group directory view">
+            <Button type="button" variant={scope === 'discover' ? 'default' : 'outline'} aria-pressed={scope === 'discover'} onClick={() => { setScope('discover'); setPage(1); }} className="h-11 rounded-xl">
+              <Compass className="mr-2 h-4 w-4" /> Discover
+            </Button>
+            <Button type="button" variant={scope === 'joined' ? 'default' : 'outline'} aria-pressed={scope === 'joined'} onClick={() => { setScope('joined'); setPage(1); }} className="h-11 rounded-xl">
+              <Users className="mr-2 h-4 w-4" /> Your groups
+            </Button>
+          </div>
         </div>
 
-        <div className="relative mb-6">
-          <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder={t('groups.searchPlaceholder', 'Search groups...')}
-            className="pl-11 rounded-2xl h-11 bg-card border-border/60"
-          />
-        </div>
+        {categoryOptions.length > 0 && (
+          <div className="mb-5 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filter groups by category">
+            <Button type="button" size="sm" variant={!category ? 'secondary' : 'ghost'} aria-pressed={!category} onClick={() => { setCategory(''); setPage(1); }} className="shrink-0 rounded-full">All topics</Button>
+            {categoryOptions.map(option => (
+              <Button key={option} type="button" size="sm" variant={category === option ? 'secondary' : 'ghost'} aria-pressed={category === option} onClick={() => { setCategory(option); setPage(1); }} className="shrink-0 rounded-full capitalize">{option}</Button>
+            ))}
+          </div>
+        )}
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1226,63 +1269,72 @@ function GroupsList() {
             <Button type="button" variant="outline" className="mt-4" onClick={() => void refetch()}>Retry</Button>
           </div>
         ) : groups.length === 0 ? (
-          <div className="text-center py-20 bg-muted/20 rounded-3xl border border-dashed border-border text-muted-foreground">
-            <Users className="w-16 h-16 mx-auto mb-4 opacity-30" />
-            <h3 className="text-xl font-serif font-medium mb-2">{t('groups.noGroupsYet', 'No groups yet')}</h3>
-            <p className="mb-6 text-sm">{t('groups.startFirstGroup', 'Start the first group for creatives like you.')}</p>
-            <Button onClick={() => setCreateOpen(true)} className="rounded-xl">
-              <Plus className="w-4 h-4 mr-2" /> {t('groups.createGroup', 'Create Group')}
-            </Button>
+          <div className="rounded-3xl border border-dashed border-border bg-muted/20 py-16 text-center text-muted-foreground">
+            <Users className="mx-auto mb-4 h-14 w-14 opacity-30" />
+            <h3 className="mb-2 text-xl font-serif font-medium">{scope === 'joined' ? 'Your communities will show up here' : search || category ? 'No communities match those filters' : t('groups.noGroupsYet', 'No groups yet')}</h3>
+            <p className="mb-6 text-sm">{scope === 'joined' ? 'Join a community to keep its conversations close.' : search || category ? 'Try another keyword or clear a filter to explore more groups.' : t('groups.startFirstGroup', 'Start the first group for creatives like you.')}</p>
+            {scope === 'joined' ? (
+              <Button type="button" onClick={() => { setScope('discover'); setPage(1); }} className="rounded-xl"><Compass className="mr-2 h-4 w-4" />Explore communities</Button>
+            ) : search || category ? (
+              <Button type="button" variant="outline" onClick={() => { setSearch(''); setCategory(''); setPage(1); }} className="rounded-xl">Clear filters</Button>
+            ) : (
+              <Button onClick={() => setCreateOpen(true)} className="rounded-xl"><Plus className="mr-2 h-4 w-4" />{t('groups.createGroup', 'Create Group')}</Button>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <>
+          <p className="mb-3 text-sm text-muted-foreground" aria-live="polite">
+            {data?.total ?? groups.length} {data?.total === 1 ? 'community' : 'communities'}{search ? ` matching “${search.trim()}”` : ''}
+          </p>
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {groups.map(group => (
-              <div key={group.id} className="bg-card border border-border/60 rounded-2xl overflow-hidden hover:border-primary/30 hover:shadow-lg transition-all group flex flex-col">
-                <div className="h-28 bg-gradient-to-br from-primary/20 to-accent/20 relative">
+              <article key={group.id} className="group flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-card transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg">
+                <div className="relative h-32 bg-gradient-to-br from-primary/20 via-accent/15 to-primary/5">
                   {group.coverUrl ? (
-                    <img src={group.coverUrl} alt={group.name} className="w-full h-full object-cover" />
+                    <img src={group.coverUrl} alt="" className="h-full w-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-5xl font-bold text-primary/30 font-serif">
-                      {group.name[0]}
+                    <div className="flex h-full items-center justify-center text-5xl font-bold text-primary/30 font-serif" aria-hidden="true">
+                      {group.name[0]?.toUpperCase()}
                     </div>
                   )}
+                  <div className="absolute -bottom-5 left-4 flex h-12 w-12 items-center justify-center overflow-hidden rounded-xl border-2 border-card bg-primary/10 text-lg font-bold text-primary shadow-sm">
+                    {group.avatarUrl ? <img src={group.avatarUrl} alt="" className="h-full w-full object-cover" /> : group.name[0]?.toUpperCase()}
+                  </div>
+                  {(group as GroupView).isPromoted && <Badge className="absolute right-3 top-3 border border-amber-500/30 bg-background/90 text-amber-700 dark:text-amber-300"><Megaphone className="mr-1 h-3 w-3" />Featured</Badge>}
                 </div>
-                <div className="p-5 flex-1 flex flex-col">
-                  <h3 className="font-bold text-lg font-serif group-hover:text-primary transition-colors mb-1 flex items-center gap-1.5">
+                <div className="flex flex-1 flex-col p-4 pt-8">
+                  <h3 className="mb-1 flex items-center gap-1.5 font-serif text-lg font-bold transition-colors group-hover:text-primary">
                     {group.name}
                     {(group as GroupView).isVerified && (
                       <BadgeCheck className="w-4 h-4 text-blue-500 fill-blue-500/15 shrink-0" />
                     )}
                   </h3>
-                  <div className="flex items-center gap-1.5 flex-wrap mb-2">
-                    <Badge variant="outline">{(group as GroupView).privacy === 'private' ? 'Private · invite-only' : (group as GroupView).privacy === 'public' ? 'Public · approval required' : 'Open'}</Badge>
-                    {(group as GroupView).isPromoted && (
-                      <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[10px] uppercase tracking-wider gap-1">
-                        <Megaphone className="w-2.5 h-2.5" /> {t('groups.promoted', 'Promoted')}
-                      </Badge>
-                    )}
+                  <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                    <Badge variant="secondary" className="capitalize">{group.category}</Badge>
+                    <Badge variant="outline">{(group as GroupView).privacy === 'private' || (group as GroupView).type === 'secret' ? 'Private' : (group as GroupView).privacy === 'public' ? 'Request to join' : 'Open'}</Badge>
                   </div>
                   {group.description && (
-                    <p className="text-sm text-muted-foreground mb-3 line-clamp-2 flex-1">{group.description}</p>
+                    <p className="mb-3 line-clamp-3 flex-1 text-sm leading-relaxed text-muted-foreground">{group.description}</p>
                   )}
-                  {(group as GroupView).tags?.length ? <div className="mb-3 flex flex-wrap gap-1">{(group as GroupView).tags?.slice(0, 4).map(tag => <Badge key={tag} variant="secondary" className="text-[10px]">{tag}</Badge>)}</div> : null}
-                  <div className="flex items-center justify-between mt-auto">
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5" />{group.membersCount} {t('groups.members', 'members')}
+                  {(group as GroupView).tags?.length ? <div className="mb-3 flex flex-wrap gap-1">{(group as GroupView).tags?.slice(0, 3).map(tag => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}</div> : null}
+                  <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Users className="h-3.5 w-3.5" />{group.membersCount} {t('groups.members', 'members')}
+                      <span aria-hidden="true">·</span>{group.postsCount} posts
                     </span>
-                    <div className="flex flex-wrap items-center justify-end gap-1.5">
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                       <Link href={`/g/${(group as GroupView).slug || group.id}`}>
-                        <Button variant="ghost" size="sm" className="rounded-xl h-8 text-xs">{t('groups.view', 'View')}</Button>
+                        <Button variant="ghost" size="sm" className="h-8 rounded-xl px-2 text-xs">{t('groups.view', 'View')}</Button>
                       </Link>
-                      {(group as GroupView).privacy === 'private' || (group as GroupView).type === 'secret' ? group.isMember ? <Button size="sm" disabled className="rounded-xl h-8 text-xs">Joined</Button> : <Badge variant="outline">Invite-only</Badge> : group.isMember ? <Button
+                      {(group as GroupView).privacy === 'private' || (group as GroupView).type === 'secret' ? group.isMember ? <Button size="sm" disabled className="h-8 rounded-xl text-xs">Joined</Button> : <Badge variant="outline">Invite-only</Badge> : group.isMember ? <Button
                         size="sm"
                         disabled
-                        className="rounded-xl h-8 text-xs"
+                        className="h-8 rounded-xl text-xs"
                       >{t('groups.joined', 'Joined')}</Button> : (group as GroupView).hasPendingJoinRequest ? <Button size="sm" disabled variant="outline" aria-label="Join request pending" className="rounded-xl h-8 text-xs"><span className="sm:hidden">Pending</span><span className="hidden sm:inline">Request pending</span></Button> : <Button
                         size="sm"
                         onClick={() => joinGroup({ id: group.id })}
                         aria-label={(group as GroupView).privacy === 'public' ? 'Request to join' : t('groups.join', 'Join group')}
-                        className="rounded-xl h-8 text-xs bg-primary text-primary-foreground"
+                        className="h-8 rounded-xl px-2 text-xs"
                       >
                         {(group as GroupView).privacy === 'public'
                           ? <><span className="sm:hidden">Request</span><span className="hidden sm:inline">Request to join</span></>
@@ -1291,9 +1343,17 @@ function GroupsList() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
+          {totalPages > 1 && <nav className="mt-6 flex items-center justify-between border-t border-border/60 pt-4" aria-label="Group directory pages">
+            <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(value => value - 1)}>Previous</Button>
+              <Button type="button" variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage(value => value + 1)}>Next</Button>
+            </div>
+          </nav>}
+          </>
         )}
       </div>
 
