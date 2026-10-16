@@ -2,13 +2,15 @@ import { jsonb, pgTable, serial, text, timestamp, integer, uniqueIndex } from "d
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { collaborationRequestsTable } from "./collaborationRequests";
+import { opportunityApplicationsTable } from "./opportunityApplications";
 import { usersTable } from "./users";
 import { z } from "zod";
 
 export const collaborationRoomsTable = pgTable("collaboration_rooms", {
   id: serial("id").primaryKey(),
   publicId: text("public_id").notNull().default(sql`gen_random_uuid()::text`),
-  requestId: integer("request_id").notNull().references(() => collaborationRequestsTable.id, { onDelete: "cascade" }),
+  requestId: integer("request_id").references(() => collaborationRequestsTable.id, { onDelete: "cascade" }),
+  opportunityApplicationId: integer("opportunity_application_id").references(() => opportunityApplicationsTable.id, { onDelete: "cascade" }),
   createdById: integer("created_by_id").notNull().references(() => usersTable.id),
   title: text("title").notNull(),
   brief: text("brief").notNull().default(""),
@@ -18,6 +20,7 @@ export const collaborationRoomsTable = pgTable("collaboration_rooms", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   requestUnique: uniqueIndex("collaboration_rooms_request_unique").on(table.requestId),
+  opportunityApplicationUnique: uniqueIndex("collaboration_rooms_opportunity_application_unique").on(table.opportunityApplicationId),
   publicIdUnique: uniqueIndex("collaboration_rooms_public_id_unique").on(table.publicId),
 }));
 

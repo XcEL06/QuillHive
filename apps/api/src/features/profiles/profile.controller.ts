@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { createHash } from "crypto";
 import { db } from "@workspace/db";
-import { usersTable, followsTable, postsTable, commentsTable, likesTable, postTopicsTable, userTrustScoresTable, workHistoryTable, educationHistoryTable, savedPostsTable, profileViewsTable, creatorAvailabilityTable } from "@workspace/db/schema";
+import { usersTable, followsTable, postsTable, commentsTable, likesTable, postTopicsTable, userTrustScoresTable, workHistoryTable, educationHistoryTable, savedPostsTable, profileViewsTable, creatorAvailabilityTable, opportunityApplicationsTable, jobsTable, seriesTable, chainsTable } from "@workspace/db/schema";
 import { eq, and, sql, ilike, desc, or, inArray, notInArray } from "drizzle-orm";
 import {
   hashPassword,
@@ -39,21 +39,14 @@ import { isFeatureEnabled } from "../../lib/featureFlags";
 import { sendEmail } from "../email/email.service";
 import { welcomeEmailHtml, welcomeEmailText } from "../email/email.templates";
 import { getRedis } from "../../lib/redis";
+import { canViewProfile } from "./profileAccess.service";
+import { getUserAchievements } from "../achievements/achievement.service";
+import { getPortfolioItems } from "../gallery/gallery.service";
 
 function getViewerId(req: Request): number | null {
   const auth = req.headers.authorization;
   if (!auth?.startsWith("Bearer ")) return null;
   return getSessionUserId(auth.slice(7));
-}
-
-async function canViewProfile(profileUser: any, viewerId: number | null): Promise<boolean> {
-  if (viewerId === profileUser.id || profileUser.profileVisibility === "public") return true;
-  if (profileUser.profileVisibility !== "followers" || viewerId === null) return false;
-  const [follow] = await db.select({ id: followsTable.followerId }).from(followsTable).where(and(
-    eq(followsTable.followerId, viewerId),
-    eq(followsTable.followingId, profileUser.id),
-  ));
-  return Boolean(follow);
 }
 
 // ─── Reserved usernames ───────────────────────────────────────────────────────
@@ -1298,12 +1291,51 @@ export const getUserPortfolio = async (req: Request, res: Response) => {
       likeCount: (postsTable as any).likeCount,
     })
     .from(postsTable)
-    .where(and(eq(postsTable.authorId, user.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), visiblePostExpiryCondition(), postVisibilityCondition(null)))
+    .where(and(eq(postsTable.authorId, user.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), visiblePostExpiryCondition(), postVisibilityCondition(viewerId)))
     .orderBy(desc((postsTable as any).likeCount), desc(postsTable.createdAt))
     .limit(6);
 
   const counts = await getUserWithCounts(user.id, null);
   const creatorProfile = await getCreatorProfile(user.id);
+  const [portfolioItems, achievements, verifiedOutcomes, publishedSeries, publicChains] = await Promise.all([
+    getPortfolioItems(user.id, viewerId),
+    getUserAchievements(user.id),
+    db.select({
+      id: opportunityApplicationsTable.id,
+      title: jobsTable.title,
+      completedAt: opportunityApplicationsTable.completedAt,
+    }).from(opportunityApplicationsTable)
+      .innerJoin(jobsTable, eq(jobsTable.id, opportunityApplicationsTable.jobId))
+      .where(and(
+        eq(opportunityApplicationsTable.applicantId, user.id),
+        eq(opportunityApplicationsTable.status, "completed"),
+        eq(jobsTable.isApproved, true),
+        eq(jobsTable.moderationStatus, "published"),
+      ))
+      .orderBy(desc(opportunityApplicationsTable.completedAt)),
+    db.selectDistinct({
+      id: seriesTable.id,
+      title: seriesTable.title,
+      description: seriesTable.description,
+      slug: seriesTable.slug,
+    }).from(seriesTable)
+      .innerJoin(postsTable, eq(postsTable.seriesId, seriesTable.id))
+      .where(and(
+        eq(seriesTable.userId, user.id),
+        eq(postsTable.authorId, user.id),
+        eq(postsTable.isPublished, true),
+        eq(postsTable.isDeleted, false),
+        eq(postsTable.visibility, "public"),
+      )),
+    db.select({
+      id: chainsTable.id,
+      title: chainsTable.title,
+      description: chainsTable.description,
+      isComplete: chainsTable.isComplete,
+    }).from(chainsTable)
+      .where(and(eq(chainsTable.creatorId, user.id), eq(chainsTable.isPublic, true)))
+      .orderBy(desc(chainsTable.updatedAt)),
+  ]);
 
   const safeUser: Record<string, unknown> = {
     id: user.id,
@@ -1330,7 +1362,22 @@ export const getUserPortfolio = async (req: Request, res: Response) => {
 
   return res.json({
     user: safeUser,
+    creatorProfile: creatorProfile ? {
+      skills: creatorProfile.skills,
+      links: creatorProfile.links,
+      isAvailableForHire: creatorProfile.isAvailableForHire,
+      availableFor: creatorProfile.availableFor,
+    } : null,
     featuredPosts: featured.map(p => ({ ...p, tags: [] })),
+    portfolioItems: portfolioItems.map(item => ({
+      ...item,
+      evidenceStatus: item.evidenceUrl ? "evidence_attached" : "self_reported",
+      evidenceUrl: viewerId === user.id ? item.evidenceUrl : null,
+    })),
+    achievements,
+    verifiedOutcomes,
+    publishedSeries,
+    publicChains,
     stats: {
       postCount: counts?.postsCount ?? 0,
       followerCount: counts?.followersCount ?? 0,

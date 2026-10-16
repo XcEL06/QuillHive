@@ -8,6 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Globe, Twitter, Linkedin, Instagram, Facebook, MapPin, Mail, Briefcase, ArrowRight } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { getStoredToken, mediaUrl } from "@/lib/api";
+import { ImageUploadField } from "@/components/media/ImageUploadField";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 const IDENTITY_LABELS: Record<string, string> = {
   everyone: "Member",
@@ -54,6 +60,21 @@ interface PortfolioPayload {
     email?: string;
   };
   featuredPosts: FeaturedPost[];
+  creatorProfile: { skills: string[]; links: Array<{ label: string; url: string }> } | null;
+  portfolioItems: Array<{
+    id: number;
+    title: string;
+    description: string | null;
+    mediaUrl: string;
+    category: string;
+    visibility: string;
+    evidenceStatus: "self_reported" | "evidence_attached";
+    evidenceUrl: string | null;
+  }>;
+  achievements: Array<{ id: number; key: string; name: string; description: string; unlockedAt: string }>;
+  verifiedOutcomes: Array<{ id: number; title: string; completedAt: string | null }>;
+  publishedSeries: Array<{ id: number; title: string; description: string | null; slug: string }>;
+  publicChains: Array<{ id: number; title: string; description: string | null; isComplete: boolean | null }>;
   stats: { postCount: number; followerCount: number };
 }
 
@@ -69,10 +90,13 @@ export default function Portfolio() {
   const params = useParams<{ username?: string }>();
   const [, setLocation] = useLocation();
   const { user: viewer } = useAuthStore();
+  const { toast } = useToast();
   const username = params?.username ?? viewer?.username;
   const [data, setData] = useState<PortfolioPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [savingItem, setSavingItem] = useState(false);
+  const [itemForm, setItemForm] = useState({ title: "", description: "", mediaUrl: "", evidenceUrl: "", category: "project", visibility: "public" });
 
   useEffect(() => {
     if (!username) {
@@ -82,7 +106,10 @@ export default function Portfolio() {
     }
     setLoading(true);
     setNotFound(false);
-    fetch(`/api/users/${encodeURIComponent(username)}/portfolio`)
+    const token = getStoredToken();
+    fetch(`/api/users/${encodeURIComponent(username)}/portfolio`, {
+      headers: token ? { Authorization: ["Bearer", token].join(" ") } : {},
+    })
       .then((r) => {
         if (r.status === 404) {
           setNotFound(true);
@@ -96,6 +123,38 @@ export default function Portfolio() {
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [username]);
+
+  const addPortfolioItem = async () => {
+    if (!itemForm.title.trim() || !itemForm.mediaUrl.trim()) {
+      toast({ title: "Title and project image are required", variant: "destructive" });
+      return;
+    }
+    const token = getStoredToken();
+    if (!token) return;
+    setSavingItem(true);
+    try {
+      const response = await fetch("/api/gallery", {
+        method: "POST",
+        headers: { Authorization: ["Bearer", token].join(" "), "Content-Type": "application/json" },
+        body: JSON.stringify(itemForm),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not save portfolio item");
+      setData(current => current ? {
+        ...current,
+        portfolioItems: [{
+          ...result,
+          evidenceStatus: result.evidenceUrl ? "evidence_attached" : "self_reported",
+        }, ...current.portfolioItems],
+      } : current);
+      setItemForm({ title: "", description: "", mediaUrl: "", evidenceUrl: "", category: "project", visibility: "public" });
+      toast({ title: "Portfolio project added" });
+    } catch (error) {
+      toast({ title: "Could not add portfolio project", description: error instanceof Error ? error.message : undefined, variant: "destructive" });
+    } finally {
+      setSavingItem(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -125,7 +184,7 @@ export default function Portfolio() {
     );
   }
 
-  const { user, featuredPosts, stats } = data;
+  const { user, featuredPosts, stats, portfolioItems, achievements, verifiedOutcomes, publishedSeries, publicChains } = data;
   const isMe = viewer?.username === user.username;
   const identityLabel = user.identityType && IDENTITY_LABELS[user.identityType] ? IDENTITY_LABELS[user.identityType] : "Member";
 
@@ -239,6 +298,82 @@ export default function Portfolio() {
               </a>
             )}
           </div>
+
+          {data.creatorProfile && data.creatorProfile.skills.length > 0 && (
+            <section className="mt-8" aria-labelledby="portfolio-skills-heading">
+              <h2 id="portfolio-skills-heading" className="mb-3 text-lg font-semibold">Self-reported skills and expertise</h2>
+              <div className="flex flex-wrap gap-2">
+                {data.creatorProfile.skills.map(skill => <Badge key={skill} variant="secondary">{skill}</Badge>)}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">Skills are provided by the creator; peer endorsements are separate signals, not platform verification.</p>
+            </section>
+          )}
+
+          <section className="mt-10" aria-labelledby="portfolio-projects-heading">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 id="portfolio-projects-heading" className="text-2xl font-serif font-semibold">Projects</h2>
+                <p className="mt-1 text-xs text-muted-foreground">Creator-submitted items are self-reported unless explicitly marked as having evidence attached.</p>
+              </div>
+            </div>
+            {isMe && (
+              <div className="mb-5 space-y-3 rounded-2xl border border-border bg-card p-4">
+                <h3 className="font-semibold">Add a portfolio project</h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1"><Label htmlFor="portfolio-title">Title</Label><Input id="portfolio-title" value={itemForm.title} onChange={event => setItemForm(form => ({ ...form, title: event.target.value }))} maxLength={200} /></div>
+                  <div className="space-y-1"><Label htmlFor="portfolio-category">Category</Label><Input id="portfolio-category" value={itemForm.category} onChange={event => setItemForm(form => ({ ...form, category: event.target.value }))} maxLength={80} /></div>
+                </div>
+                <div className="space-y-1"><Label>Project image</Label><ImageUploadField value={itemForm.mediaUrl} onChange={media => setItemForm(form => ({ ...form, mediaUrl: media }))} category="gallery" label="Upload project image" previewClassName="aspect-video" /></div>
+                <div className="space-y-1"><Label htmlFor="portfolio-description">Description</Label><Textarea id="portfolio-description" value={itemForm.description} onChange={event => setItemForm(form => ({ ...form, description: event.target.value }))} maxLength={2000} /></div>
+                <div className="space-y-1"><Label htmlFor="portfolio-evidence">Evidence link (optional)</Label><Input id="portfolio-evidence" value={itemForm.evidenceUrl} onChange={event => setItemForm(form => ({ ...form, evidenceUrl: event.target.value }))} maxLength={2048} placeholder="A supporting document or public reference" /><p className="text-xs text-muted-foreground">Evidence links are visible only to you. Adding a link does not mean QuillHive has reviewed or verified it.</p></div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Label htmlFor="portfolio-visibility">Visibility</Label>
+                  <select id="portfolio-visibility" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={itemForm.visibility} onChange={event => setItemForm(form => ({ ...form, visibility: event.target.value }))}>
+                    <option value="public">Public</option><option value="followers">Followers</option><option value="private">Only me</option>
+                  </select>
+                  <Button type="button" onClick={() => void addPortfolioItem()} disabled={savingItem}>{savingItem ? "Saving…" : "Add project"}</Button>
+                </div>
+              </div>
+            )}
+            {portfolioItems.length === 0 ? <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">No portfolio projects have been added yet.</p> : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {portfolioItems.map(item => (
+                  <article key={item.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+                    <img src={mediaUrl(item.mediaUrl)} alt="" className="aspect-video w-full object-cover" />
+                    <div className="space-y-2 p-4">
+                      <div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className="capitalize">{item.category}</Badge><Badge variant="secondary">{item.evidenceStatus === "evidence_attached" ? "Evidence attached · unreviewed" : "Self-reported"}</Badge></div>
+                      <h3 className="font-semibold">{item.title}</h3>
+                      {item.description && <p className="text-sm text-muted-foreground">{item.description}</p>}
+                      {isMe && item.evidenceUrl && <a href={item.evidenceUrl} target="_blank" rel="noreferrer" className="text-xs text-primary underline">View your supporting evidence</a>}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {(verifiedOutcomes.length > 0 || achievements.length > 0) && (
+            <section className="mt-10 grid gap-6 md:grid-cols-2">
+              {verifiedOutcomes.length > 0 && <div>
+                <h2 className="mb-3 text-xl font-serif font-semibold">Verified project outcomes</h2>
+                <p className="mb-3 text-xs text-muted-foreground">Shown only after both opportunity participants confirm completion in QuillHive.</p>
+                <ul className="space-y-2">{verifiedOutcomes.map(outcome => <li key={outcome.id} className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3"><p className="font-medium">{outcome.title}</p><p className="text-xs text-muted-foreground">QuillHive-confirmed completion{outcome.completedAt ? ` · ${new Date(outcome.completedAt).toLocaleDateString()}` : ""}</p></li>)}</ul>
+              </div>}
+              {achievements.length > 0 && <div>
+                <h2 className="mb-3 text-xl font-serif font-semibold">Platform achievements</h2>
+                <div className="flex flex-wrap gap-2">{achievements.map(achievement => <Badge key={achievement.id} title={achievement.description} variant="outline">{achievement.name}</Badge>)}</div>
+                <p className="mt-2 text-xs text-muted-foreground">Achievements are based on QuillHive activity records.</p>
+              </div>}
+            </section>
+          )}
+
+          {(publishedSeries.length > 0 || publicChains.length > 0) && <section className="mt-10">
+            <h2 className="mb-3 text-xl font-serif font-semibold">Series and Chains</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {publishedSeries.map(series => <article key={`series-${series.id}`} className="rounded-xl border border-border p-4"><Badge variant="outline">Public Series</Badge><h3 className="mt-2 font-semibold">{series.title}</h3>{series.description && <p className="mt-1 text-sm text-muted-foreground">{series.description}</p>}</article>)}
+              {publicChains.map(chain => <article key={`chain-${chain.id}`} className="rounded-xl border border-border p-4"><Badge variant="outline">{chain.isComplete ? "Completed Chain" : "Public Chain"}</Badge><h3 className="mt-2 font-semibold">{chain.title}</h3>{chain.description && <p className="mt-1 text-sm text-muted-foreground">{chain.description}</p>}</article>)}
+            </div>
+          </section>}
 
           <section className="mt-12 mb-16">
             <div className="flex items-center justify-between mb-6">

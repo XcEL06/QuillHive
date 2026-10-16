@@ -1,22 +1,33 @@
 import { db } from "@workspace/db";
-import { portfolioItemsTable } from "@workspace/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { portfolioItemsTable, followsTable } from "@workspace/db/schema";
+import { eq, and, desc, or } from "drizzle-orm";
 
 export async function getPortfolioItems(userId: number, viewerId: number | null) {
+  if (viewerId === userId) {
+    return db.select().from(portfolioItemsTable)
+      .where(eq(portfolioItemsTable.userId, userId))
+      .orderBy(desc(portfolioItemsTable.createdAt));
+  }
+  const [follow] = viewerId === null ? [] : await db.select({ id: followsTable.followerId })
+    .from(followsTable)
+    .where(and(eq(followsTable.followerId, viewerId), eq(followsTable.followingId, userId)));
   return db
     .select()
     .from(portfolioItemsTable)
     .where(
-      viewerId === userId
-        ? eq(portfolioItemsTable.userId, userId)
-        : and(eq(portfolioItemsTable.userId, userId), eq(portfolioItemsTable.visibility, "public"))
+      and(
+        eq(portfolioItemsTable.userId, userId),
+        follow
+          ? or(eq(portfolioItemsTable.visibility, "public"), eq(portfolioItemsTable.visibility, "followers"))
+          : eq(portfolioItemsTable.visibility, "public"),
+      )
     )
     .orderBy(desc(portfolioItemsTable.createdAt));
 }
 
 export async function addPortfolioItem(
   userId: number,
-  data: { title: string; description?: string; mediaUrl: string; category?: string; visibility?: string }
+  data: { title: string; description?: string; mediaUrl: string; evidenceUrl?: string; category?: string; visibility?: string }
 ) {
   const [item] = await db
     .insert(portfolioItemsTable)
@@ -25,6 +36,7 @@ export async function addPortfolioItem(
       title: data.title,
       description: data.description || null,
       mediaUrl: data.mediaUrl,
+      evidenceUrl: data.evidenceUrl || null,
       category: data.category || "general",
       visibility: data.visibility || "public",
     })
@@ -35,7 +47,7 @@ export async function addPortfolioItem(
 export async function updatePortfolioItem(
   id: number,
   userId: number,
-  data: { title: string; description?: string; mediaUrl: string; category?: string; visibility?: string },
+  data: { title: string; description?: string; mediaUrl: string; evidenceUrl?: string; category?: string; visibility?: string },
 ) {
   const [item] = await db.select().from(portfolioItemsTable).where(eq(portfolioItemsTable.id, id));
   if (!item) return null;
@@ -46,6 +58,7 @@ export async function updatePortfolioItem(
       title: data.title,
       description: data.description || null,
       mediaUrl: data.mediaUrl,
+      evidenceUrl: data.evidenceUrl || null,
       category: data.category || "general",
       visibility: data.visibility || "public",
     })

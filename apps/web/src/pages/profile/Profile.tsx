@@ -565,6 +565,11 @@ export default function Profile() {
                 </Badge>
               );
             })()}
+            <Link href={`/portfolio/${encodeURIComponent(user.username)}`}>
+              <Button variant="outline" size="sm" className="h-8 rounded-full">
+                Professional portfolio
+              </Button>
+            </Link>
           </div>
 
           {user.bio ? (

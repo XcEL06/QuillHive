@@ -3,13 +3,14 @@ import { db } from "@workspace/db";
 import {
   jobsTable, usersTable, topicFollowsTable, topicsTable,
   creatorProfilesTable, creatorAvailabilityTable, userTrustScoresTable, postsTable,
-  opportunityApplicationsTable, conversationsTable, conversationParticipantsTable, messagesTable,
+  opportunityApplicationsTable, conversationsTable, conversationParticipantsTable, messagesTable, collaborationRoomsTable,
 } from "@workspace/db/schema";
 import { eq, desc, and, or, isNull, gt, sql, inArray, gte } from "drizzle-orm";
 import { z } from "zod";
 import { getSessionUserId } from "../lib/auth";
 import { getUserWithCounts } from "../features/profiles/profile.service";
 import { notify } from "../features/notifications/notification.service";
+import { decideOpportunityApplication, resolveCompletionAction } from "../features/creator-economy/opportunityWorkflow";
 
 const SCAM_PATTERNS = [
   /registration\s*fee/i,
@@ -396,6 +397,8 @@ router.get("/applications", async (req, res) => {
     proposedCurrency: opportunityApplicationsTable.proposedCurrency,
     status: opportunityApplicationsTable.status,
     conversationId: opportunityApplicationsTable.conversationId,
+    completionRequestedById: opportunityApplicationsTable.completionRequestedById,
+    completedAt: opportunityApplicationsTable.completedAt,
     createdAt: opportunityApplicationsTable.createdAt,
     jobTitle: jobsTable.title,
     jobAuthorId: jobsTable.authorId,
@@ -415,6 +418,161 @@ router.get("/applications", async (req, res) => {
     isMine: application.applicantId === viewerId,
     isOwner: application.jobAuthorId === viewerId,
   })) });
+});
+
+router.patch("/applications/:applicationId", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const applicationId = Number(req.params.applicationId);
+  if (!Number.isInteger(applicationId) || applicationId <= 0) return res.status(400).json({ error: "Invalid application id" });
+  const action = req.body?.action;
+  if (!["accepted", "rejected", "cancelled"].includes(action)) {
+    return res.status(400).json({ error: "Action must be accepted, rejected, or cancelled" });
+  }
+
+  const result = await db.transaction(async tx => {
+    const [application] = await tx.select().from(opportunityApplicationsTable)
+      .where(eq(opportunityApplicationsTable.id, applicationId))
+      .for("update");
+    if (!application) return { kind: "missing" as const };
+    const [job] = await tx.select().from(jobsTable).where(eq(jobsTable.id, application.jobId));
+    if (!job) return { kind: "missing" as const };
+
+    const isOwner = job.authorId === viewerId;
+    const isApplicant = application.applicantId === viewerId;
+    const decision = decideOpportunityApplication({
+      status: application.status,
+      action,
+      isOwner,
+      isApplicant,
+    });
+    if (decision === "forbidden") return { kind: "forbidden" as const };
+    if (decision === "conflict") return { kind: "conflict" as const };
+    if (action === "cancelled") {
+      if (decision === "idempotent") return { kind: "updated" as const, application, room: null };
+
+      const [updated] = await tx.update(opportunityApplicationsTable).set({
+        status: "cancelled",
+        updatedAt: new Date(),
+      }).where(and(
+        eq(opportunityApplicationsTable.id, applicationId),
+        eq(opportunityApplicationsTable.status, application.status),
+      )).returning();
+      if (!updated) return { kind: "conflict" as const };
+      const [room] = await tx.update(collaborationRoomsTable).set({ status: "cancelled", updatedAt: new Date() })
+        .where(eq(collaborationRoomsTable.opportunityApplicationId, applicationId))
+        .returning({ id: collaborationRoomsTable.id });
+      return { kind: "updated" as const, application: updated, room: room ?? null };
+    }
+
+    if (decision === "idempotent") {
+      const [room] = await tx.select().from(collaborationRoomsTable)
+        .where(eq(collaborationRoomsTable.opportunityApplicationId, applicationId));
+      if (room && room.status !== "cancelled") return { kind: "updated" as const, application, room };
+      return { kind: "conflict" as const };
+    }
+    if (application.status !== "pending") return { kind: "conflict" as const };
+    if (action === "accepted" && (!job.isActive || !job.isApproved || job.moderationStatus !== "published")) {
+      return { kind: "opportunity_closed" as const };
+    }
+
+    const [updated] = await tx.update(opportunityApplicationsTable).set({
+      status: action,
+      updatedAt: new Date(),
+    }).where(and(
+      eq(opportunityApplicationsTable.id, applicationId),
+      eq(opportunityApplicationsTable.status, "pending"),
+    )).returning();
+    if (!updated) return { kind: "conflict" as const };
+    if (action === "rejected") return { kind: "updated" as const, application: updated, room: null };
+
+    const brief = [
+      `Opportunity: ${job.title}`,
+      job.description,
+      application.message?.trim() ? `Applicant note: ${application.message.trim()}` : "",
+    ].filter(Boolean).join("\n\n");
+    await tx.insert(collaborationRoomsTable).values({
+      requestId: null,
+      opportunityApplicationId: applicationId,
+      createdById: viewerId,
+      title: job.title,
+      brief,
+    }).onConflictDoNothing({
+      target: collaborationRoomsTable.opportunityApplicationId,
+    });
+    const [room] = await tx.select().from(collaborationRoomsTable)
+      .where(eq(collaborationRoomsTable.opportunityApplicationId, applicationId));
+    if (!room) throw new Error("Accepted application workspace could not be created");
+    return { kind: "updated" as const, application: updated, room };
+  });
+
+  if (result.kind === "missing") return res.status(404).json({ error: "Application not found" });
+  if (result.kind === "forbidden") return res.status(403).json({ error: "Only the opportunity owner can accept or reject applications; either participant can cancel" });
+  if (result.kind === "conflict") return res.status(409).json({ error: "This application can no longer be changed" });
+  if (result.kind === "opportunity_closed") return res.status(409).json({ error: "This opportunity is no longer available" });
+  return res.json({ application: result.application, room: result.room });
+});
+
+router.post("/applications/:applicationId/completion", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const applicationId = Number(req.params.applicationId);
+  if (!Number.isInteger(applicationId) || applicationId <= 0) return res.status(400).json({ error: "Invalid application id" });
+  if (!["request", "confirm"].includes(req.body?.action)) return res.status(400).json({ error: "Action must be request or confirm" });
+
+  const result = await db.transaction(async tx => {
+    const [application] = await tx.select().from(opportunityApplicationsTable)
+      .where(eq(opportunityApplicationsTable.id, applicationId))
+      .for("update");
+    if (!application) return { kind: "missing" as const };
+    const [job] = await tx.select({ authorId: jobsTable.authorId }).from(jobsTable)
+      .where(eq(jobsTable.id, application.jobId));
+    if (!job) return { kind: "missing" as const };
+    if (viewerId !== job.authorId && viewerId !== application.applicantId) return { kind: "forbidden" as const };
+    const completionDecision = resolveCompletionAction({
+      status: application.status,
+      requestedById: application.completionRequestedById,
+      actorId: viewerId,
+      action: req.body.action,
+    });
+    if (completionDecision === "completed") return { kind: "completed" as const, application };
+    if (completionDecision === "conflict") return { kind: "conflict" as const };
+
+    if (req.body.action === "request") {
+      if (completionDecision === "confirmation_required") return { kind: "confirmation_required" as const };
+      if (completionDecision === "already_requested") return { kind: "already_requested" as const };
+      const [updated] = await tx.update(opportunityApplicationsTable).set({
+        completionRequestedById: viewerId,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(opportunityApplicationsTable.id, applicationId),
+        eq(opportunityApplicationsTable.status, "accepted"),
+      )).returning();
+      return updated ? { kind: "requested" as const, application: updated } : { kind: "conflict" as const };
+    }
+
+    if (completionDecision !== "complete") return { kind: "confirmation_required" as const };
+    const completedAt = new Date();
+    const [updated] = await tx.update(opportunityApplicationsTable).set({
+      status: "completed",
+      completedAt,
+      updatedAt: completedAt,
+    }).where(and(
+      eq(opportunityApplicationsTable.id, applicationId),
+      eq(opportunityApplicationsTable.status, "accepted"),
+    )).returning();
+    if (!updated) return { kind: "conflict" as const };
+    await tx.update(collaborationRoomsTable).set({ status: "completed", updatedAt: completedAt })
+      .where(eq(collaborationRoomsTable.opportunityApplicationId, applicationId));
+    return { kind: "completed" as const, application: updated };
+  });
+
+  if (result.kind === "missing") return res.status(404).json({ error: "Application not found" });
+  if (result.kind === "forbidden") return res.status(403).json({ error: "Forbidden" });
+  if (result.kind === "conflict") return res.status(409).json({ error: "Only accepted applications can be marked complete" });
+  if (result.kind === "confirmation_required") return res.status(409).json({ error: "The other participant must request completion before you confirm it" });
+  if (result.kind === "already_requested") return res.status(409).json({ error: "Completion is awaiting confirmation from the other participant" });
+  return res.json({ application: result.application, completed: result.kind === "completed" });
 });
 
 // ── GET /my-matches - top matched opportunities for the logged-in creator ──────

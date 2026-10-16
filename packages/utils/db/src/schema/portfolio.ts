@@ -9,6 +9,7 @@ export const portfolioItemsTable = pgTable("portfolio_items", {
   title: text("title").notNull(),
   description: text("description"),
   mediaUrl: text("media_url").notNull(),
+  evidenceUrl: text("evidence_url"),
   category: text("category").notNull().default("general"),
   visibility: text("visibility").notNull().default("public"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

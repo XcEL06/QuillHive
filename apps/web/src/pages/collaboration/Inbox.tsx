@@ -52,12 +52,14 @@ interface CommissionRequest {
 
 interface CollaborationRoom {
   id: number;
-  requestId: number;
+  requestId: number | null;
+  opportunityApplicationId: number | null;
   title: string;
   brief: string;
   splitSuggestion: Record<string, number>;
   status: string;
   updatedAt: string;
+  opportunity?: { id: number; jobId: number; title: string; status: string } | null;
 }
 
 // ── Status helpers ───────────────────────────────────────────────────────────
@@ -461,7 +463,7 @@ export default function Inbox() {
             <section className="mb-6 space-y-3">
               <div>
                 <h2 className="text-sm font-semibold">Project rooms</h2>
-                <p className="text-xs text-muted-foreground">Shared briefs and split suggestions for accepted collaborations.</p>
+                <p className="text-xs text-muted-foreground">Private workspaces for accepted collaborations and selected opportunity applications. Acceptance is not payment.</p>
               </div>
               {rooms.map(room => (
                 <Card key={room.id} className="p-4 border-primary/20 bg-primary/[0.03]">
@@ -474,6 +476,7 @@ export default function Inbox() {
                         aria-label="Project room title"
                       />
                       <p className="text-[11px] text-muted-foreground mt-1">Updated <Timestamp value={room.updatedAt} mode="date" /></p>
+                      {room.opportunity && <Link className="mt-1 inline-block text-xs text-primary underline" href={`/opportunities/${room.opportunity.jobId}`}>Opportunity: {room.opportunity.title}</Link>}
                     </div>
                     <Button size="sm" variant="outline" className="gap-1.5 text-xs shrink-0" onClick={() => saveRoom(room)} disabled={savingRoomId === room.id}>
                       {savingRoomId === room.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}

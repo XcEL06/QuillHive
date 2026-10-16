@@ -239,6 +239,13 @@
       "when": 1792137600000,
       "tag": "0037_group_reputation_gates",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1792224000000,
+      "tag": "0038_verified_portfolios_opportunity_rooms",
+      "breakpoints": true
     }
   ]
 }

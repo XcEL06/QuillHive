@@ -8,7 +8,7 @@ import { ApplyOpportunityActions } from '@/components/opportunities/ApplyOpportu
 import { OpportunityShareDialog } from '@/components/opportunities/OpportunityShareDialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { apiUrl, getStoredToken } from '@/lib/api';
-import { ArrowLeft, Briefcase, Clock, DollarSign, MapPin } from 'lucide-react';
+import { ArrowLeft, Briefcase, Clock, DollarSign, MapPin, Check, X, CheckCircle2 } from 'lucide-react';
 import { Timestamp } from '@/lib/postTimestamp';
 import { useAuthStore } from '@/store/auth';
 
@@ -32,11 +32,16 @@ type Opportunity = {
 
 type OpportunityApplication = {
   id: number;
+  applicantId: number;
   message?: string | null;
   proposedBudget?: number | null;
   proposedCurrency: string;
   status: string;
   conversationId?: number | null;
+  completionRequestedById?: number | null;
+  completedAt?: string | null;
+  isMine?: boolean;
+  isOwner?: boolean;
   createdAt: string;
   applicant: { username: string; displayName: string; avatarUrl?: string | null };
 };
@@ -72,7 +77,7 @@ export default function OpportunityDetail() {
   const isOwner = Boolean(opportunity && user?.id === opportunity.authorId);
 
   useEffect(() => {
-    if (!isOwner || !opportunity) {
+    if (!user || !opportunity) {
       setApplications([]);
       setApplicationsError('');
       return;
@@ -98,7 +103,31 @@ export default function OpportunityDetail() {
       })
       .finally(() => { if (active) setApplicationsLoading(false); });
     return () => { active = false; };
-  }, [isOwner, opportunity?.id]);
+  }, [isOwner, opportunity?.id, user?.id]);
+
+  const updateApplication = async (application: OpportunityApplication, action: 'accepted' | 'rejected' | 'cancelled') => {
+    const token = getStoredToken();
+    const response = await fetch(apiUrl(`/api/jobs/applications/${application.id}`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: ["Bearer", token].join(" ") } : {}) },
+      body: JSON.stringify({ action }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not update application');
+    setApplications(current => current.map(item => item.id === application.id ? { ...item, ...data.application, room: data.room } : item));
+  };
+
+  const updateCompletion = async (application: OpportunityApplication, action: 'request' | 'confirm') => {
+    const token = getStoredToken();
+    const response = await fetch(apiUrl(`/api/jobs/applications/${application.id}/completion`), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: ["Bearer", token].join(" ") } : {}) },
+      body: JSON.stringify({ action }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not update project completion');
+    setApplications(current => current.map(item => item.id === application.id ? { ...item, ...data.application } : item));
+  };
 
   return (
     <AppLayout>
@@ -128,13 +157,13 @@ export default function OpportunityDetail() {
               <h2 className="mb-2 text-sm font-semibold">About this opportunity</h2>
               <p className="whitespace-pre-wrap text-sm leading-7 text-foreground/85">{opportunity.description}</p>
             </section>
-            {isOwner && <section className="space-y-3 border-t border-border/70 pt-5">
-              <h2 className="text-sm font-semibold">Applications ({applications.length})</h2>
+            {(isOwner || applications.some(application => application.isMine)) && <section className="space-y-3 border-t border-border/70 pt-5">
+              <h2 className="text-sm font-semibold">{isOwner ? `Applications (${applications.length})` : 'Your application'}</h2>
               {applicationsLoading ? <Skeleton className="h-20 w-full" /> : applicationsError ? (
                 <p className="text-sm text-destructive" role="alert">{applicationsError}</p>
-              ) : applications.length === 0 ? (
+              ) : applications.filter(application => isOwner || application.isMine).length === 0 ? (
                 <p className="text-sm text-muted-foreground">No applications yet.</p>
-              ) : applications.map(application => (
+              ) : applications.filter(application => isOwner || application.isMine).map(application => (
                 <article key={application.id} className="flex flex-wrap items-start justify-between gap-3 border-b border-border/50 py-3 last:border-0">
                   <div className="flex min-w-0 items-start gap-3">
                     <Avatar className="h-9 w-9 shrink-0"><AvatarImage src={application.applicant.avatarUrl || ''} /><AvatarFallback>{application.applicant.displayName.slice(0, 1)}</AvatarFallback></Avatar>
@@ -143,9 +172,27 @@ export default function OpportunityDetail() {
                       <p className="text-xs text-muted-foreground">@{application.applicant.username} · <Timestamp value={application.createdAt} /></p>
                       {application.message && <p className="mt-2 whitespace-pre-wrap text-sm text-foreground/85">{application.message}</p>}
                       {application.proposedBudget != null && <p className="mt-1 text-xs text-muted-foreground">Proposed {application.proposedCurrency} {application.proposedBudget}</p>}
+                      <p className="mt-1 text-xs capitalize text-muted-foreground">Status: {application.status}</p>
+                      {application.status === 'accepted' && <p className="mt-1 text-xs text-muted-foreground">A project workspace is available. Acceptance does not mean payment has been made.</p>}
+                      {application.status === 'completed' && <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-400">Completion confirmed by both participants.</p>}
                     </div>
                   </div>
-                  {application.conversationId && <Button asChild variant="outline" size="sm"><Link href={`/messages/${application.conversationId}`}>Open conversation</Link></Button>}
+                  <div className="flex flex-wrap gap-2">
+                    {application.conversationId && <Button asChild variant="outline" size="sm"><Link href={`/messages/${application.conversationId}`}>Open conversation</Link></Button>}
+                    {application.status === 'pending' && application.isOwner && <>
+                      <Button size="sm" onClick={() => void updateApplication(application, 'accepted').catch(error => setApplicationsError(error instanceof Error ? error.message : 'Could not accept application'))}><Check className="mr-1 h-4 w-4" />Accept and create workspace</Button>
+                      <Button size="sm" variant="outline" onClick={() => void updateApplication(application, 'rejected').catch(error => setApplicationsError(error instanceof Error ? error.message : 'Could not reject application'))}><X className="mr-1 h-4 w-4" />Reject</Button>
+                    </>}
+                    {application.status === 'pending' && application.isMine && <Button size="sm" variant="outline" onClick={() => void updateApplication(application, 'cancelled').catch(error => setApplicationsError(error instanceof Error ? error.message : 'Could not cancel application'))}>Cancel application</Button>}
+                    {application.status === 'accepted' && (application.isMine || application.isOwner) && <>
+                      {application.completionRequestedById == null
+                        ? <Button size="sm" variant="outline" onClick={() => void updateCompletion(application, 'request').catch(error => setApplicationsError(error instanceof Error ? error.message : 'Could not request completion'))}>Request completion</Button>
+                        : application.completionRequestedById !== user?.id
+                          ? <Button size="sm" onClick={() => void updateCompletion(application, 'confirm').catch(error => setApplicationsError(error instanceof Error ? error.message : 'Could not confirm completion'))}><CheckCircle2 className="mr-1 h-4 w-4" />Confirm completion</Button>
+                          : <span className="self-center text-xs text-muted-foreground">Waiting for the other participant to confirm completion</span>}
+                      <Button size="sm" variant="ghost" onClick={() => void updateApplication(application, 'cancelled').catch(error => setApplicationsError(error instanceof Error ? error.message : 'Could not cancel project'))}>Cancel project</Button>
+                    </>}
+                  </div>
                 </article>
               ))}
             </section>}

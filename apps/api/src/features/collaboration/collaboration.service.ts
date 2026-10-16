@@ -1,8 +1,9 @@
 import { db } from "@workspace/db";
-import { collaborationRequestsTable, collaborationRoomsTable } from "@workspace/db/schema";
-import { eq, and, or, desc } from "drizzle-orm";
+import { collaborationRequestsTable, collaborationRoomsTable, opportunityApplicationsTable, jobsTable } from "@workspace/db/schema";
+import { eq, and, or, desc, inArray } from "drizzle-orm";
 import { getUserWithCounts } from "../profiles/profile.service";
 import { startConversation, sendMessage } from "../messaging/messaging.service";
+import { canAccessOpportunityWorkspace } from "../creator-economy/opportunityWorkflow";
 
 export async function sendCollaborationRequest(
   senderId: number,
@@ -78,12 +79,14 @@ export async function updateRequestStatus(
 
   if (!request) return null;
   if (request.receiverId !== userId) throw new Error("Forbidden");
+  if (request.status !== "pending") throw new Error("RequestResolved");
 
   const [updated] = await db
     .update(collaborationRequestsTable)
     .set({ status, updatedAt: new Date() })
-    .where(eq(collaborationRequestsTable.id, id))
+    .where(and(eq(collaborationRequestsTable.id, id), eq(collaborationRequestsTable.status, "pending")))
     .returning();
+  if (!updated) throw new Error("RequestResolved");
 
   if (status === "accepted") {
     const { conversationId } = await startConversation(request.senderId, request.receiverId);
@@ -106,12 +109,38 @@ export async function getRooms(userId: number) {
     .select()
     .from(collaborationRequestsTable)
     .where(and(or(eq(collaborationRequestsTable.senderId, userId), eq(collaborationRequestsTable.receiverId, userId)), eq(collaborationRequestsTable.status, "accepted")));
-  if (requests.length === 0) return [];
+  const applications = await db.select({
+    id: opportunityApplicationsTable.id,
+    jobId: opportunityApplicationsTable.jobId,
+    applicantId: opportunityApplicationsTable.applicantId,
+    status: opportunityApplicationsTable.status,
+    completedAt: opportunityApplicationsTable.completedAt,
+    title: jobsTable.title,
+    authorId: jobsTable.authorId,
+  }).from(opportunityApplicationsTable)
+    .innerJoin(jobsTable, eq(jobsTable.id, opportunityApplicationsTable.jobId))
+    .where(and(
+      or(eq(opportunityApplicationsTable.applicantId, userId), eq(jobsTable.authorId, userId)),
+      inArray(opportunityApplicationsTable.status, ["accepted", "completed"]),
+    ));
+  const requestIds = requests.map(request => request.id);
+  const applicationIds = applications.map(application => application.id);
+  if (requestIds.length === 0 && applicationIds.length === 0) return [];
 
-  const rooms = await db.select().from(collaborationRoomsTable).orderBy(desc(collaborationRoomsTable.updatedAt));
-  return rooms
-    .filter(room => requests.some(request => request.id === room.requestId))
-    .map(room => ({ ...room, request: requests.find(request => request.id === room.requestId) }));
+  const roomConditions = [
+    ...(requestIds.length ? [inArray(collaborationRoomsTable.requestId, requestIds)] : []),
+    ...(applicationIds.length ? [inArray(collaborationRoomsTable.opportunityApplicationId, applicationIds)] : []),
+  ];
+  const rooms = await db.select().from(collaborationRoomsTable)
+    .where(and(or(...roomConditions), inArray(collaborationRoomsTable.status, ["active", "completed"])))
+    .orderBy(desc(collaborationRoomsTable.updatedAt));
+  const requestById = new Map(requests.map(request => [request.id, request]));
+  const applicationById = new Map(applications.map(application => [application.id, application]));
+  return rooms.map(room => ({
+    ...room,
+    request: room.requestId === null ? null : requestById.get(room.requestId) ?? null,
+    opportunity: room.opportunityApplicationId === null ? null : applicationById.get(room.opportunityApplicationId) ?? null,
+  }));
 }
 
 export async function createRoom(userId: number, input: { requestId: number; title: string; brief?: string; splitSuggestion?: Record<string, number> }) {
@@ -122,22 +151,45 @@ export async function createRoom(userId: number, input: { requestId: number; tit
   const [existing] = await db.select().from(collaborationRoomsTable).where(eq(collaborationRoomsTable.requestId, input.requestId));
   if (existing) return { kind: "exists" as const, room: existing };
 
-  const [room] = await db.insert(collaborationRoomsTable).values({
+  await db.insert(collaborationRoomsTable).values({
     requestId: input.requestId,
     createdById: userId,
     title: input.title,
     brief: input.brief ?? "",
     splitSuggestion: input.splitSuggestion ?? {},
-  }).returning();
-  return { kind: "created" as const, room };
+  }).onConflictDoNothing({ target: collaborationRoomsTable.requestId });
+  const [room] = await db.select().from(collaborationRoomsTable).where(eq(collaborationRoomsTable.requestId, input.requestId));
+  return room ? { kind: existing ? "exists" as const : "created" as const, room } : { kind: "missing" as const };
 }
 
 export async function updateRoom(userId: number, roomId: number, input: { title?: string; brief?: string; splitSuggestion?: Record<string, number> }) {
   const [room] = await db.select().from(collaborationRoomsTable).where(eq(collaborationRoomsTable.id, roomId));
-  if (!room) return { kind: "missing" as const };
-  const [request] = await db.select().from(collaborationRequestsTable).where(eq(collaborationRequestsTable.id, room.requestId));
-  if (!request) return { kind: "missing" as const };
-  if (!canAccessRoom(request, userId)) return { kind: "forbidden" as const };
+  if (!room || room.status === "cancelled") return { kind: "missing" as const };
+  if (room.requestId !== null) {
+    const [request] = await db.select().from(collaborationRequestsTable)
+      .where(and(eq(collaborationRequestsTable.id, room.requestId), eq(collaborationRequestsTable.status, "accepted")));
+    if (!request) return { kind: "missing" as const };
+    if (!canAccessRoom(request, userId)) return { kind: "forbidden" as const };
+  } else if (room.opportunityApplicationId !== null) {
+    const [application] = await db.select({
+      applicantId: opportunityApplicationsTable.applicantId,
+      status: opportunityApplicationsTable.status,
+      authorId: jobsTable.authorId,
+    }).from(opportunityApplicationsTable)
+      .innerJoin(jobsTable, eq(jobsTable.id, opportunityApplicationsTable.jobId))
+      .where(and(
+        eq(opportunityApplicationsTable.id, room.opportunityApplicationId),
+        inArray(opportunityApplicationsTable.status, ["accepted", "completed"]),
+      ));
+    if (!application) return { kind: "missing" as const };
+    if (!canAccessOpportunityWorkspace(application.status, application.authorId === userId, application.applicantId === userId)) {
+      return application.applicantId === userId || application.authorId === userId
+        ? { kind: "missing" as const }
+        : { kind: "forbidden" as const };
+    }
+  } else {
+    return { kind: "missing" as const };
+  }
 
   const [updated] = await db.update(collaborationRoomsTable).set({ ...input, updatedAt: new Date() }).where(eq(collaborationRoomsTable.id, roomId)).returning();
   return { kind: "updated" as const, room: updated };
