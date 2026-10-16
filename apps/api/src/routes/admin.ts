@@ -645,6 +645,7 @@ router.delete("/posts/:id", requirePermission("delete_post"), async (req: any, r
   if (!post) return res.status(404).json({ error: "Post not found" });
   await PostService.deletePost(id, req.currentUser.id, true);
   await auditLog(req.currentUser.id, "post_deleted", "post", id, post.title ?? undefined);
+  await deleteCachePattern("feed:*");
   return res.json({ success: true });
 });
 
@@ -652,6 +653,7 @@ router.patch("/posts/:id/unpublish", requirePermission("unpublish_post"), async 
   const id = parseInt(req.params.id);
   const [updated] = await db.update(postsTable).set({ isPublished: false, updatedAt: new Date() }).where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false))).returning({ id: postsTable.id, isPublished: postsTable.isPublished });
   if (!updated) return res.status(404).json({ error: "Post not found" });
+  await deleteCachePattern("feed:*");
   await auditLog(req.currentUser.id, "post_unpublished", "post", id);
   return res.json(updated);
 });

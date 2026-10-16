@@ -9,6 +9,7 @@ import {
   postSharesTable, repostsTable, savedPostsTable,
   commentLikesTable, userTrustScoresTable, usersTable, boostRequestsTable,
   groupPostDetailsTable, groupsTable, groupMembersTable,
+  postTopicsTable, topicFollowsTable, topicsTable, creatorProfilesTable,
 } from "@workspace/db/schema";
 import { eq, and, desc, inArray, notInArray, sql, isNull, gte, lte, gt, or, ne } from "drizzle-orm";
 import { enrichPost, getUserWithCounts } from "../profiles/profile.service";
@@ -17,7 +18,7 @@ import { updateUserTrustScoreSafe } from "../trust/trust.service";
 import { getCache, setCache, deleteCachePattern } from "../../lib/cache";
 import { memGet, memSet, memDeletePattern } from "../../lib/memCache";
 import { addReputationEvent } from "../trust/reputation.service";
-import { calculateRankingScore } from "./ranking.service";
+import { buildFeedCacheKey, calculateMeaningfulEngagementScore, calculateRankingScore, getFeedCandidateWindow, selectRankedPage } from "./ranking.service";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../../lib/featureFlags";
 import { hasPermission } from "../../middleware/admin";
@@ -426,6 +427,7 @@ export const updatePost = async (req: Request, res: Response) => {
   try {
     const post = await PostService.updatePost(id, viewerId, req.body);
     if (!post) return res.status(404).json({ error: "Post not found" });
+    void deleteCachePattern("feed:*");
     return res.json(post);
   } catch (e: any) {
     if (e.message === "Forbidden") return res.status(403).json({ error: "Forbidden" });
@@ -540,15 +542,28 @@ export const getFeed = async (req: Request, res: Response) => {
   const type = (req.query.type as string) || "algorithmic";
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 20;
-  const offset = (page - 1) * limit;
   const since = typeof req.query.since === "string" ? new Date(req.query.since) : null;
   const hasSince = since && !Number.isNaN(since.getTime());
-  const mutedIds = await PostService.getMutedUserIds(viewerId);
-
-  const cacheKey = `feed:${viewerId ?? "anon"}:${type}:${page}:${limit}:${mutedIds.join(",")}:${hasSince ? since.toISOString() : "all"}`;
-  const cached = await getCache<object>(cacheKey);
+  const [mutedIds, blockedSet] = await Promise.all([
+    PostService.getMutedUserIds(viewerId),
+    viewerId ? import("../safety/blocks.service").then(({ getMutualBlockSet }) => getMutualBlockSet(viewerId)) : Promise.resolve(new Set<number>()),
+  ]);
+  const blockedIds = [...blockedSet];
+  const cacheKey = buildFeedCacheKey({
+    viewerId,
+    type,
+    page,
+    limit,
+    mutedIds,
+    blockedIds,
+    since: hasSince ? since.toISOString() : null,
+  });
+  // Authenticated feed responses contain viewer-specific visibility and reaction fields.
+  const cacheable = viewerId === null;
+  const cached = cacheable ? await getCache<object>(cacheKey) : null;
   if (cached) return res.json(cached);
 
+  const candidateWindow = getFeedCandidateWindow(type, page, limit);
   const posts = await db
     .select(PostService.stablePostSelection)
     .from(postsTable)
@@ -558,18 +573,45 @@ export const getFeed = async (req: Request, res: Response) => {
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
       postVisibilityCondition(viewerId),
-      ...(mutedIds.length > 0 ? [notInArray(postsTable.authorId, mutedIds)] : []),
+      ...([...new Set([...mutedIds, ...blockedIds])].length > 0
+        ? [notInArray(postsTable.authorId, [...new Set([...mutedIds, ...blockedIds])])]
+        : []),
       ...(hasSince ? [gt(postsTable.createdAt, since)] : []),
     ))
     .orderBy(desc(postsTable.createdAt))
-    .limit(type === "chronological" ? limit : Math.max(limit * 10, 200))
-    .offset(type === "chronological" ? offset : 0);
+    .limit(candidateWindow.limit)
+    .offset(candidateWindow.offset);
 
   if (type === "chronological") {
     const enriched = await Promise.all(posts.slice(0, limit).map(p => enrichPost(p, viewerId)));
     const result = { posts: enriched, total: enriched.length, page, limit, type };
-    await setCache(cacheKey, result, 60);
+    if (cacheable) await setCache(cacheKey, result, 30);
     return res.json(result);
+  }
+
+  const [followedTopicRows, followingRows, creatorProfileRows] = await Promise.all([
+    viewerId
+      ? db.select({ topicId: topicFollowsTable.topicId }).from(topicFollowsTable).where(eq(topicFollowsTable.userId, viewerId))
+      : Promise.resolve([] as Array<{ topicId: number }>),
+    viewerId
+      ? db.select({ userId: followsTable.followingId }).from(followsTable).where(eq(followsTable.followerId, viewerId))
+      : Promise.resolve([] as Array<{ userId: number }>),
+    viewerId
+      ? db.select({ skills: creatorProfilesTable.skills }).from(creatorProfilesTable).where(eq(creatorProfilesTable.userId, viewerId))
+      : Promise.resolve([] as Array<{ skills: string }>),
+  ]);
+  const followedTopicIds = followedTopicRows.map(row => row.topicId);
+  const followingIdSet = new Set(followingRows.map(row => row.userId));
+  let viewerSkills = new Set<string>();
+  try {
+    const skills = JSON.parse(creatorProfileRows[0]?.skills ?? "[]");
+    if (Array.isArray(skills)) {
+      viewerSkills = new Set(skills.filter((skill): skill is string => typeof skill === "string")
+        .map(skill => skill.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-"))
+        .filter(Boolean));
+    }
+  } catch {
+    viewerSkills = new Set();
   }
 
   const postIds = posts.map(p => p.id);
@@ -579,13 +621,8 @@ export const getFeed = async (req: Request, res: Response) => {
         .from(likesTable).where(inArray(likesTable.postId, postIds)).groupBy(likesTable.postId)
     : [];
 
-  const commentCounts = postIds.length > 0
-    ? await db.select({ postId: commentsTable.postId, count: sql<number>`count(*)::int` })
-        .from(commentsTable).where(inArray(commentsTable.postId, postIds)).groupBy(commentsTable.postId)
-    : [];
-
   const shareCounts = postIds.length > 0
-    ? await db.select({ postId: postSharesTable.postId, count: sql<number>`count(*)::int` })
+    ? await db.select({ postId: postSharesTable.postId, count: sql<number>`count(DISTINCT ${postSharesTable.userId})::int` })
         .from(postSharesTable).where(inArray(postSharesTable.postId, postIds)).groupBy(postSharesTable.postId)
     : [];
 
@@ -594,10 +631,49 @@ export const getFeed = async (req: Request, res: Response) => {
         .from(repostsTable).where(inArray(repostsTable.postId, postIds)).groupBy(repostsTable.postId)
     : [];
 
+  const saveCounts = postIds.length > 0
+    ? await db.select({ postId: savedPostsTable.postId, count: sql<number>`count(*)::int` })
+        .from(savedPostsTable).where(inArray(savedPostsTable.postId, postIds)).groupBy(savedPostsTable.postId)
+    : [];
+
+  const commentQualityCounts = postIds.length > 0
+    ? await db.select({
+        postId: commentsTable.postId,
+        distinctAuthors: sql<number>`count(DISTINCT ${commentsTable.authorId})::int`,
+        substantiveAuthors: sql<number>`count(DISTINCT ${commentsTable.authorId}) FILTER (WHERE length(trim(${commentsTable.content})) >= 80)::int`,
+      })
+        .from(commentsTable).where(inArray(commentsTable.postId, postIds)).groupBy(commentsTable.postId)
+    : [];
+
+  const followedTopicSet = new Set(followedTopicIds);
+  const topicMatches = postIds.length > 0 && (followedTopicSet.size > 0 || viewerSkills.size > 0)
+    ? await db.select({
+        postId: postTopicsTable.postId,
+        topicId: postTopicsTable.topicId,
+        slug: topicsTable.slug,
+        name: topicsTable.name,
+      })
+        .from(postTopicsTable)
+        .innerJoin(topicsTable, eq(topicsTable.id, postTopicsTable.topicId))
+        .where(inArray(postTopicsTable.postId, postIds))
+    : [];
+  const followedTopicMatches = new Set<number>();
+  const expertiseMatches = new Set<number>();
+  for (const match of topicMatches) {
+    if (followedTopicSet.has(match.topicId)) followedTopicMatches.add(match.postId);
+    const topicSlug = match.slug.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    const topicName = match.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    if (viewerSkills.has(topicSlug) || viewerSkills.has(topicName)) expertiseMatches.add(match.postId);
+  }
+
   const likeMap = new Map<number, number>(likeCounts.map(l => [l.postId, Number(l.count)]));
-  const commentMap = new Map<number, number>(commentCounts.map(c => [c.postId, Number(c.count)]));
   const shareMap = new Map<number, number>(shareCounts.map(s => [s.postId, Number(s.count)]));
   const repostMap = new Map<number, number>(repostCounts.map(r => [r.postId, Number(r.count)]));
+  const saveMap = new Map<number, number>(saveCounts.map(s => [s.postId, Number(s.count)]));
+  const commentQualityMap = new Map(commentQualityCounts.map(row => [row.postId, {
+    distinctAuthors: Number(row.distinctAuthors),
+    substantiveAuthors: Number(row.substantiveAuthors),
+  }]));
   const now = Date.now();
 
   const authorIds = [...new Set(posts.map(p => p.authorId))];
@@ -606,8 +682,13 @@ export const getFeed = async (req: Request, res: Response) => {
         .from(userTrustScoresTable)
         .where(inArray(userTrustScoresTable.userId, authorIds))
     : [];
-  const trustMap = new Map<number, { tier: string; creatorLevel: string; vm: number }>(
-    trustScores.map(t => [t.userId, { tier: t.tier ?? "normal", creatorLevel: t.creatorLevel ?? "new_voice", vm: Number(t.vm ?? 1) }])
+  const trustMap = new Map<number, { uti: number | null; tier: string; creatorLevel: string; vm: number }>(
+    trustScores.map(t => [t.userId, {
+      uti: t.uti === null ? null : Number(t.uti),
+      tier: t.tier ?? "normal",
+      creatorLevel: t.creatorLevel ?? "new_voice",
+      vm: Number(t.vm ?? 1),
+    }])
   );
 
   const authorProfiles = authorIds.length > 0
@@ -641,20 +722,11 @@ export const getFeed = async (req: Request, res: Response) => {
     : [];
   const boostMap = new Map(activeBoosts.map(boost => [boost.postId, boost]));
 
-  // Cold-start boost: query join dates for all authors to identify new creators
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const authorJoinDates = authorIds.length > 0
-    ? await db.select({ id: usersTable.id, createdAt: usersTable.createdAt })
-        .from(usersTable)
-        .where(and(inArray(usersTable.id, authorIds), gte(usersTable.createdAt, thirtyDaysAgo)))
-    : [];
-  const newCreatorSet = new Set(authorJoinDates.map(a => a.id));
-
   const scored = posts.map(post => {
     const likes = Number(likeMap.get(post.id) ?? 0);
-    const comments = Number(commentMap.get(post.id) ?? 0);
     const shares = Number(shareMap.get(post.id) ?? 0);
     const reposts = Number(repostMap.get(post.id) ?? 0);
+    const commentQuality = commentQualityMap.get(post.id) ?? { distinctAuthors: 0, substantiveAuthors: 0 };
     const ageHours = (now - new Date(post.createdAt).getTime()) / (1000 * 60 * 60);
 
     const trust = trustMap.get(post.authorId);
@@ -662,10 +734,24 @@ export const getFeed = async (req: Request, res: Response) => {
     const vm = trust?.vm ?? 1.0;
     const author = authorProfileMap.get(post.authorId);
     const activeBoost = boostMap.get(post.id);
+    const engagementScore = calculateMeaningfulEngagementScore({
+      likes,
+      distinctCommentAuthors: commentQuality.distinctAuthors,
+      substantiveCommentAuthors: commentQuality.substantiveAuthors,
+      shares,
+      reposts,
+      saves: Number(saveMap.get(post.id) ?? 0),
+    });
+    // Creator skills are self-reported, so their relevance weight stays modest.
+    const topicRelevance = 1
+      + (followedTopicMatches.has(post.id) ? 0.25 : 0)
+      + (expertiseMatches.has(post.id) ? 0.15 : 0);
+    const followingRelevance = followingIdSet.has(post.authorId) ? 1.2 : 1;
     const score = calculateRankingScore({
       ageHours,
-      engagementScore: likes * 2 + comments * 3 + shares * 4 + reposts * 5,
-      authorTrustScore: trustScores.find(t => t.userId === post.authorId)?.uti,
+      engagementScore,
+      relevanceScore: topicRelevance * followingRelevance,
+      authorTrustScore: trust?.uti ?? undefined,
       visibilityMultiplier: vm,
       authorReachMultiplier: Number(author?.reachMultiplier ?? 1),
       author: {
@@ -682,10 +768,10 @@ export const getFeed = async (req: Request, res: Response) => {
   });
 
   scored.sort((a, b) => b.score - a.score);
-  const topPosts = scored.slice(offset, offset + limit).map(s => s.post);
+  const topPosts = selectRankedPage(scored, page, limit).map(s => s.post);
   const enriched = await Promise.all(topPosts.map(p => enrichPost(p, viewerId)));
   const feedResult = { posts: enriched, total: enriched.length, page, limit, type };
-  await setCache(cacheKey, feedResult, 90);
+  if (cacheable) await setCache(cacheKey, feedResult, 30);
   return res.json(feedResult);
 };
 

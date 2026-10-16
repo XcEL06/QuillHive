@@ -8,6 +8,7 @@ import {
 } from "../../lib/events";
 import { detectAnomalies, alertCooldownStatus, sendDailyDigest } from "../../lib/alertEngine";
 import { isEmailConfigured, ADMIN_EMAIL, sendAlertEmail } from "../../lib/emailAlerts";
+import { getCacheMetrics } from "../../lib/cache";
 
 export const monitoringRouter: IRouter = Router();
 monitoringRouter.use(requireAdmin);
@@ -24,6 +25,7 @@ monitoringRouter.get("/metrics", (_req: Request, res: Response) => {
   const anomaly = detectAnomalies();
   res.json({
     counters,
+    cache: getCacheMetrics(),
     uptimeMs,
     anomaly,
     rateLimit: alertCooldownStatus(),

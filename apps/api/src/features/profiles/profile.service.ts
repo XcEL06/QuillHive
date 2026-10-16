@@ -22,7 +22,7 @@ export async function getUserWithCounts(userId: number, viewerId: number | null)
   const cached = await getCache<object>(cacheKey);
   if (cached) return cached as Awaited<ReturnType<typeof _getUserWithCounts>>;
   const result = await _getUserWithCounts(userId, viewerId);
-  if (result) await setCache(cacheKey, result, 300);
+  if (result) await setCache(cacheKey, result, 60);
   return result;
 }
 

@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { getViewerId } from "../../lib/auth-types";
+import { deleteCachePattern } from "../../lib/cache";
 import { invalidateUserCache } from "./profile.service";
 
 export const privacyRouter = Router();
@@ -50,5 +51,8 @@ privacyRouter.patch("/", async (req, res: Response) => {
     showInSearch: usersTable.showInSearch,
   });
   await invalidateUserCache(userId);
+  if (updates.profileVisibility !== undefined || updates.showPostsToEveryone !== undefined) {
+    await deleteCachePattern("feed:*");
+  }
   return res.json(updated);
 });

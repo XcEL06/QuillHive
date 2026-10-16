@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '@/lib/api';
 import { reportCaughtError } from '@/lib/reportCaughtError';
+import { getActiveReadingDelta } from '@/lib/readingActivity';
 
 export function useReadingProgress(postId: number | null, opts?: { enabled?: boolean }) {
   const enabled = opts?.enabled ?? true;
   const [percent, setPercent] = useState(0);
   const lastSentRef = useRef(0);
   const lastSentAtRef = useRef(0);
-  const startTime = useRef(Date.now());
   const activeMs = useRef(0);
-  const lastActiveRef = useRef(Date.now());
+  const baseReadTimeMs = useRef(0);
+  const lastActivityAt = useRef(0);
+  const lastTickAt = useRef(0);
 
   const sendProgress = (value: number) => {
     if (!postId) return;
-    const currentlyActive = document.visibilityState === 'visible' ? Date.now() - lastActiveRef.current : 0;
-    const elapsed = activeMs.current + currentlyActive;
+    const elapsed = Math.min(12 * 60 * 60 * 1000, baseReadTimeMs.current + activeMs.current);
     void apiRequest('PUT', `/api/reading-progress/${postId}`, { percent: value, readTimeMs: elapsed }).catch((error) => {
       console.error('[reading-progress] save failed', error);
       reportCaughtError(error, { action: 'save_reading_progress', postId });
@@ -24,27 +25,45 @@ export function useReadingProgress(postId: number | null, opts?: { enabled?: boo
   useEffect(() => {
     if (!enabled || !postId) return;
 
-    startTime.current = Date.now();
-    lastActiveRef.current = startTime.current;
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        lastActiveRef.current = Date.now();
-      } else {
-        activeMs.current += Date.now() - lastActiveRef.current;
-      }
+    activeMs.current = 0;
+    baseReadTimeMs.current = 0;
+    lastActivityAt.current = 0;
+    const sampleActivity = () => {
+      const now = Date.now();
+      activeMs.current += getActiveReadingDelta(
+        now,
+        lastTickAt.current,
+        lastActivityAt.current,
+        document.visibilityState === 'visible',
+        document.hasFocus(),
+      );
+      lastTickAt.current = now;
     };
-    document.addEventListener('visibilitychange', onVisible);
+    const markActivity = () => {
+      lastActivityAt.current = Date.now();
+    };
+    lastTickAt.current = Date.now();
+    const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
+    activityEvents.forEach(event => window.addEventListener(event, markActivity, { passive: true }));
+    const timer = window.setInterval(sampleActivity, 1_000);
+    document.addEventListener('visibilitychange', sampleActivity);
     let cancelled = false;
     apiRequest('GET', `/api/reading-progress/${postId}`)
       .then((r) => r.json())
       .then((data) => {
         if (cancelled) return;
         if (typeof data?.percent === 'number') setPercent(data.percent);
+        if (typeof data?.readTimeMs === 'number' && Number.isFinite(data.readTimeMs)) {
+          baseReadTimeMs.current = Math.max(0, Math.min(12 * 60 * 60 * 1000, data.readTimeMs));
+        }
       })
       .catch((error) => reportCaughtError(error, { action: 'load_reading_progress', postId }));
     return () => {
       cancelled = true;
-      document.removeEventListener('visibilitychange', onVisible);
+      sampleActivity();
+      window.clearInterval(timer);
+      activityEvents.forEach(event => window.removeEventListener(event, markActivity));
+      document.removeEventListener('visibilitychange', sampleActivity);
     };
   }, [postId, enabled]);
 
@@ -79,7 +98,15 @@ export function useReadingProgress(postId: number | null, opts?: { enabled?: boo
     return () => {
       window.removeEventListener('scroll', onScroll);
       if (raf) cancelAnimationFrame(raf);
-      if (document.visibilityState === 'visible') activeMs.current += Date.now() - lastActiveRef.current;
+      const now = Date.now();
+      activeMs.current += getActiveReadingDelta(
+        now,
+        lastTickAt.current,
+        lastActivityAt.current,
+        document.visibilityState === 'visible',
+        document.hasFocus(),
+      );
+      lastTickAt.current = now;
       sendProgress(lastSentRef.current);
     };
   }, [postId, enabled]);

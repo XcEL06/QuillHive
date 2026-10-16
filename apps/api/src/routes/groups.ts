@@ -9,6 +9,7 @@ import { enrichPost } from "../features/profiles/profile.service";
 import { deletePostsPermanently } from "../features/posts/post.service";
 import { postVisibilityCondition } from "../features/posts/postVisibility";
 import { sanitizeRichText } from "../lib/sanitize";
+import { deleteCachePattern } from "../lib/cache";
 import { assessGroupReputation, readTrustScoreAtJoin } from "../features/groups/groupReputation";
 import { evaluateGroupPostReview, requiresManualJoinReview } from "../features/groups/groupPermissions";
 
@@ -620,6 +621,7 @@ router.post("/:id/posts/:postId/archive", async (req, res) => {
   if (post.authorId !== viewerId && !canModerateGroup(await getGroupRole(groupId, viewerId))) return res.status(403).json({ error: "Forbidden" });
   await db.update(postsTable).set({ isPublished: false, updatedAt: new Date() })
     .where(and(eq(postsTable.id, postId), eq(postsTable.groupId, groupId)));
+  await deleteCachePattern("feed:*");
   return res.json({ ok: true });
 });
 
@@ -699,6 +701,7 @@ router.delete("/:id", async (req, res) => {
 
   if (outcome === "missing") return res.status(404).json({ error: "Group not found" });
   if (outcome === "forbidden") return res.status(403).json({ error: "Only the group owner can delete the group" });
+  await deleteCachePattern("feed:*");
   return res.json({ ok: true });
 });
 

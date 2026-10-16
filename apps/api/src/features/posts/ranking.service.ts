@@ -1,6 +1,67 @@
+import { createHash } from "node:crypto";
+
 export const HIGH_TRUST_AUTHOR_MULTIPLIER = 4;
 export const OFFICIAL_POST_MULTIPLIER = 4;
 export const BOOST_PLACEMENT_WEIGHT = 10;
+
+export interface FeedCacheKeyInput {
+  viewerId: number | null;
+  type: string;
+  page: number;
+  limit: number;
+  mutedIds: number[];
+  blockedIds: number[];
+  since: string | null;
+}
+
+export function buildFeedCacheKey(input: FeedCacheKeyInput): string {
+  const stableIds = (ids: number[]) => createHash("sha256")
+    .update([...ids].sort((a, b) => a - b).join(","))
+    .digest("hex")
+    .slice(0, 24);
+  return [
+    "feed",
+    input.viewerId ?? "anon",
+    input.type,
+    input.page,
+    input.limit,
+    `muted:${stableIds(input.mutedIds)}`,
+    `blocked:${stableIds(input.blockedIds)}`,
+    `since:${input.since ?? "all"}`,
+  ].join(":");
+}
+
+export function selectRankedPage<T>(items: T[], page: number, limit: number): T[] {
+  const safePage = Math.max(1, Math.floor(page));
+  const safeLimit = Math.max(1, Math.floor(limit));
+  const offset = (safePage - 1) * safeLimit;
+  return items.slice(offset, offset + safeLimit);
+}
+
+export function getFeedCandidateWindow(type: string, page: number, limit: number): { limit: number; offset: number } {
+  const safePage = Math.max(1, Math.floor(page));
+  const safeLimit = Math.max(1, Math.floor(limit));
+  return type === "chronological"
+    ? { limit: safeLimit, offset: (safePage - 1) * safeLimit }
+    : { limit: Math.min(2_000, Math.max(safeLimit * 10, 200, safePage * safeLimit)), offset: 0 };
+}
+
+export function calculateMeaningfulEngagementScore(input: {
+  likes: number;
+  distinctCommentAuthors: number;
+  substantiveCommentAuthors: number;
+  shares: number;
+  reposts: number;
+  saves: number;
+}): number {
+  const count = (value: number) => Math.max(0, Number.isFinite(value) ? value : 0);
+  return count(input.likes) * 1.5
+    + count(input.distinctCommentAuthors) * 2
+    + count(input.substantiveCommentAuthors) * 3
+    + count(input.shares) * 2
+    + count(input.reposts) * 2
+    + count(input.saves) * 4;
+}
 
 const HIGH_TRUST_CREATOR_LEVELS = new Set(["established", "featured", "luminary"]);
 

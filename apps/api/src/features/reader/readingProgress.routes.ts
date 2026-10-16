@@ -2,14 +2,15 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { readingProgressTable, postsTable, usersTable } from "@workspace/db/schema";
-import { and, eq, desc, gte, lt } from "drizzle-orm";
+import { and, eq, desc, gte, lt, sql } from "drizzle-orm";
 import { getViewerId } from "../../lib/auth-types";
+import { postVisibilityCondition } from "../posts/postVisibility";
 
 export const readingProgressRouter: Router = Router();
 
 const upsertSchema = z.object({
   percent: z.number().min(0).max(100),
-  readTimeMs: z.number().int().min(0).optional(),
+  readTimeMs: z.number().int().min(0).max(12 * 60 * 60 * 1000).optional(),
 });
 
 readingProgressRouter.put("/:postId", async (req, res) => {
@@ -24,7 +25,12 @@ readingProgressRouter.put("/:postId", async (req, res) => {
   const parsed = upsertSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid body" });
 
-  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(eq(postsTable.id, postId));
+  const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(and(
+    eq(postsTable.id, postId),
+    eq(postsTable.isPublished, true),
+    eq(postsTable.isDeleted, false),
+    postVisibilityCondition(userId),
+  ));
   if (!post) return res.status(404).json({ error: "Post not found" });
 
   await db
@@ -33,30 +39,13 @@ readingProgressRouter.put("/:postId", async (req, res) => {
     .onConflictDoUpdate({
       target: [readingProgressTable.userId, readingProgressTable.postId],
       set: {
-        percent: parsed.data.percent,
-        ...(parsed.data.readTimeMs !== undefined ? { readTimeMs: parsed.data.readTimeMs } : {}),
+        percent: sql`GREATEST(${readingProgressTable.percent}, EXCLUDED.percent)`,
+        ...(parsed.data.readTimeMs !== undefined
+          ? { readTimeMs: sql`GREATEST(${readingProgressTable.readTimeMs}, EXCLUDED.read_time_ms)` }
+          : {}),
         lastReadAt: new Date(),
       },
     });
-
-  if (parsed.data.percent > 50) {
-    (async () => {
-      try {
-        const { topicsTable } = await import("@workspace/db/schema");
-        const { sql: _sql } = await import("drizzle-orm");
-        const [post] = await db.select({ tags: postsTable.tags }).from(postsTable).where(eq(postsTable.id, postId));
-        if (!post?.tags) return;
-        const tags: string[] = (() => { try { return JSON.parse(post.tags); } catch { return []; } })();
-        for (const tag of tags.slice(0, 5)) {
-          const slug = tag.replace(/^#/, "").toLowerCase().replace(/[^a-z0-9_]/g, "");
-          if (slug.length < 2) continue;
-          await db.update(topicsTable)
-            .set({ postCount: _sql`${topicsTable.postCount} + 1` })
-            .where(eq(topicsTable.slug, slug));
-        }
-      } catch { /* never block reading progress save */ }
-    })();
-  }
 
   return res.json({ ok: true });
 });

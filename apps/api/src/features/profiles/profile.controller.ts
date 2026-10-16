@@ -39,6 +39,7 @@ import { isFeatureEnabled } from "../../lib/featureFlags";
 import { sendEmail } from "../email/email.service";
 import { welcomeEmailHtml, welcomeEmailText } from "../email/email.templates";
 import { getRedis } from "../../lib/redis";
+import { deleteCachePattern } from "../../lib/cache";
 import { canViewProfile } from "./profileAccess.service";
 import { getUserAchievements } from "../achievements/achievement.service";
 import { getPortfolioItems } from "../gallery/gallery.service";
@@ -891,6 +892,8 @@ export const followUser = async (req: Request, res: Response) => {
     })();
   }
 
+  await Promise.all([invalidateUserCache(viewerId), invalidateUserCache(target.id)]);
+
   const [followersResult] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(followsTable)
@@ -987,6 +990,7 @@ export const updateMyProfile = async (req: Request, res: Response) => {
 
   await db.update(usersTable).set(updates).where(eq(usersTable.id, viewerId));
   await invalidateUserCache(viewerId);
+  if (updates.profileVisibility !== undefined) await deleteCachePattern("feed:*");
   const reportedUsername = typeof req.body.username === "string" ? req.body.username.trim() : currentUser.username;
   emitEvent({
     type: "USER_EVENT",
