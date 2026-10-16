@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Link } from 'wouter';
-import { apiFetch, getStoredToken } from '@/lib/api';
+import { apiFetch, apiUrl, getStoredToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { getInitials } from '@/lib/utils';
 import { useLocation } from 'wouter';
@@ -192,7 +192,7 @@ export function TalentPanel() {
     if (availableForFilter !== 'all') params.set('availableFor', availableForFilter);
 
     try {
-      const res = await fetch(`/api/opportunities?${params}`, {
+      const res = await fetch(apiUrl(`/api/opportunities?${params}`), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json().catch(() => null) as { creators?: Creator[]; total?: number; error?: string } | null;
