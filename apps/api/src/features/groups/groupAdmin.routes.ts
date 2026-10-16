@@ -579,59 +579,6 @@ groupAdminRouter.get("/:id/archived-posts", requireAuth, async (req, res: Respon
   }))) });
 });
 
-groupAdminRouter.post("/:id/posts/:postId/archive", requireAuth, async (req, res: Response) => {
-  const actorId = (req as AuthedRequest).currentUser.id;
-  const groupId = Number(req.params.id);
-  const postId = Number(req.params.postId);
-  const role = await getActorRole(groupId, actorId);
-  const [actor] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, actorId));
-  const isSuperAdmin = actor?.role === "super_admin";
-  const [post] = await db.select({
-    id: postsTable.id,
-    authorId: postsTable.authorId,
-    isDeleted: postsTable.isDeleted,
-  }).from(postsTable).where(and(eq(postsTable.id, postId), eq(postsTable.groupId, groupId)));
-  if (!post || post.isDeleted) return res.status(404).json({ error: "Group post not found" });
-  if (post.authorId !== actorId && !canModerate(role) && !isSuperAdmin) {
-    return res.status(403).json({ error: "Only the author or a group moderator can archive this post" });
-  }
-  await db.update(postsTable).set({
-    isArchived: true,
-    archiveType: post.authorId === actorId && !canModerate(role) && !isSuperAdmin ? "owner" : "moderation",
-    updatedAt: new Date(),
-  }).where(eq(postsTable.id, postId));
-  await db.insert(groupActivityLogsTable).values({ groupId, actorId, action: "post_archived", details: { postId } });
-  return res.json({ ok: true, archived: true });
-});
-
-groupAdminRouter.delete("/:id/posts/:postId/archive", requireAuth, async (req, res: Response) => {
-  const actorId = (req as AuthedRequest).currentUser.id;
-  const groupId = Number(req.params.id);
-  const postId = Number(req.params.postId);
-  const role = await getActorRole(groupId, actorId);
-  const [actor] = await db.select({ role: usersTable.role }).from(usersTable).where(eq(usersTable.id, actorId));
-  const isSuperAdmin = actor?.role === "super_admin";
-  const [post] = await db.select({
-    id: postsTable.id,
-    authorId: postsTable.authorId,
-    archiveType: postsTable.archiveType,
-  }).from(postsTable).where(and(
-    eq(postsTable.id, postId),
-    eq(postsTable.groupId, groupId),
-    eq(postsTable.isArchived, true),
-    eq(postsTable.isDeleted, false),
-  ));
-  if (!post) return res.status(404).json({ error: "Archived group post not found" });
-  const ownerCanRestore = post.authorId === actorId && post.archiveType === "owner";
-  const moderatorCanRestore = canModerate(role) && post.archiveType === "moderation";
-  if (!isSuperAdmin && !ownerCanRestore && !moderatorCanRestore) {
-    return res.status(403).json({ error: "You cannot restore this group post" });
-  }
-  await db.update(postsTable).set({ isArchived: false, updatedAt: new Date() }).where(eq(postsTable.id, postId));
-  await db.insert(groupActivityLogsTable).values({ groupId, actorId, action: "post_restored", details: { postId } });
-  return res.json({ ok: true, archived: false });
-});
-
 groupAdminRouter.patch("/:id/posts/:postId/approval", requireAuth, async (req, res: Response) => {
   const actorId = (req as AuthedRequest).currentUser.id;
   const groupId = Number(req.params.id);

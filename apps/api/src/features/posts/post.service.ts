@@ -75,6 +75,7 @@ export const stablePostSelection = {
   attachments: postsTable.attachments,
   tags: postsTable.tags,
   isPublished: postsTable.isPublished,
+  isOfficialPost: postsTable.isOfficialPost,
   scheduledAt: postsTable.scheduledAt,
   expiresAt: postsTable.expiresAt,
   isHighlight: postsTable.isHighlight,
@@ -626,9 +627,10 @@ export async function createPost(
 }
 
 export async function getPostById(id: number, viewerId: number | null) {
-  const [post] = await db.select().from(postsTable).where(and(
+  const [post] = await db.select(stablePostSelection).from(postsTable).where(and(
     eq(postsTable.id, id),
     eq(postsTable.isDeleted, false),
+    eq(postsTable.isArchived, false),
     or(
       eq(postsTable.isPublished, true),
       viewerId != null
@@ -639,7 +641,7 @@ export async function getPostById(id: number, viewerId: number | null) {
     postVisibilityCondition(viewerId),
   ));
   if (!post) return null;
-  return enrichPost(post, viewerId);
+  return enrichPost(post as typeof postsTable.$inferSelect, viewerId);
 }
 
 export async function updatePost(id: number, authorId: number, data: Record<string, unknown>) {

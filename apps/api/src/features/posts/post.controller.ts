@@ -30,6 +30,15 @@ function refreshTrustForUsers(...userIds: Array<number | null | undefined>) {
   }
 }
 
+async function optionalRankingQuery<T>(query: PromiseLike<T>, fallback: T, signal: string): Promise<T> {
+  try {
+    return await query;
+  } catch (err) {
+    logger.warn({ err, signal }, "Optional feed ranking signal unavailable");
+    return fallback;
+  }
+}
+
 async function getRankingContext(postIds: number[], authorIds: number[]) {
   if (postIds.length === 0) return { authors: new Map(), trust: new Map(), boosts: new Map() };
   const now = new Date();
@@ -97,6 +106,7 @@ async function getAccessibleComment(commentId: number, viewerId: number) {
     .where(and(
       eq(commentsTable.id, commentId),
       eq(postsTable.isPublished, true),
+      eq(postsTable.isArchived, false),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
       postVisibilityCondition(viewerId),
@@ -263,7 +273,9 @@ export const listArchivedPosts = async (req: Request, res: Response) => {
   const conditions = [
     eq(postsTable.isArchived, true),
     eq(postsTable.isDeleted, false),
-    viewer?.role === "super_admin" ? sql`TRUE` : eq(postsTable.authorId, viewerId),
+    viewer?.role === "super_admin"
+      ? sql`TRUE`
+      : and(eq(postsTable.authorId, viewerId), eq(postsTable.archiveType, "owner"))!,
   ];
   const [{ total } = { total: 0 }] = await db.select({ total: sql<number>`count(*)::int` })
     .from(postsTable).where(and(...conditions));
@@ -272,7 +284,7 @@ export const listArchivedPosts = async (req: Request, res: Response) => {
     .orderBy(desc(postsTable.updatedAt), desc(postsTable.createdAt))
     .limit(limit).offset((page - 1) * limit);
   const posts = await Promise.all(rows.map(post => enrichPost(post as typeof postsTable.$inferSelect, viewerId)));
-  return res.json({ posts, total, page, limit });
+  return res.json({ posts, total, page, limit, hasMore: page * limit < total });
 };
 
 export const updatePostArchive = async (req: Request, res: Response) => {
@@ -341,6 +353,7 @@ export const listRecentSparks = async (req: Request, res: Response) => {
     .where(and(
       eq(postsTable.type, "spark"),
       eq(postsTable.isPublished, true),
+      eq(postsTable.isArchived, false),
       eq(postsTable.isDeleted, false),
       inArray(postsTable.authorId, authorIds),
       activeSparkCondition(now),
@@ -413,6 +426,7 @@ export const viewSpark = async (req: Request, res: Response) => {
     eq(postsTable.id, id),
     eq(postsTable.type, "spark"),
     eq(postsTable.isPublished, true),
+    eq(postsTable.isArchived, false),
     eq(postsTable.isDeleted, false),
     postVisibilityCondition(viewerId),
   ));
@@ -679,13 +693,25 @@ export const getFeed = async (req: Request, res: Response) => {
 
   const [followedTopicRows, followingRows, creatorProfileRows] = await Promise.all([
     viewerId
-      ? db.select({ topicId: topicFollowsTable.topicId }).from(topicFollowsTable).where(eq(topicFollowsTable.userId, viewerId))
+      ? optionalRankingQuery(
+          db.select({ topicId: topicFollowsTable.topicId }).from(topicFollowsTable).where(eq(topicFollowsTable.userId, viewerId)),
+          [] as Array<{ topicId: number }>,
+          "followed topics",
+        )
       : Promise.resolve([] as Array<{ topicId: number }>),
     viewerId
-      ? db.select({ userId: followsTable.followingId }).from(followsTable).where(eq(followsTable.followerId, viewerId))
+      ? optionalRankingQuery(
+          db.select({ userId: followsTable.followingId }).from(followsTable).where(eq(followsTable.followerId, viewerId)),
+          [] as Array<{ userId: number }>,
+          "following authors",
+        )
       : Promise.resolve([] as Array<{ userId: number }>),
     viewerId
-      ? db.select({ skills: creatorProfilesTable.skills }).from(creatorProfilesTable).where(eq(creatorProfilesTable.userId, viewerId))
+      ? optionalRankingQuery(
+          db.select({ skills: creatorProfilesTable.skills }).from(creatorProfilesTable).where(eq(creatorProfilesTable.userId, viewerId)),
+          [] as Array<{ skills: string }>,
+          "creator skills",
+        )
       : Promise.resolve([] as Array<{ skills: string }>),
   ]);
   const followedTopicIds = followedTopicRows.map(row => row.topicId);
@@ -705,45 +731,69 @@ export const getFeed = async (req: Request, res: Response) => {
   const postIds = posts.map(p => p.id);
 
   const likeCounts = postIds.length > 0
-    ? await db.select({ postId: likesTable.postId, count: sql<number>`count(*)::int` })
-        .from(likesTable).where(inArray(likesTable.postId, postIds)).groupBy(likesTable.postId)
+    ? await optionalRankingQuery(
+        db.select({ postId: likesTable.postId, count: sql<number>`count(*)::int` })
+          .from(likesTable).where(inArray(likesTable.postId, postIds)).groupBy(likesTable.postId),
+        [] as Array<{ postId: number; count: number }>,
+        "likes",
+      )
     : [];
 
   const shareCounts = postIds.length > 0
-    ? await db.select({ postId: postSharesTable.postId, count: sql<number>`count(DISTINCT ${postSharesTable.userId})::int` })
-        .from(postSharesTable).where(inArray(postSharesTable.postId, postIds)).groupBy(postSharesTable.postId)
+    ? await optionalRankingQuery(
+        db.select({ postId: postSharesTable.postId, count: sql<number>`count(DISTINCT ${postSharesTable.userId})::int` })
+          .from(postSharesTable).where(inArray(postSharesTable.postId, postIds)).groupBy(postSharesTable.postId),
+        [] as Array<{ postId: number; count: number }>,
+        "shares",
+      )
     : [];
 
   const repostCounts = postIds.length > 0
-    ? await db.select({ postId: repostsTable.postId, count: sql<number>`count(*)::int` })
-        .from(repostsTable).where(inArray(repostsTable.postId, postIds)).groupBy(repostsTable.postId)
+    ? await optionalRankingQuery(
+        db.select({ postId: repostsTable.postId, count: sql<number>`count(*)::int` })
+          .from(repostsTable).where(inArray(repostsTable.postId, postIds)).groupBy(repostsTable.postId),
+        [] as Array<{ postId: number; count: number }>,
+        "reposts",
+      )
     : [];
 
   const saveCounts = postIds.length > 0
-    ? await db.select({ postId: savedPostsTable.postId, count: sql<number>`count(*)::int` })
-        .from(savedPostsTable).where(inArray(savedPostsTable.postId, postIds)).groupBy(savedPostsTable.postId)
+    ? await optionalRankingQuery(
+        db.select({ postId: savedPostsTable.postId, count: sql<number>`count(*)::int` })
+          .from(savedPostsTable).where(inArray(savedPostsTable.postId, postIds)).groupBy(savedPostsTable.postId),
+        [] as Array<{ postId: number; count: number }>,
+        "saves",
+      )
     : [];
 
   const commentQualityCounts = postIds.length > 0
-    ? await db.select({
-        postId: commentsTable.postId,
-        distinctAuthors: sql<number>`count(DISTINCT ${commentsTable.authorId})::int`,
-        substantiveAuthors: sql<number>`count(DISTINCT ${commentsTable.authorId}) FILTER (WHERE length(trim(${commentsTable.content})) >= 80)::int`,
-      })
-        .from(commentsTable).where(inArray(commentsTable.postId, postIds)).groupBy(commentsTable.postId)
+    ? await optionalRankingQuery(
+        db.select({
+          postId: commentsTable.postId,
+          distinctAuthors: sql<number>`count(DISTINCT ${commentsTable.authorId})::int`,
+          substantiveAuthors: sql<number>`count(DISTINCT ${commentsTable.authorId}) FILTER (WHERE length(trim(${commentsTable.content})) >= 80)::int`,
+        })
+          .from(commentsTable).where(inArray(commentsTable.postId, postIds)).groupBy(commentsTable.postId),
+        [] as Array<{ postId: number; distinctAuthors: number; substantiveAuthors: number }>,
+        "comment quality",
+      )
     : [];
 
   const followedTopicSet = new Set(followedTopicIds);
   const topicMatches = postIds.length > 0 && (followedTopicSet.size > 0 || viewerSkills.size > 0)
-    ? await db.select({
-        postId: postTopicsTable.postId,
-        topicId: postTopicsTable.topicId,
-        slug: topicsTable.slug,
-        name: topicsTable.name,
-      })
-        .from(postTopicsTable)
-        .innerJoin(topicsTable, eq(topicsTable.id, postTopicsTable.topicId))
-        .where(inArray(postTopicsTable.postId, postIds))
+    ? await optionalRankingQuery(
+        db.select({
+          postId: postTopicsTable.postId,
+          topicId: postTopicsTable.topicId,
+          slug: topicsTable.slug,
+          name: topicsTable.name,
+        })
+          .from(postTopicsTable)
+          .innerJoin(topicsTable, eq(topicsTable.id, postTopicsTable.topicId))
+          .where(inArray(postTopicsTable.postId, postIds)),
+        [] as Array<{ postId: number; topicId: number; slug: string; name: string }>,
+        "topic matches",
+      )
     : [];
   const followedTopicMatches = new Set<number>();
   const expertiseMatches = new Set<number>();
@@ -766,9 +816,13 @@ export const getFeed = async (req: Request, res: Response) => {
 
   const authorIds = [...new Set(posts.map(p => p.authorId))];
   const trustScores = authorIds.length > 0
-    ? await db.select({ userId: userTrustScoresTable.userId, uti: userTrustScoresTable.uti, tier: userTrustScoresTable.tier, creatorLevel: userTrustScoresTable.creatorLevel, vm: userTrustScoresTable.visibilityMultiplier })
-        .from(userTrustScoresTable)
-        .where(inArray(userTrustScoresTable.userId, authorIds))
+    ? await optionalRankingQuery(
+        db.select({ userId: userTrustScoresTable.userId, uti: userTrustScoresTable.uti, tier: userTrustScoresTable.tier, creatorLevel: userTrustScoresTable.creatorLevel, vm: userTrustScoresTable.visibilityMultiplier })
+          .from(userTrustScoresTable)
+          .where(inArray(userTrustScoresTable.userId, authorIds)),
+        [] as Array<{ userId: number; uti: number | null; tier: string | null; creatorLevel: string | null; vm: number | null }>,
+        "author trust",
+      )
     : [];
   const trustMap = new Map<number, { uti: number | null; tier: string; creatorLevel: string; vm: number }>(
     trustScores.map(t => [t.userId, {
@@ -780,12 +834,16 @@ export const getFeed = async (req: Request, res: Response) => {
   );
 
   const authorProfiles = authorIds.length > 0
-    ? await db.select({
-        id: usersTable.id,
-        reachMultiplier: usersTable.reachMultiplier,
-        isOfficialAccount: usersTable.isOfficialAccount,
-        role: usersTable.role,
-      }).from(usersTable).where(inArray(usersTable.id, authorIds))
+    ? await optionalRankingQuery(
+        db.select({
+          id: usersTable.id,
+          reachMultiplier: usersTable.reachMultiplier,
+          isOfficialAccount: usersTable.isOfficialAccount,
+          role: usersTable.role,
+        }).from(usersTable).where(inArray(usersTable.id, authorIds)),
+        [] as Array<{ id: number; reachMultiplier: number | null; isOfficialAccount: boolean | null; role: string | null }>,
+        "author ranking profile",
+      )
     : [];
   const authorProfileMap = new Map(authorProfiles.map(author => [author.id, author]));
 
@@ -870,6 +928,7 @@ export const sharePost = async (req: Request, res: Response) => {
   const [post] = await db.select().from(postsTable).where(and(
     eq(postsTable.id, id),
     eq(postsTable.isPublished, true),
+    eq(postsTable.isArchived, false),
     eq(postsTable.isDeleted, false),
     visiblePostExpiryCondition(),
     postVisibilityCondition(viewerId),
@@ -907,7 +966,13 @@ export const repostPost = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const id = parseInt(req.params.id);
-  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, id));
+  const [post] = await db.select().from(postsTable).where(and(
+    eq(postsTable.id, id),
+    eq(postsTable.isPublished, true),
+    eq(postsTable.isArchived, false),
+    eq(postsTable.isDeleted, false),
+    postVisibilityCondition(viewerId),
+  ));
   if (!post) return res.status(404).json({ error: "Post not found" });
   if (!post.repostsEnabled) return res.status(403).json({ error: "Reposts are turned off for this post" });
 
@@ -942,6 +1007,7 @@ export const getReposts = async (req: Request, res: Response) => {
   const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(and(
     eq(postsTable.id, id),
     eq(postsTable.isPublished, true),
+    eq(postsTable.isArchived, false),
     eq(postsTable.isDeleted, false),
     visiblePostExpiryCondition(),
     postVisibilityCondition(viewerId),
@@ -960,7 +1026,13 @@ export const savePost = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const id = parseInt(req.params.id);
-  const [post] = await db.select().from(postsTable).where(eq(postsTable.id, id));
+  const [post] = await db.select().from(postsTable).where(and(
+    eq(postsTable.id, id),
+    eq(postsTable.isPublished, true),
+    eq(postsTable.isArchived, false),
+    eq(postsTable.isDeleted, false),
+    postVisibilityCondition(viewerId),
+  ));
   if (!post) return res.status(404).json({ error: "Post not found" });
 
   const [existing] = await db
@@ -999,6 +1071,7 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
     .innerJoin(postsTable, eq(savedPostsTable.postId, postsTable.id))
     .where(and(
       eq(savedPostsTable.userId, viewerId),
+      eq(postsTable.isArchived, false),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
       postVisibilityCondition(viewerId),
@@ -1010,6 +1083,7 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
     .innerJoin(postsTable, eq(savedPostsTable.postId, postsTable.id))
     .where(and(
       eq(savedPostsTable.userId, viewerId),
+      eq(postsTable.isArchived, false),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
       postVisibilityCondition(viewerId),
@@ -1022,9 +1096,9 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
   if (postIds.length === 0) return res.json({ posts: [], total, page, limit, hasMore: false });
 
   const posts = await db
-    .select()
+    .select(PostService.stablePostSelection)
     .from(postsTable)
-    .where(and(inArray(postsTable.id, postIds), eq(postsTable.isDeleted, false)));
+    .where(and(inArray(postsTable.id, postIds), eq(postsTable.isArchived, false), eq(postsTable.isDeleted, false)));
 
   const postsById = new Map(posts.map(post => [post.id, post]));
   const enriched = await Promise.all(postIds.flatMap(postId => {
@@ -1099,6 +1173,7 @@ export const getCommentReplies = async (req: Request, res: Response) => {
       .where(and(
         eq(commentsTable.id, commentId),
         eq(postsTable.isPublished, true),
+        eq(postsTable.isArchived, false),
         eq(postsTable.isDeleted, false),
         visiblePostExpiryCondition(),
         postVisibilityCondition(null),
@@ -1189,6 +1264,7 @@ export const getTopLevelComments = async (req: Request, res: Response) => {
   const [post] = await db.select({ id: postsTable.id }).from(postsTable).where(and(
     eq(postsTable.id, postId),
     eq(postsTable.isPublished, true),
+    eq(postsTable.isArchived, false),
     eq(postsTable.isDeleted, false),
     visiblePostExpiryCondition(),
     postVisibilityCondition(viewerId),
@@ -1219,6 +1295,7 @@ export const getTrending = async (req: Request, res: Response) => {
     .from(postsTable)
     .where(and(
       eq(postsTable.isPublished, true),
+      eq(postsTable.isArchived, false),
       eq(postsTable.isDeleted, false),
       visiblePostExpiryCondition(),
       postVisibilityCondition(null),
@@ -1293,6 +1370,7 @@ export const getMotion = async (req: Request, res: Response) => {
 
   const baseConds = [
     eq(postsTable.isPublished, true),
+    eq(postsTable.isArchived, false),
     eq(postsTable.isDeleted, false),
     visiblePostExpiryCondition(),
     postVisibilityCondition(viewerId),
@@ -1306,7 +1384,7 @@ export const getMotion = async (req: Request, res: Response) => {
     baseConds.push(inArray(postsTable.authorId, followingIds));
   }
 
-  const candidates = await db.select().from(postsTable)
+  const candidates = await db.select(PostService.stablePostSelection).from(postsTable)
     .where(and(...baseConds))
     .orderBy(desc(postsTable.createdAt))
     .limit(limit * 3)
@@ -1349,6 +1427,6 @@ export const getMotion = async (req: Request, res: Response) => {
   scored.sort((a, b) => b.score - a.score);
 
   const top = scored.slice(0, limit).map(s => s.post);
-  const enriched = await Promise.all(top.map(p => enrichPost(p, viewerId)));
+  const enriched = await Promise.all(top.map(p => enrichPost(p as typeof postsTable.$inferSelect, viewerId)));
   return res.json({ posts: enriched, total: enriched.length, page, limit });
 };

@@ -147,7 +147,7 @@ async function enrichGroup(group: any, viewerId: number | null, isSuperAdmin = f
     .from(groupMembersTable).where(and(eq(groupMembersTable.groupId, group.id), inArray(groupMembersTable.status, ["active", "muted"])));
 
   const [postsResult] = await db.select({ count: sql<number>`count(*)::int` })
-    .from(postsTable).where(and(eq(postsTable.groupId, group.id), eq(postsTable.isPublished, true), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId, isSuperAdmin)));
+    .from(postsTable).where(and(eq(postsTable.groupId, group.id), eq(postsTable.isPublished, true), eq(postsTable.isArchived, false), eq(postsTable.isDeleted, false), postVisibilityCondition(viewerId, isSuperAdmin)));
 
   let isMember = false;
   let memberRole: string | null = null;
@@ -643,14 +643,47 @@ router.post("/:id/posts/:postId/archive", async (req, res) => {
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
   const groupId = Number(req.params.id);
   const postId = Number(req.params.postId);
-  const [post] = await db.select({ authorId: postsTable.authorId }).from(postsTable)
+  const [post] = await db.select({ authorId: postsTable.authorId, isDeleted: postsTable.isDeleted }).from(postsTable)
     .where(and(eq(postsTable.id, postId), eq(postsTable.groupId, groupId), eq(postsTable.isDeleted, false)));
   if (!post) return res.status(404).json({ error: "Post not found" });
-  if (post.authorId !== viewerId && !canModerateGroup(await getGroupRole(groupId, viewerId))) return res.status(403).json({ error: "Forbidden" });
-  await db.update(postsTable).set({ isPublished: false, updatedAt: new Date() })
-    .where(and(eq(postsTable.id, postId), eq(postsTable.groupId, groupId)));
+  const role = await getGroupRole(groupId, viewerId);
+  const isSuperAdmin = (await loadCurrentUser(req))?.role === "super_admin";
+  if (post.authorId !== viewerId && !canModerateGroup(role) && !isSuperAdmin) return res.status(403).json({ error: "Forbidden" });
+  await db.update(postsTable).set({
+    isArchived: true,
+    archiveType: post.authorId === viewerId && !isSuperAdmin ? "owner" : "moderation",
+    updatedAt: new Date(),
+  }).where(and(eq(postsTable.id, postId), eq(postsTable.groupId, groupId)));
+  await db.insert(groupActivityLogsTable).values({ groupId, actorId: viewerId, action: "post_archived", details: { postId } });
   await deleteCachePattern("feed:*");
-  return res.json({ ok: true });
+  return res.json({ ok: true, archived: true });
+});
+
+router.delete("/:id/posts/:postId/archive", async (req, res) => {
+  const viewerId = getViewerId(req);
+  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
+  const groupId = Number(req.params.id);
+  const postId = Number(req.params.postId);
+  const role = await getGroupRole(groupId, viewerId);
+  const isSuperAdmin = (await loadCurrentUser(req))?.role === "super_admin";
+  const [post] = await db.select({
+    authorId: postsTable.authorId,
+    archiveType: postsTable.archiveType,
+  }).from(postsTable).where(and(
+    eq(postsTable.id, postId),
+    eq(postsTable.groupId, groupId),
+    eq(postsTable.isArchived, true),
+    eq(postsTable.isDeleted, false),
+  ));
+  if (!post) return res.status(404).json({ error: "Archived group post not found" });
+  const ownerCanRestore = post.authorId === viewerId && post.archiveType === "owner";
+  const moderatorCanRestore = canModerateGroup(role) && post.archiveType === "moderation";
+  if (!ownerCanRestore && !moderatorCanRestore && !isSuperAdmin) return res.status(403).json({ error: "You cannot restore this group post" });
+  await db.update(postsTable).set({ isArchived: false, updatedAt: new Date() })
+    .where(and(eq(postsTable.id, postId), eq(postsTable.groupId, groupId)));
+  await db.insert(groupActivityLogsTable).values({ groupId, actorId: viewerId, action: "post_restored", details: { postId } });
+  await deleteCachePattern("feed:*");
+  return res.json({ ok: true, archived: false });
 });
 
 router.post("/:id/posts/:postId/best-answer", async (req, res) => {

@@ -22,7 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2, Send, Share2, MoreHorizontal, Copy, LogOut, UserPlus, CircleDot, MessageSquare, BarChart3, Bold, Italic, List, ListOrdered, ImagePlus, AtSign, Pin, Archive, MessageCircleOff, Flag, Check, X, Compass } from 'lucide-react';
+import { Search, Plus, Users, Hash, Loader2, ArrowLeft, BadgeCheck, Megaphone, Settings, Trash2, Send, Share2, MoreHorizontal, Copy, LogOut, UserPlus, CircleDot, MessageSquare, BarChart3, Bold, Italic, List, ListOrdered, ImagePlus, AtSign, Pin, Archive, MessageCircleOff, Flag, Check, X, Compass, Redo2 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { useT } from '@/lib/i18n';
 
@@ -185,6 +185,8 @@ function GroupActivityTimeline({ groupId }: { groupId: number }) {
     announcement_posted: 'posted an announcement',
     post_approved: 'approved a post',
     post_rejected: 'rejected a post',
+    post_archived: 'archived a post',
+    post_restored: 'restored a post',
     group_archived: 'archived the group',
     join_request_created: 'requested to join',
     join_request_cancelled: 'cancelled a join request',
@@ -206,12 +208,13 @@ function GroupActivityTimeline({ groupId }: { groupId: number }) {
   })}</ol>;
 }
 
-function GroupPostActions({ groupId, postId, isAuthor, canModerate, isPinned, commentsEnabled, onChanged, children }: {
+function GroupPostActions({ groupId, postId, isAuthor, canModerate, isPinned, isArchived = false, commentsEnabled, onChanged, children }: {
   groupId: number;
   postId: number;
   isAuthor: boolean;
   canModerate: boolean;
   isPinned: boolean;
+  isArchived?: boolean;
   commentsEnabled: boolean;
   onChanged: () => void;
   children: (actions: Array<{ label: string; icon: ComponentType<{ className?: string }>; onSelect: () => void }>) => ReactNode;
@@ -254,7 +257,7 @@ function GroupPostActions({ groupId, postId, isAuthor, canModerate, isPinned, co
       onSelect: () => runWithToast(`/api/groups/${groupId}/posts/${postId}/pin`, isPinned ? 'DELETE' : 'POST', isPinned ? 'Post unpinned' : 'Post pinned'),
     }] : []),
     ...((isAuthor || canModerate) ? [
-      { label: 'Archive post', icon: Archive, onSelect: () => runWithToast(`/api/groups/${groupId}/posts/${postId}/archive`, 'POST', 'Post archived') },
+      { label: isArchived ? 'Restore post' : 'Archive post', icon: isArchived ? Redo2 : Archive, onSelect: () => runWithToast(`/api/groups/${groupId}/posts/${postId}/archive`, isArchived ? 'DELETE' : 'POST', isArchived ? 'Post restored' : 'Post archived') },
       { label: commentsEnabled ? 'Turn off comments' : 'Turn on comments', icon: MessageCircleOff, onSelect: () => runWithToast(`/api/groups/${groupId}/posts/${postId}/comments`, 'PATCH', commentsEnabled ? 'Comments turned off' : 'Comments turned on', { enabled: !commentsEnabled }) },
     ] : []),
     { label: 'Report to group moderators', icon: Flag, onSelect: () => setReportOpen(true) },
@@ -350,6 +353,10 @@ function GroupDetail({ id }: { id: number }) {
   const [isPosting, setIsPosting] = useState(false);
   const [pendingPosts, setPendingPosts] = useState<any[]>([]);
   const [pendingLoading, setPendingLoading] = useState(false);
+  const [archivedPosts, setArchivedPosts] = useState<any[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archivedError, setArchivedError] = useState<string | null>(null);
+  const [archivedRefreshKey, setArchivedRefreshKey] = useState(0);
   const [joinRequests, setJoinRequests] = useState<JoinRequestPreview[]>([]);
   const [joinRequestsLoading, setJoinRequestsLoading] = useState(false);
   const [moderationReports, setModerationReports] = useState<Array<{ id: number; targetId: number; reason: string; postTitle: string | null; reporterName: string | null; reporterUsername: string | null; createdAt: string }>>([]);
@@ -464,6 +471,29 @@ function GroupDetail({ id }: { id: number }) {
       .then(data => setPendingPosts(Array.isArray(data.posts) ? data.posts : []))
       .finally(() => setPendingLoading(false));
   }, [id, myRole, token]);
+
+  useEffect(() => {
+    if (!token || (!['owner', 'admin', 'moderator'].includes(myRole ?? '') && user?.role !== 'super_admin')) {
+      setArchivedPosts([]);
+      setArchivedError(null);
+      return;
+    }
+    let active = true;
+    setArchivedLoading(true);
+    setArchivedError(null);
+    void apiFetch(`/api/groups/${id}/archived-posts`)
+      .then(async response => {
+        if (!response.ok) {
+          const result = await response.json().catch(() => null);
+          throw new Error(result?.error ?? 'Could not load archived group posts.');
+        }
+        return response.json();
+      })
+      .then(data => { if (active) setArchivedPosts(Array.isArray(data?.posts) ? data.posts : []); })
+      .catch(error => { if (active) setArchivedError(error instanceof Error ? error.message : 'Could not load archived group posts.'); })
+      .finally(() => { if (active) setArchivedLoading(false); });
+    return () => { active = false; };
+  }, [id, myRole, token, user?.role, archivedRefreshKey]);
 
   useEffect(() => {
     if (!token || (myRole !== 'owner' && myRole !== 'admin')) {
@@ -782,7 +812,7 @@ function GroupDetail({ id }: { id: number }) {
   const canPostAnnouncement = myRole === 'owner' || (myRole === 'admin' && groupView.announcementPolicy !== 'owner');
   const canReviewJoinRequests = myRole === 'owner' || myRole === 'admin';
   const canManageGroup = myRole === 'owner' || myRole === 'admin' || myRole === 'moderator' || user?.role === 'super_admin';
-  const isSettingsView = ['settings', 'pending', 'join-requests', 'reports'].includes(activeTab);
+  const isSettingsView = ['settings', 'pending', 'join-requests', 'reports', 'archived-posts'].includes(activeTab);
   const primaryTab = isSettingsView ? 'settings' : activeTab;
   const hasMorePosts = (postsPage * (postsData?.limit ?? 20)) < (postsData?.total ?? 0);
   if (!user && (groupView.privacy === 'private' || groupView.type === 'secret')) {
@@ -811,6 +841,8 @@ function GroupDetail({ id }: { id: number }) {
     visiblePosts = allGroupPosts.filter(post => post.groupDetails?.type === 'announcement');
   } else if (activeTab === 'pending') {
     visiblePosts = pendingGroupPosts;
+  } else if (activeTab === 'archived-posts') {
+    visiblePosts = archivedPosts;
   } else if (feedMode === 'unanswered') {
     visiblePosts = questions.filter(post => !post.groupDetails?.question?.isAnswered);
   } else if (feedMode === 'top') {
@@ -830,10 +862,17 @@ function GroupDetail({ id }: { id: number }) {
       groupId={id}
       postId={post.id}
       isAuthor={user?.id === post.authorId}
-      canModerate={myRole === 'owner' || myRole === 'admin' || myRole === 'moderator'}
+      canModerate={myRole === 'owner' || myRole === 'admin' || myRole === 'moderator' || user?.role === 'super_admin'}
       isPinned={Boolean(post.groupDetails?.isPinned)}
+      isArchived={Boolean(post.isArchived)}
       commentsEnabled={post.groupDetails?.commentsEnabled !== false}
-      onChanged={() => { void queryClient.invalidateQueries({ queryKey: [`/api/groups/${id}/posts`] }); setPinnedRefreshKey(value => value + 1); }}
+      onChanged={() => {
+        void queryClient.invalidateQueries({ queryKey: [`/api/groups/${id}/posts`] });
+        void queryClient.invalidateQueries({ queryKey: [`/api/groups/${id}/archived-posts`] });
+        setArchivedRefreshKey(value => value + 1);
+        window.dispatchEvent(new CustomEvent('quillhive:post-archive-changed'));
+        setPinnedRefreshKey(value => value + 1);
+      }}
     >
       {extraActions => <PostCard post={post} feedStyle extraActions={extraActions} />}
     </GroupPostActions>
@@ -861,6 +900,7 @@ function GroupDetail({ id }: { id: number }) {
     questions: { icon: CircleDot, title: 'No questions in this view', body: 'Questions from members will gather here.' },
     polls: { icon: BarChart3, title: 'No active polls', body: 'Active community polls will appear here.' },
     announcements: { icon: Megaphone, title: 'No announcements yet', body: 'Important notes from group moderators will appear here.' },
+    'archived-posts': { icon: Archive, title: 'No moderated posts are archived', body: 'When moderators archive a post, it will be available here to restore.' },
   };
   const EmptyIcon = emptyStates[activeTab]?.icon ?? MessageSquare;
 
@@ -955,6 +995,7 @@ function GroupDetail({ id }: { id: number }) {
                   {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <Button size="sm" variant={activeTab === 'pending' ? 'secondary' : 'ghost'} onClick={() => setActiveTab('pending')}>Pending posts{pendingPosts.length ? ` (${pendingPosts.length})` : ''}</Button>}
                   {canReviewJoinRequests && <Button size="sm" variant={activeTab === 'join-requests' ? 'secondary' : 'ghost'} onClick={() => setActiveTab('join-requests')}>Join requests{joinRequests.length ? ` (${joinRequests.length})` : ''}</Button>}
                   {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator') && <Button size="sm" variant={activeTab === 'reports' ? 'secondary' : 'ghost'} onClick={() => setActiveTab('reports')}>Reports{moderationReports.length ? ` (${moderationReports.length})` : ''}</Button>}
+                  {(myRole === 'owner' || myRole === 'admin' || myRole === 'moderator' || user?.role === 'super_admin') && <Button size="sm" variant={activeTab === 'archived-posts' ? 'secondary' : 'ghost'} onClick={() => setActiveTab('archived-posts')}>Archived posts{archivedPosts.length ? ` (${archivedPosts.length})` : ''}</Button>}
                 </div>
                 {activeTab === 'settings' && (myRole === 'admin' || myRole === 'owner') && <div className="space-y-3">
                   <Input value={settings.name} onChange={e => setSettings(s => ({ ...s, name: e.target.value }))} placeholder="Group name" />
@@ -1048,7 +1089,7 @@ function GroupDetail({ id }: { id: number }) {
                   </div>
                   <div className="flex gap-2"><Button size="sm" onClick={() => void reviewJoinRequest(request.id, 'approve')}><Check className="mr-1.5 h-4 w-4" />Approve</Button><Button size="sm" variant="outline" onClick={() => void reviewJoinRequest(request.id, 'deny')}><X className="mr-1.5 h-4 w-4" />Deny</Button></div>
                 </article>)}
-              </div> : activeTab === 'reports' ? <div className="divide-y divide-border border-y">
+              </div> : activeTab === 'archived-posts' && archivedError ? <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-center text-sm text-destructive" role="alert">{archivedError}</div> : activeTab === 'archived-posts' && archivedLoading ? <div className="space-y-4">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-44 rounded-xl" />)}</div> : activeTab === 'reports' ? <div className="divide-y divide-border border-y">
                 {moderationReports.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">No reports need group review.</p> : moderationReports.map(report => <article key={report.id} className="flex flex-wrap items-center justify-between gap-3 py-4">
                   <div className="min-w-0"><p className="text-sm font-semibold">{report.postTitle || `Post #${report.targetId}`}</p><p className="mt-1 text-xs text-muted-foreground">{report.reason.replace(/_/g, ' ')} · reported by {report.reporterName || `@${report.reporterUsername}`} · <Timestamp value={report.createdAt} mode="date" /></p></div>
                   <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => void reviewGroupReport(report.id, 'dismiss')}>Dismiss</Button><Button size="sm" variant="destructive" onClick={() => void reviewGroupReport(report.id, 'remove_post')}>Remove post</Button><Button size="sm" variant="ghost" onClick={() => void reviewGroupReport(report.id, 'escalate')}>Escalate</Button></div>

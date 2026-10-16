@@ -23,6 +23,14 @@ describe("Spark visibility", () => {
     expect(query.params.filter(value => value === viewerId).length).toBeGreaterThanOrEqual(3);
   });
 
+  it("allows group posts based on group visibility rather than the author's profile feed setting", () => {
+    const query = dialect.sqlToQuery(postVisibilityCondition(42));
+
+    expect(query.sql).toContain('"posts"."group_id" IS NOT NULL or EXISTS');
+    expect(query.sql).toContain("visibility_group.privacy");
+    expect(query.sql).toContain("profile_visibility");
+  });
+
   it("removes Spark and group visibility predicates for super-admin inspection queries", () => {
     const query = dialect.sqlToQuery(postVisibilityCondition(42, true));
 
