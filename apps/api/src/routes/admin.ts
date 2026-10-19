@@ -124,6 +124,8 @@ router.get("/users", requirePermission("view_users"), async (req, res) => {
       isOfficialAccount: usersTable.isOfficialAccount,
       isBanned: usersTable.isBanned,
       bannedAt: usersTable.bannedAt,
+      bannedUntil: usersTable.bannedUntil,
+      banReason: usersTable.banReason,
       isDeleted: usersTable.isDeleted,
       deletedAt: usersTable.deletedAt,
       avatarUrl: usersTable.avatarUrl,
@@ -509,9 +511,55 @@ router.post("/users/:id/ban", requirePermission("ban_user"), async (req: any, re
   }
 
   const newBanned = !target.isBanned;
-  const [updated] = await db.update(usersTable).set({ isBanned: newBanned, bannedAt: newBanned ? new Date() : null, updatedAt: new Date() }).where(eq(usersTable.id, id)).returning({ id: usersTable.id, username: usersTable.username, isBanned: usersTable.isBanned });
+  const now = new Date();
+  const [updated] = await db.update(usersTable).set({
+    isBanned: newBanned,
+    bannedAt: newBanned ? now : null,
+    bannedUntil: null,
+    banReason: null,
+    ...(newBanned ? { authVersion: sql`${usersTable.authVersion} + 1` } : {}),
+    updatedAt: now,
+  }).where(eq(usersTable.id, id)).returning({ id: usersTable.id, username: usersTable.username, isBanned: usersTable.isBanned });
   await auditLog(req.currentUser.id, newBanned ? "user_banned" : "user_unbanned", "user", id);
   return res.json({ ...updated, action: newBanned ? "banned" : "unbanned" });
+});
+
+router.post("/users/:id/temporary-restriction", requirePermission("ban_user"), async (req: any, res) => {
+  const id = Number(req.params.id);
+  const durationDays = Number(req.body?.durationDays);
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid user id" });
+  if (![1, 7, 30].includes(durationDays)) return res.status(400).json({ error: "Restriction duration must be 1, 7, or 30 days" });
+  if (reason.length < 10 || reason.length > 1000) return res.status(400).json({ error: "Provide a reason between 10 and 1000 characters" });
+  if (req.currentUser.id === id) return res.status(400).json({ error: "Cannot restrict your own account" });
+  if (!checkRateLimit(req.currentUser.id, "ban")) return res.status(429).json({ error: "Too many restriction actions. Try again in a minute." });
+
+  const [target] = await db.select().from(usersTable).where(and(eq(usersTable.id, id), eq(usersTable.isDeleted, false)));
+  if (!target) return res.status(404).json({ error: "User not found" });
+  if (target.isBanned) return res.status(409).json({ error: "Restore the existing ban before applying a temporary restriction" });
+  if (target.role === "super_admin" || target.role === "admin" && req.currentUser.role !== "super_admin") {
+    return res.status(403).json({ error: "You cannot restrict this account" });
+  }
+
+  const now = new Date();
+  const bannedUntil = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
+  const [updated] = await db.update(usersTable).set({
+    isBanned: true,
+    bannedAt: now,
+    bannedUntil,
+    banReason: reason,
+    authVersion: sql`${usersTable.authVersion} + 1`,
+    updatedAt: now,
+  }).where(eq(usersTable.id, id)).returning({
+    id: usersTable.id,
+    username: usersTable.username,
+    isBanned: usersTable.isBanned,
+    bannedAt: usersTable.bannedAt,
+    bannedUntil: usersTable.bannedUntil,
+    banReason: usersTable.banReason,
+  });
+  await auditLog(req.currentUser.id, "user_temporarily_restricted", "user", id, `until ${bannedUntil.toISOString()}: ${reason}`);
+  return res.json({ ...updated, action: "temporarily_restricted" });
 });
 
 router.delete("/users/:id", requirePermission("delete_user"), async (req: any, res) => {
@@ -1097,6 +1145,8 @@ router.get("/users/:id/detail", requirePermission("view_users"), async (req, res
     emailVerified: usersTable.emailVerified,
     isBanned: usersTable.isBanned,
     bannedAt: usersTable.bannedAt,
+    bannedUntil: usersTable.bannedUntil,
+    banReason: usersTable.banReason,
     isDeleted: usersTable.isDeleted,
     deletedAt: usersTable.deletedAt,
     isCreatorMode: usersTable.isCreatorMode,

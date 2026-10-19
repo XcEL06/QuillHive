@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { getSessionAuthVersion, getSessionUserId, isSessionActive, isTokenBlacklisted } from "../lib/auth";
+import { getAccountBanStatus, temporaryRestrictionResponse } from "../lib/accountRestriction";
 
 export const ADMIN_ROLES = ["moderator", "admin", "super_admin"] as const;
 const SUPER_ADMIN_ROLES = ["super_admin"];
@@ -67,12 +68,32 @@ async function resolveUser(req: Request, res: Response): Promise<boolean> {
     return false;
   }
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  if (!user || user.isDeleted || getSessionAuthVersion(token) !== user.authVersion) {
+  if (!user || user.isDeleted) {
     res.status(401).json({ error: "Unauthorized" });
     return false;
   }
-  if (user.isBanned) {
-    res.status(403).json({ error: "Account banned" });
+  const banStatus = getAccountBanStatus(user.isBanned, user.bannedUntil, user.banReason);
+  if (banStatus.kind === "expired") {
+    await db.update(usersTable).set({
+      isBanned: false,
+      bannedAt: null,
+      bannedUntil: null,
+      banReason: null,
+      updatedAt: new Date(),
+    }).where(eq(usersTable.id, user.id));
+    user.isBanned = false;
+    user.bannedAt = null;
+    user.bannedUntil = null;
+    user.banReason = null;
+  } else if (banStatus.kind === "temporary") {
+    res.status(403).json(temporaryRestrictionResponse(banStatus.until, user.banReason));
+    return false;
+  } else if (banStatus.kind === "permanent") {
+    res.status(403).json({ error: "Account banned", reason: user.banReason });
+    return false;
+  }
+  if (getSessionAuthVersion(token) !== user.authVersion) {
+    res.status(401).json({ error: "Unauthorized" });
     return false;
   }
   (req as any).currentUser = user;

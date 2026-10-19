@@ -36,6 +36,8 @@ export const usersTable = pgTable("users", {
   emailVerified: boolean("email_verified").notNull().default(false),
   isBanned: boolean("is_banned").notNull().default(false),
   bannedAt: timestamp("banned_at"),
+  bannedUntil: timestamp("banned_until"),
+  banReason: text("ban_reason"),
   isDeleted: boolean("is_deleted").notNull().default(false),
   deletedAt: timestamp("deleted_at"),
   isFeatured: boolean("is_featured").notNull().default(false),

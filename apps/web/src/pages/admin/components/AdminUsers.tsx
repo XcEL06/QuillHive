@@ -21,6 +21,10 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
   const [noticeUser, setNoticeUser] = useState<any | null>(null);
   const [notice, setNotice] = useState("");
   const [sending, setSending] = useState(false);
+  const [restrictingUser, setRestrictingUser] = useState<any | null>(null);
+  const [restrictionDays, setRestrictionDays] = useState<1 | 7 | 30>(7);
+  const [restrictionReason, setRestrictionReason] = useState("");
+  const [submittingRestriction, setSubmittingRestriction] = useState(false);
   const [userDetail, setUserDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [clusters, setClusters] = useState<any[]>([]);
@@ -73,7 +77,13 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
     setChangingBanId(account.id);
     try {
       const result = await fetchAdmin(`/api/admin/users/${account.id}/ban`, { method: "POST" });
-      setUsers((current) => current.map((user) => user.id === account.id ? { ...user, isBanned: Boolean(result.isBanned), bannedAt: result.isBanned ? new Date().toISOString() : null } : user));
+      setUsers((current) => current.map((user) => user.id === account.id ? {
+        ...user,
+        isBanned: Boolean(result.isBanned),
+        bannedAt: result.isBanned ? new Date().toISOString() : null,
+        bannedUntil: null,
+        banReason: null,
+      } : user));
       setClusters((current) => current.map((cluster) => ({
         ...cluster,
         accounts: cluster.accounts.map((user: any) => user.id === account.id ? { ...user, isBanned: Boolean(result.isBanned) } : user),
@@ -83,6 +93,31 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
       toast({ title: `Could not ${action} account`, description: error instanceof Error ? error.message : "Request failed", variant: "destructive" });
     } finally {
       setChangingBanId(null);
+    }
+  };
+  const temporarilyRestrictUser = async () => {
+    if (!restrictingUser || restrictionReason.trim().length < 10) return;
+    setSubmittingRestriction(true);
+    try {
+      const result = await fetchAdmin(`/api/admin/users/${restrictingUser.id}/temporary-restriction`, {
+        method: "POST",
+        body: JSON.stringify({ durationDays: restrictionDays, reason: restrictionReason.trim() }),
+      });
+      setUsers((current) => current.map((user) => user.id === restrictingUser.id ? { ...user, ...result } : user));
+      setClusters((current) => current.map((cluster) => ({
+        ...cluster,
+        accounts: cluster.accounts.map((user: any) => user.id === restrictingUser.id ? { ...user, isBanned: true } : user),
+      })));
+      toast({
+        title: "Temporary restriction applied",
+        description: `@${restrictingUser.username} cannot sign in until ${new Date(result.bannedUntil).toLocaleString()}.`,
+      });
+      setRestrictingUser(null);
+      setRestrictionReason("");
+    } catch (error) {
+      toast({ title: "Could not restrict account", description: error instanceof Error ? error.message : "Request failed", variant: "destructive" });
+    } finally {
+      setSubmittingRestriction(false);
     }
   };
   const reviveAccount = async (account: any) => {
@@ -159,8 +194,8 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
         </div>
       </div>
       <div className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm">
-        <div className="hidden grid-cols-[minmax(0,1fr)_130px_100px_100px_170px] gap-4 border-b border-border/70 bg-muted/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid"><span>User</span><span>Trust score</span><span>Role</span><span>Status</span><span>Actions</span></div>
-        {loading ? <div className="space-y-3 p-5">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div> : filtered.length === 0 ? <div className="p-12 text-center"><p className="text-sm font-medium">No users found</p><p className="mt-1 text-xs text-muted-foreground">Try a different search.</p></div> : <div className="divide-y divide-border/60">{filtered.map((u) => { const protectedAccount = u.id === currentUser.id || u.role === "super_admin" || (u.role === "admin" && currentUser.role !== "super_admin"); const userContent = <div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{u.displayName?.[0] ?? u.username?.[0] ?? "?"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{u.displayName || "Unnamed user"}{u.isOfficialAccount && <Badge variant="secondary" className="ml-2 text-[9px]">Official</Badge>}</p><p className="truncate text-xs text-muted-foreground">@{u.username} · {u.email}</p></div></div>; return <div key={u.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_130px_100px_100px_250px] sm:items-center">{u.isDeleted ? <div className="min-w-0">{userContent}<p className="mt-1 pl-12 text-[10px] text-muted-foreground">Deleted <Timestamp value={u.deletedAt} mode="datetime" /></p></div> : <Link href={`/profile/${encodeURIComponent(u.username)}`} target="_blank" rel="noreferrer" aria-label={`Open ${u.displayName || u.username}'s profile in a new tab`} className="hover:underline">{userContent}</Link>}<div><p className="text-sm font-semibold tabular-nums">{Math.round(Number(u.uti) || 0)} / 100</p><p className="text-[10px] capitalize text-muted-foreground">{String(u.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div><Badge variant="outline" className="w-fit text-[10px] capitalize">{u.role}</Badge><Badge variant={u.isDeleted ? "outline" : u.isBanned ? "destructive" : "secondary"} className="w-fit text-[10px]">{u.isDeleted ? "Deleted" : u.isBanned ? "Suspended" : "Active"}</Badge><div className="flex flex-wrap gap-1"><Button variant="outline" size="sm" className="h-8" onClick={() => void openUserDetail(u)}><Eye className="mr-1 h-3.5 w-3.5" />Details</Button>{u.isDeleted && currentUser.role === "super_admin" ? <Button variant="outline" size="sm" className="h-8" disabled={revivingId === u.id} onClick={() => void reviveAccount(u)}><RotateCcw className="mr-1 h-3.5 w-3.5" />{revivingId === u.id ? "Reviving..." : "Revive"}</Button> : !protectedAccount && <Button variant={u.isBanned ? "outline" : "destructive"} size="sm" className="h-8" disabled={changingBanId === u.id} onClick={() => void toggleBan(u)}><Ban className="mr-1 h-3.5 w-3.5" />{changingBanId === u.id ? "Working…" : u.isBanned ? "Restore" : "Suspend"}</Button>}{currentUser.role === "super_admin" && !u.isDeleted && <Button variant="outline" size="sm" className="h-8" onClick={() => setNoticeUser(u)}><Send className="mr-1 h-3.5 w-3.5" />Notice</Button>}</div></div>; })}</div>}
+        <div className="hidden grid-cols-[minmax(0,1fr)_130px_100px_100px_310px] gap-4 border-b border-border/70 bg-muted/30 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground sm:grid"><span>User</span><span>Trust score</span><span>Role</span><span>Status</span><span>Actions</span></div>
+        {loading ? <div className="space-y-3 p-5">{[1, 2, 3, 4].map((row) => <div key={row} className="h-12 animate-pulse rounded bg-muted" />)}</div> : filtered.length === 0 ? <div className="p-12 text-center"><p className="text-sm font-medium">No users found</p><p className="mt-1 text-xs text-muted-foreground">Try a different search.</p></div> : <div className="divide-y divide-border/60">{filtered.map((u) => { const protectedAccount = u.id === currentUser.id || u.role === "super_admin" || (u.role === "admin" && currentUser.role !== "super_admin"); const userContent = <div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">{u.displayName?.[0] ?? u.username?.[0] ?? "?"}</div><div className="min-w-0"><p className="truncate text-sm font-medium">{u.displayName || "Unnamed user"}{u.isOfficialAccount && <Badge variant="secondary" className="ml-2 text-[9px]">Official</Badge>}</p><p className="truncate text-xs text-muted-foreground">@{u.username} · {u.email}</p></div></div>; return <div key={u.id} className="grid gap-3 px-5 py-4 sm:grid-cols-[minmax(0,1fr)_130px_100px_100px_310px] sm:items-center">{u.isDeleted ? <div className="min-w-0">{userContent}<p className="mt-1 pl-12 text-[10px] text-muted-foreground">Deleted <Timestamp value={u.deletedAt} mode="datetime" /></p></div> : <Link href={`/profile/${encodeURIComponent(u.username)}`} target="_blank" rel="noreferrer" aria-label={`Open ${u.displayName || u.username}'s profile in a new tab`} className="hover:underline">{userContent}</Link>}<div><p className="text-sm font-semibold tabular-nums">{Math.round(Number(u.uti) || 0)} / 100</p><p className="text-[10px] capitalize text-muted-foreground">{String(u.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div><Badge variant="outline" className="w-fit text-[10px] capitalize">{u.role}</Badge><div><Badge variant={u.isDeleted ? "outline" : u.isBanned ? "destructive" : "secondary"} className="w-fit text-[10px]">{u.isDeleted ? "Deleted" : u.isBanned && u.bannedUntil ? "Temporarily restricted" : u.isBanned ? "Banned" : "Active"}</Badge>{u.isBanned && u.bannedUntil && <p className="mt-1 text-[10px] text-muted-foreground">Until <Timestamp value={u.bannedUntil} mode="datetime" /></p>}</div><div className="flex flex-wrap gap-1"><Button variant="outline" size="sm" className="h-8" onClick={() => void openUserDetail(u)}><Eye className="mr-1 h-3.5 w-3.5" />Details</Button>{u.isDeleted && currentUser.role === "super_admin" ? <Button variant="outline" size="sm" className="h-8" disabled={revivingId === u.id} onClick={() => void reviveAccount(u)}><RotateCcw className="mr-1 h-3.5 w-3.5" />{revivingId === u.id ? "Reviving..." : "Revive"}</Button> : !protectedAccount && <>{u.isBanned ? <Button variant="outline" size="sm" className="h-8" disabled={changingBanId === u.id} onClick={() => void toggleBan(u)}><Ban className="mr-1 h-3.5 w-3.5" />{changingBanId === u.id ? "Working…" : "Restore"}</Button> : <><Button variant="destructive" size="sm" className="h-8" disabled={changingBanId === u.id} onClick={() => void toggleBan(u)}><Ban className="mr-1 h-3.5 w-3.5" />Ban indefinitely</Button><Button variant="outline" size="sm" className="h-8" onClick={() => { setRestrictionDays(7); setRestrictionReason(""); setRestrictingUser(u); }}>Restrict</Button></>}</>}{currentUser.role === "super_admin" && !u.isDeleted && <Button variant="outline" size="sm" className="h-8" onClick={() => setNoticeUser(u)}><Send className="mr-1 h-3.5 w-3.5" />Notice</Button>}</div></div>; })}</div>}
       </div>
       <div className="flex items-center justify-end gap-2"><Button variant="outline" size="sm" disabled={page === 1 || loading} onClick={() => setPage((current) => current - 1)}><ChevronLeft className="mr-1 h-4 w-4" />Previous</Button><span className="text-xs text-muted-foreground">Page {page} of {Math.max(1, Math.ceil(totalUsers / 25))}</span><Button variant="outline" size="sm" disabled={page * 25 >= totalUsers || loading} onClick={() => setPage((current) => current + 1)}>Next<ChevronRight className="ml-1 h-4 w-4" /></Button></div>
     </section>
@@ -172,6 +207,38 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
         <DialogFooter><Button variant="outline" onClick={() => setNoticeUser(null)}>Cancel</Button><Button onClick={() => void sendNotice()} disabled={sending || !notice.trim()}><Send className="mr-2 h-4 w-4" />{sending ? "Sending..." : "Send"}</Button></DialogFooter>
       </DialogContent>
     </Dialog>}
+    <Dialog open={!!restrictingUser} onOpenChange={(open) => { if (!open && !submittingRestriction) setRestrictingUser(null); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Temporarily restrict account</DialogTitle>
+          <DialogDescription>
+            @{restrictingUser?.username} will be signed out and unable to sign in until the restriction expires. They will see the reason and expiry when they try to sign in.
+          </DialogDescription>
+        </DialogHeader>
+        <label className="space-y-2 text-sm font-medium">
+          Duration
+          <select
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            value={restrictionDays}
+            onChange={(event) => setRestrictionDays(Number(event.target.value) as 1 | 7 | 30)}
+          >
+            <option value={1}>1 day</option>
+            <option value={7}>7 days</option>
+            <option value={30}>30 days</option>
+          </select>
+        </label>
+        <label className="space-y-2 text-sm font-medium">
+          Reason (shown to the user)
+          <Textarea value={restrictionReason} onChange={(event) => setRestrictionReason(event.target.value)} minLength={10} maxLength={1000} rows={4} />
+        </label>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setRestrictingUser(null)} disabled={submittingRestriction}>Cancel</Button>
+          <Button variant="destructive" onClick={() => void temporarilyRestrictUser()} disabled={submittingRestriction || restrictionReason.trim().length < 10}>
+            {submittingRestriction ? "Applying…" : "Apply restriction"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     <Dialog open={!!userDetail} onOpenChange={(open) => { if (!open) setUserDetail(null); }}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
@@ -183,6 +250,13 @@ export default function AdminUsers({ token, toast, currentUser }: AdminProps) {
             <div><p className="text-xs text-muted-foreground">Trust score</p><p className="text-xl font-semibold tabular-nums">{Math.round(userDetail.trustScore?.uti ?? 0)} / 100</p><p className="text-xs capitalize text-muted-foreground">{String(userDetail.trustScore?.creatorLevel || "new_voice").replace(/_/g, " ")}</p></div>
             {!userDetail.user.isDeleted && <a href={`/profile/${encodeURIComponent(userDetail.user.username)}`} target="_blank" rel="noreferrer" className="text-sm font-medium text-primary hover:underline">Open profile</a>}
           </div>
+          {userDetail.user.isBanned && <section className="space-y-1 rounded-lg border border-destructive/40 p-4">
+            <h3 className="text-sm font-semibold">Account restriction</h3>
+            <p className="text-xs text-muted-foreground">
+              {userDetail.user.bannedUntil ? <>Until <Timestamp value={userDetail.user.bannedUntil} mode="datetime" /></> : "No expiry (permanent ban)"}
+            </p>
+            {userDetail.user.banReason && <p className="text-sm">{userDetail.user.banReason}</p>}
+          </section>}
           <section className="space-y-2 rounded-lg border border-border p-4">
             <h3 className="text-sm font-semibold">{userDetail.user.isDeleted ? "Profile retained on the tombstone" : "Profile"}</h3>
             <p className="text-xs text-muted-foreground">@{userDetail.user.username} · {userDetail.user.email}</p>

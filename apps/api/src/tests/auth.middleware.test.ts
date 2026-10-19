@@ -8,7 +8,7 @@ const authMocks = vi.hoisted(() => ({
   isTokenBlacklisted: vi.fn(),
 }));
 const dbMocks = vi.hoisted(() => ({
-  user: { id: 1, role: "user", isBanned: false, authVersion: 0 },
+  user: { id: 1, role: "user", isBanned: false, bannedUntil: null as Date | null, banReason: null as string | null, authVersion: 0 },
 }));
 
 vi.mock("../lib/auth", () => authMocks);
@@ -70,6 +70,8 @@ describe("requireAdmin middleware", () => {
     authMocks.isTokenBlacklisted.mockResolvedValue(false);
     dbMocks.user.role = "user";
     dbMocks.user.isBanned = false;
+    dbMocks.user.bannedUntil = null;
+    dbMocks.user.banReason = null;
     dbMocks.user.authVersion = 0;
   });
 
@@ -81,6 +83,8 @@ describe("requireAdmin middleware", () => {
       authMocks.isTokenBlacklisted.mockResolvedValue(false);
       dbMocks.user.role = "user";
       dbMocks.user.isBanned = false;
+      dbMocks.user.bannedUntil = null;
+      dbMocks.user.banReason = null;
       dbMocks.user.authVersion = 0;
     });
 
@@ -135,6 +139,28 @@ describe("requireAdmin middleware", () => {
     await requireAdmin(req, res, next);
     expect(next).toHaveBeenCalledOnce();
     expect(res.status).not.toHaveBeenCalled();
+  });
+
+  it("blocks a temporarily restricted user with the expiry and moderation reason", async () => {
+    const until = new Date(Date.now() + 86_400_000);
+    dbMocks.user.isBanned = true;
+    dbMocks.user.bannedUntil = until;
+    dbMocks.user.banReason = "Repeated harassment";
+    const { requireAuth } = await import("../middleware/admin");
+    const req = { headers: { authorization: "Bearer valid" } } as unknown as Request;
+    const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() } as unknown as Response;
+    const next = vi.fn() as NextFunction;
+
+    await requireAuth(req, res, next);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      error: "Account temporarily restricted",
+      code: "TEMPORARY_RESTRICTION",
+      until: until.toISOString(),
+      reason: "Repeated harassment",
+    });
+    expect(next).not.toHaveBeenCalled();
   });
 
   it("rejects authenticated users without an admin role with 403", async () => {

@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { passkeysTable } from "@workspace/db/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getViewerId } from "../../lib/auth-types";
+import { getUserAccountBanStatus, temporaryRestrictionResponse } from "../../lib/accountRestriction";
 
 export const passkeyRouter = Router();
 
@@ -92,6 +93,10 @@ passkeyRouter.post("/authenticate", async (req, res: Response) => {
 
   const [pk] = await db.select().from(passkeysTable).where(eq(passkeysTable.credentialId, String(credentialId)));
   if (!pk) return res.status(404).json({ error: "Unknown credential" });
+
+  const banStatus = await getUserAccountBanStatus(pk.userId);
+  if (banStatus?.kind === "temporary") return res.status(403).json(temporaryRestrictionResponse(banStatus.until, banStatus.reason));
+  if (banStatus?.kind === "permanent") return res.status(403).json({ error: "Account banned", reason: banStatus.reason });
 
   await db.update(passkeysTable).set({ lastUsedAt: new Date(), counter: (pk.counter ?? 0) + 1 }).where(eq(passkeysTable.id, pk.id));
 

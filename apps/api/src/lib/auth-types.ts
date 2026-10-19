@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable, type User } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { getSessionAuthVersion, getSessionUserId, isSessionActive, isTokenBlacklisted } from "./auth";
+import { getAccountBanStatus, temporaryRestrictionResponse } from "./accountRestriction";
 
 export interface AuthenticatedRequest extends Request {
   currentUser: User;
@@ -40,7 +41,19 @@ export function requireAuthTyped(
   return async (req: Request, res: Response, next: NextFunction) => {
     const user = await loadCurrentUser(req);
     if (!user) return res.status(401).json({ error: "Unauthorized" });
-    if (user.isBanned) return res.status(403).json({ error: "Account banned" });
+    const banStatus = getAccountBanStatus(user.isBanned, user.bannedUntil, user.banReason);
+    if (banStatus.kind === "temporary") return res.status(403).json(temporaryRestrictionResponse(banStatus.until, user.banReason));
+    if (banStatus.kind === "permanent") return res.status(403).json({ error: "Account banned", reason: user.banReason });
+    if (banStatus.kind === "expired") {
+      await db.update(usersTable).set({
+        isBanned: false,
+        bannedAt: null,
+        bannedUntil: null,
+        banReason: null,
+        updatedAt: new Date(),
+      }).where(eq(usersTable.id, user.id));
+      return res.status(401).json({ error: "Session expired; please sign in again." });
+    }
     try {
       await handler(req as AuthenticatedRequest, res, next);
     } catch (err) {

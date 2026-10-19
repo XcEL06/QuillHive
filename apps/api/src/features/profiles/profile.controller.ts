@@ -40,6 +40,7 @@ import { sendEmail } from "../email/email.service";
 import { welcomeEmailHtml, welcomeEmailText } from "../email/email.templates";
 import { getRedis } from "../../lib/redis";
 import { deleteCachePattern } from "../../lib/cache";
+import { getAccountBanStatus, temporaryRestrictionResponse } from "../../lib/accountRestriction";
 import { canViewProfile } from "./profileAccess.service";
 import { getUserAchievements } from "../achievements/achievement.service";
 import { getPortfolioItems } from "../gallery/gallery.service";
@@ -283,6 +284,26 @@ export const login = async (req: Request, res: Response) => {
     }
     return res.status(401).json({ error: "Invalid credentials" });
   }
+  const banStatus = getAccountBanStatus(user.isBanned, user.bannedUntil, user.banReason);
+  if (banStatus.kind === "temporary") {
+    return res.status(403).json(temporaryRestrictionResponse(banStatus.until, banStatus.reason));
+  }
+  if (banStatus.kind === "permanent") {
+    return res.status(403).json({ error: "Account banned", reason: banStatus.reason });
+  }
+  if (banStatus.kind === "expired") {
+    await db.update(usersTable).set({
+      isBanned: false,
+      bannedAt: null,
+      bannedUntil: null,
+      banReason: null,
+      updatedAt: new Date(),
+    }).where(eq(usersTable.id, user.id));
+    user.isBanned = false;
+    user.bannedAt = null;
+    user.bannedUntil = null;
+    user.banReason = null;
+  }
   loginFailures.delete(failKey);
   // Auto-upgrade weak SHA-256 hashes to scrypt on successful login
   if (isLegacyPasswordHash(user.passwordHash)) {
@@ -338,6 +359,21 @@ export const verifyLoginEmailCode = async (req: Request, res: Response) => {
   if (!challenge) return res.status(400).json({ error: "The sign-in code is invalid, expired, or has reached its attempt limit. Sign in again to request a new code." });
 
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, challenge.userId));
+  if (user && user.isBanned) {
+    const banStatus = getAccountBanStatus(user.isBanned, user.bannedUntil, user.banReason);
+    if (banStatus.kind === "temporary") {
+      return res.status(403).json(temporaryRestrictionResponse(banStatus.until, banStatus.reason));
+    }
+    if (banStatus.kind === "expired") {
+      await db.update(usersTable).set({
+        isBanned: false,
+        bannedAt: null,
+        bannedUntil: null,
+        banReason: null,
+        updatedAt: new Date(),
+      }).where(eq(usersTable.id, user.id));
+    }
+  }
   if (!user || !user.emailVerified || user.isDeleted || user.isBanned || user.authVersion !== challenge.authVersion) {
     return res.status(401).json({ error: "This sign-in request is no longer valid. Please sign in again." });
   }

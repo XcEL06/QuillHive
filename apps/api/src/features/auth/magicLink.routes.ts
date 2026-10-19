@@ -7,6 +7,7 @@ import { createAuthTokens } from "../../lib/auth";
 import { getPublicAppUrl, sendEmail } from "../email/email.service";
 import { magicLinkEmailHtml, magicLinkEmailText } from "../email/email.templates";
 import { rateLimit } from "../../middleware/rateLimit";
+import { getUserAccountBanStatus, temporaryRestrictionResponse } from "../../lib/accountRestriction";
 
 export const magicLinkRouter = Router();
 
@@ -91,6 +92,9 @@ magicLinkRouter.post("/consume", async (req, res: Response) => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.email, row.email)).limit(1);
   if (!user) return res.status(400).json({ error: "Account not found" });
   if (!user.emailVerified) return res.status(403).json({ error: "Please verify your email before using a magic link." });
+  const banStatus = await getUserAccountBanStatus(user.id);
+  if (banStatus?.kind === "temporary") return res.status(403).json(temporaryRestrictionResponse(banStatus.until, banStatus.reason));
+  if (banStatus?.kind === "permanent") return res.status(403).json({ error: "Account banned", reason: banStatus.reason });
 
   await db.update(magicLinkTokensTable)
     .set({ usedAt: new Date() })

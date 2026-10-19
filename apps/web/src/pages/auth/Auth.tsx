@@ -130,10 +130,17 @@ export default function Auth() {
         oauth_failed: "GitHub sign-in could not be completed. Please try again.",
         no_email: "GitHub did not provide a verified email address. Add a verified email to your GitHub account and try again.",
         oauth_error: "GitHub sign-in failed. Please try again.",
+        account_banned: "This account is banned and cannot sign in.",
       };
-      toast.error(messages[oauthError] || "Sign-in failed. Please try again.");
+      const restrictionUntil = url.searchParams.get("until");
+      const restrictionExpiry = restrictionUntil ? new Date(restrictionUntil) : null;
+      const message = oauthError === "temporarily_restricted"
+        ? `Account temporarily restricted${restrictionExpiry && Number.isFinite(restrictionExpiry.getTime()) ? ` until ${restrictionExpiry.toLocaleString()}` : ""}.`
+        : messages[oauthError] || "Sign-in failed. Please try again.";
+      toast.error(message);
       url.searchParams.delete("error");
       url.searchParams.delete("provider");
+      url.searchParams.delete("until");
       window.history.replaceState({}, "", url.toString());
     }
 

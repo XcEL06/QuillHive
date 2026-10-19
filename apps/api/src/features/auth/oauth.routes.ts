@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { createAuthTokens } from "../../lib/auth";
 import { logger } from "../../lib/logger";
 import { isFeatureEnabled } from "../../lib/featureFlags";
+import { getUserAccountBanStatus } from "../../lib/accountRestriction";
 
 export const oauthRouter = Router();
 
@@ -227,6 +228,14 @@ async function handleGithubCallback(req: Request, res: Response): Promise<void> 
       });
     }
 
+    const banStatus = await getUserAccountBanStatus(userId);
+    if (banStatus?.kind === "temporary" || banStatus?.kind === "permanent") {
+      const target = new URL("/login", appUrl);
+      target.searchParams.set("error", banStatus.kind === "temporary" ? "temporarily_restricted" : "account_banned");
+      if (banStatus.kind === "temporary") target.searchParams.set("until", banStatus.until.toISOString());
+      return res.redirect(target.toString());
+    }
+
     const tokens = await createAuthTokens(userId, { userAgent: (req.headers["user-agent"] || "").slice(0, 200) });
     const target = new URL("/auth/oauth-complete", appUrl);
     target.searchParams.set("token", tokens.token);
@@ -304,7 +313,13 @@ async function handleCallback(req: Request, res: Response, provider: string) {
       userId, provider, providerAccountId: profile.sub, email: profile.email, isPrimary: true,
     });
   }
-
+  const banStatus = await getUserAccountBanStatus(userId);
+  if (banStatus?.kind === "temporary" || banStatus?.kind === "permanent") {
+    const target = new URL("/login", frontendUrl());
+    target.searchParams.set("error", banStatus.kind === "temporary" ? "temporarily_restricted" : "account_banned");
+    if (banStatus.kind === "temporary") target.searchParams.set("until", banStatus.until.toISOString());
+    return res.redirect(target.toString());
+  }
   const tokens = await createAuthTokens(userId, { userAgent: (req.headers["user-agent"] || "").slice(0, 200) });
   const base = frontendUrl();
   const target = new URL("/auth/oauth-complete", base);

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   adminLogsTable,
@@ -100,7 +100,15 @@ spamReviewRouter.post("/:id/decision", requirePermission("manage_moderation"), a
       strikeId = strike.id;
     }
     if (decision === "ban") {
-      await tx.update(usersTable).set({ isBanned: true, bannedAt: new Date(), updatedAt: new Date() }).where(eq(usersTable.id, flag.userId));
+      const now = new Date();
+      await tx.update(usersTable).set({
+        isBanned: true,
+        bannedAt: now,
+        bannedUntil: null,
+        banReason: reason.slice(0, 1_000),
+        authVersion: sql`${usersTable.authVersion} + 1`,
+        updatedAt: now,
+      }).where(eq(usersTable.id, flag.userId));
     }
     await tx.insert(adminLogsTable).values({
       adminId: req.currentUser.id,
