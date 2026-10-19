@@ -300,6 +300,8 @@ export function AppLayout({ children, publicPage = false }: AppLayoutProps) {
                     <Link href="/saved" className="cursor-pointer w-full flex items-center gap-2">
                       <Bookmark className="w-4 h-4" /> Saved Posts
                     </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
                     <Link href="/archive" className="cursor-pointer w-full flex items-center gap-2">
                       <Archive className="w-4 h-4" /> Your Archive
                     </Link>
