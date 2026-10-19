@@ -18,6 +18,8 @@ export function OriginalityPanel({ postId }: { postId: number }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setData(null);
+    setError(null);
     apiFetch(`/api/posts/${postId}/originality`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d) => { if (!cancelled) setData(d); })
@@ -29,12 +31,24 @@ export function OriginalityPanel({ postId }: { postId: number }) {
   if (loading) {
     return (
       <div className="mb-6 inline-flex items-center gap-2 text-xs px-3 py-1.5 rounded-full bg-muted/40 text-muted-foreground border border-border/60">
-        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking originality…
+        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking indexed text overlap…
       </div>
     );
   }
-  if (error || !data) return null;
-  if (data.status === "insufficient_text") return null;
+  if (error || !data) {
+    return (
+      <p role="status" className="mb-6 rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+        The text-overlap check is unavailable right now. No originality conclusion was reached.
+      </p>
+    );
+  }
+  if (data.status === "insufficient_text") {
+    return (
+      <p className="mb-6 rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+        There is not enough text to compare this post with indexed posts. No originality conclusion was reached.
+      </p>
+    );
+  }
 
   const isOriginal = data.status === "original";
   const isDup = data.status === "duplicate";
@@ -57,7 +71,11 @@ export function OriginalityPanel({ postId }: { postId: number }) {
         <span>{label}</span>
         <span className="ml-2 text-[11px] opacity-80">Top text overlap {((data.topSimilarity ?? 1 - data.score) * 100).toFixed(0)}%</span>
       </div>
-      <p className="mt-2 text-xs opacity-80">{data.interpretation || "Automated text similarity is a review signal, not proof of plagiarism or originality."} {data.method ? `Method: ${data.method}.` : ""}</p>
+      <p className="mt-2 text-xs opacity-80">
+        {data.interpretation || "This compares phrases with indexed published posts; overlap can come from quotations, common phrases, or shared sources."}
+        It is not an originality score or a plagiarism finding, and this result alone does not affect your trust score, feed ranking, or fees.
+        {data.method ? ` Method: ${data.method}.` : ""}
+      </p>
       {!isOriginal && data.similar.length > 0 && (
         <div className="mt-3 space-y-1.5 border-t border-current/10 pt-3 text-xs">
           <p className="opacity-80">Potentially similar indexed posts (visible only to you, the author):</p>

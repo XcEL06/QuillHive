@@ -644,7 +644,13 @@ export default function CreatorDashboard() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <p className="text-xs text-muted-foreground">An explainable activity composite from platform records; it is not proof of authorship, character, or trustworthiness and does not itself change reach or marketplace fees.</p>
+                    <p className="text-xs text-muted-foreground">
+                      This explainable activity score is based on platform records, not proof of authorship, character, or trustworthiness.
+                      The feed uses the Trust Score and visibility multiplier as ranking inputs. Established, Featured, and Luminary creators
+                      also receive a 4× author-ranking multiplier on posts that meet a basic quality threshold. Relevance, recency, engagement,
+                      post quality, and optional boosts also affect ranking, so these multipliers do not guarantee impressions. Marketplace
+                      fees are not changed by this score.
+                    </p>
                     <details className="rounded-lg border border-border/60 p-3 text-xs">
                       <summary className="cursor-pointer font-medium">How the indicators are calculated</summary>
                       <ul className="mt-2 space-y-2 text-muted-foreground">
