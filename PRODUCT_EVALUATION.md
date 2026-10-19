@@ -5,7 +5,7 @@
 
 ## 1. Executive Summary
 
-QuillHive is a social publishing platform for everyone, positioning itself as a growth and discovery platform - combining Substack-style writing with LinkedIn-style career signaling and an opportunity marketplace. The platform has strong technical bones: a mature Express API, real-time sockets, a rich admin system, and a well-structured React frontend. However, it is in early-seed state with no real user base, no revenue, and several email/communication flows broken. The official @quillhive account can now post content (fully built admin UI + API), email sending now works via SMTP fallback, and real-time unread DM badges have been wired throughout the nav. The strategic priority must shift to **user acquisition and retention** - the platform is far more feature-complete than its zero-user-count suggests.
+QuillHive is a creator and professional growth platform that brings together publishing, audience discovery, portfolios, and opportunity matching. The platform has strong technical bones: a mature Express API, real-time sockets, a rich admin system, and a well-structured React frontend. However, it is in early-seed state with no real user base, no revenue, and several email/communication flows broken. The official @quillhive account can now post content (fully built admin UI + API), email sending now works via SMTP fallback, and real-time unread DM badges have been wired throughout the nav. The strategic priority must shift to **user acquisition and retention** - the platform is far more feature-complete than its zero-user-count suggests.
 
 **Overall Score: 6.8 / 10** - Strong foundation, gaps in email delivery, missing social proof, and no clear go-to-market execution yet.
 
@@ -17,7 +17,7 @@ QuillHive is a social publishing platform for everyone, positioning itself as a 
 **Mission:** Give everyone the infrastructure of a career - not just a publishing tool.
 
 **Assessment:**
-- The vision is clearly differentiated from Substack (pure publishing) and LinkedIn (professional networking with poor creator tools). The "career OS" framing is compelling and defensible.
+- The distinctive combination of publishing, audience growth, professional portfolios, and opportunity matching gives the product a clear identity. Position it around helping people build a body of work and turn it into meaningful connections and opportunities.
 - The mission is reflected in the product: income tracking, opportunity marketplace, service listings, portfolio, growth score, and trust tiers all exist.
 - **Gap:** The homepage and onboarding don't communicate this vision clearly. First-time visitors see a generic feed, not a "career dashboard."
 - **Recommendation:** Make the Creator Growth HQ panel the first thing users see after onboarding. The value proposition must be felt on day one.
@@ -42,7 +42,7 @@ QuillHive is a social publishing platform for everyone, positioning itself as a 
 **Assessment:**
 - The product tries to serve all three segments simultaneously, risking "built for everyone = built for no one"
 - The creator-focused UX (Spark Composer, Writing Streaks, Growth Score) clearly prioritizes serious independent creators
-- The LinkedIn-style features (Opportunities, Service Listings, Portfolio) are mature but undermarketed
+- The career-oriented features (Opportunities, Service Listings, Portfolio) are mature but undermarketed
 
 **Recommendation:** Double down on segment 1 (indie creators with existing audiences). They have the highest LTV, the strongest word-of-mouth potential, and the clearest pain points QuillHive solves.
 

@@ -1,10 +1,11 @@
 import { PublicLayout } from "@/components/layout/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Feather, Heart, ShieldCheck, Users } from "lucide-react";
+import { Heart, ShieldCheck, Users } from "lucide-react";
 import { Link } from "wouter";
 import { useAuthStore } from "@/store/auth";
 import { BackButton } from "@/components/ui/BackButton";
+import { QuillHiveLogo } from "@/components/QuillHiveLogo";
 
 export function About() {
   const { user } = useAuthStore();
@@ -16,7 +17,7 @@ export function About() {
           <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
           <div className="relative mx-auto max-w-3xl">
             <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-              <Feather className="h-7 w-7" aria-hidden="true" />
+              <QuillHiveLogo size={40} showWordmark={false} />
             </div>
             <p className="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-primary">About QuillHive</p>
             <h1 className="text-4xl font-serif font-bold tracking-tight text-foreground sm:text-5xl">

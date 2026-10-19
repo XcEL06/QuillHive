@@ -18,31 +18,14 @@ export function QuillHiveLogo({
 
   return (
     <div className={`flex items-center gap-2 select-none ${className}`}>
-      <svg
+      <img
+        src="/images/logo-icon-192.png"
         width={size}
         height={size}
-        viewBox="0 0 40 40"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
+        alt=""
         aria-hidden="true"
-      >
-        <path
-          d="M20 2L36 11V29L20 38L4 29V11L20 2Z"
-          fill={color}
-          fillOpacity="0.15"
-          stroke={color}
-          strokeWidth="2"
-        />
-        <path
-          d="M12 28L22 12M22 12L28 18M22 12L16 15"
-          stroke={color}
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="20" cy="20" r="8" stroke={color} strokeWidth="2" fill="none" />
-        <path d="M25 25L29 29" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-      </svg>
+        className="shrink-0 rounded-lg object-contain"
+      />
 
       {showWordmark && (
         <span

@@ -5,11 +5,11 @@ import {
   Github,
   Instagram,
   Heart,
-  Feather,
   Globe,
   Headphones,
   Shield,
 } from 'lucide-react';
+import { QuillHiveLogo } from '@/components/QuillHiveLogo';
 
 export function Footer() {
   const t = useT();
@@ -19,7 +19,7 @@ export function Footer() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="mb-8">
             <div className="flex items-center gap-2 mb-4">
-              <Feather className="w-6 h-6 text-primary" />
+              <QuillHiveLogo size={24} showWordmark={false} />
               <span className="font-serif text-xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
                 QuillHive
               </span>
