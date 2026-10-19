@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Timestamp } from '@/lib/postTimestamp';
+import { apiFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Loader2, LogOut, Monitor, MapPin } from 'lucide-react';
 
