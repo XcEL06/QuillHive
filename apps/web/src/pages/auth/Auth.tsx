@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuthStore } from "@/store/auth";
-import { apiUrl, getStoredToken, setStoredRefreshToken, setStoredToken } from "@/lib/api";
+import { apiUrl, setStoredRefreshToken, setStoredToken } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,7 +41,7 @@ export default function Auth() {
   const [, setLocation] = useLocation();
   const googleOAuthEnabled = useFeature("google_oauth_enabled");
   const githubOAuthEnabled = useFeature("github_oauth_enabled");
-  const { setAuth, user, refreshUser } = useAuthStore();
+  const { setAuth, user } = useAuthStore();
   const [inviteCode, setInviteCode] = useState("");
   const [refSource, setRefSource] = useState("");
   const [inviteStatus, setInviteStatus] = useState<"checking" | "valid" | "invalid" | "unavailable" | null>(null);
@@ -59,13 +59,8 @@ export default function Auth() {
   useEffect(() => {
     if (user) {
       setLocation("/");
-      return;
     }
-    if (!getStoredToken()) return;
-    void refreshUser().then(() => {
-      if (useAuthStore.getState().user) setLocation("/");
-    });
-  }, [user, refreshUser, setLocation]);
+  }, [user, setLocation]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

@@ -1,4 +1,4 @@
-import { useEffect, lazy, Suspense, useState } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import "@/lib/api";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 import { useFeature } from "@/lib/features";
@@ -127,24 +127,13 @@ function PageLoader() {
 
 function AppRoot({ children }: { children: React.ReactNode }) {
   const { refreshUser, setInitializing } = useAuthStore();
-  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     setInitializing(true);
     refreshUser().finally(() => {
       setInitializing(false);
-      setReady(true);
     });
   }, [refreshUser, setInitializing]);
-
-  if (!ready) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-8 space-y-4 animate-pulse">
-        <div className="h-9 w-9 rounded-full bg-muted" />
-        <div className="h-40 rounded-2xl bg-muted" />
-      </div>
-    );
-  }
 
   return <>{children}</>;
 }
@@ -193,7 +182,7 @@ function GuestGuard({ children }: { children: React.ReactNode }) {
     if (!isInitializing && isAuthenticated) setLocation("/");
   }, [isAuthenticated, isInitializing, setLocation]);
 
-  if (isInitializing || isAuthenticated) return null;
+  if (isAuthenticated) return null;
   return <>{children}</>;
 }
 

@@ -94,15 +94,17 @@ const queryClient = new QueryClient({
   },
 })
 
-useI18n.getState().init().then(() => {
-  createRoot(document.getElementById('root')!).render(
-    <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </StrictMode>
-  )
+void useI18n.getState().init().catch((error) => {
+  console.error('[i18n] Failed to initialize translations', error)
 })
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </StrictMode>
+)
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
