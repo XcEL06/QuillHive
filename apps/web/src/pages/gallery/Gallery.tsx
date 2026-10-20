@@ -127,7 +127,7 @@ export default function Gallery() {
                     <ImageIcon className="w-10 h-10 text-muted-foreground/30" />
                   </div>
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                   <div className="absolute bottom-0 left-0 right-0 p-3">
                     <p className="text-white text-sm font-medium truncate">{post.title || 'Untitled'}</p>
                     <div className="flex items-center gap-2 mt-1">

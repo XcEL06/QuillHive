@@ -65,7 +65,7 @@ export default function Workspace() {
             QuillHive helps you find opportunities — we don't process or hold any payment made here.
             Never pay a fee to apply for work. Verify who you're working with, and report anything that
             feels wrong.
-            <Link href="/safety" className="underline ml-1 whitespace-nowrap">Learn more →</Link>
+            <Link href="/safety" className="ml-1 underline">Learn more →</Link>
             <button
               type="button"
               onClick={dismissSafetyNotice}

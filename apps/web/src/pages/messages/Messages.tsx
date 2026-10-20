@@ -631,7 +631,7 @@ export default function Messages() {
           {activeConvId ? (
             <>
               {/* Header */}
-              <div className="h-16 border-b border-border/50 flex items-center px-6 bg-card shrink-0 gap-3 shadow-sm z-10">
+              <div className="min-h-16 border-b border-border/50 flex flex-wrap items-center px-3 sm:px-6 py-2 bg-card shrink-0 gap-2 sm:gap-3 shadow-sm z-10">
                 <button className="md:hidden p-2 -ml-2 text-muted-foreground" onClick={() => setActiveConvId(null)}>
                   ←
                 </button>
@@ -652,11 +652,11 @@ export default function Messages() {
                     <AvatarFallback>{otherUser?.displayName?.substring(0, 2)}</AvatarFallback>
                   </Avatar>
                 )}
-                <div>
+                <div className="min-w-0 flex-1">
                   {activeConv?.isGroup || !otherUser?.username ? (
-                    <h3 className="font-semibold text-foreground">{activeConv?.isGroup ? activeConv?.groupName : otherUser?.displayName}</h3>
+                    <h3 className="truncate font-semibold text-foreground">{activeConv?.isGroup ? activeConv?.groupName : otherUser?.displayName}</h3>
                   ) : (
-                    <Link href={`/profile/${otherUser.username}`} className="font-semibold text-foreground hover:text-primary transition-colors">
+                    <Link href={`/profile/${otherUser.username}`} className="block truncate font-semibold text-foreground hover:text-primary transition-colors">
                       {otherUser.displayName}
                     </Link>
                   )}
@@ -667,7 +667,7 @@ export default function Messages() {
                   )}
                 </div>
                 {(isOutgoingRequest || isClosedOutgoingRequest) && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="min-w-0 basis-full text-xs text-muted-foreground sm:ml-auto sm:basis-auto sm:text-right">
                     {isOutgoingRequest ? 'Your message request is awaiting acceptance.' : 'This conversation is unavailable.'}
                   </p>
                 )}
@@ -810,7 +810,7 @@ export default function Messages() {
                       placeholder={t('messages.typePlaceholder', 'Type a message...')}
                       value={messageText}
                       onChange={e => handleTyping(e.target.value)}
-                      className="border-0 bg-transparent focus-visible:ring-0 flex-1 px-4"
+                      className="min-w-0 flex-1 border-0 bg-transparent px-4 focus-visible:ring-0"
                     />
                     <Button type="submit" size="icon" disabled={isSending || (!messageText.trim() && messageAttachments.length === 0)} className="rounded-full shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground">
                       <Send className="w-4 h-4" />

@@ -95,7 +95,7 @@ function EntryCard({ entry, index }: { entry: ChainEntry; index: number }) {
             {entry.postExcerpt && (
               <p className="text-xs text-muted-foreground line-clamp-2">{entry.postExcerpt}</p>
             )}
-            <div className="flex items-center gap-1 text-xs text-primary mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="mt-2 flex items-center gap-1 text-xs text-primary opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
               Read <ExternalLink className="w-3 h-3" />
             </div>
           </div>

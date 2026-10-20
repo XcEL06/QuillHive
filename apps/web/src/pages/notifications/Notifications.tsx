@@ -133,14 +133,14 @@ export default function Notifications() {
   return (
     <AppLayout>
       <div className="max-w-3xl mx-auto px-4 md:px-0 pt-4 pb-20">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h1 className="text-3xl font-serif font-bold text-foreground">{t('notifications.title')}</h1>
           {unreadCount > 0 && (
             <Button
               variant="ghost"
               onClick={handleMarkAllRead}
               disabled={isPending}
-              className="text-primary hover:text-primary/80 hover:bg-primary/10"
+              className="max-w-full whitespace-normal text-primary hover:text-primary/80 hover:bg-primary/10"
             >
               <CheckCheck className="w-4 h-4 mr-2" /> {t('notifications.markAllRead')}
             </Button>
@@ -166,7 +166,7 @@ export default function Notifications() {
             <div
               key={notif.id}
               className={clsx(
-                'flex items-start gap-4 p-5 hover:bg-muted/50 transition-colors group',
+                'flex items-start gap-3 p-3 sm:gap-4 sm:p-5 hover:bg-muted/50 transition-colors group',
                 !notif.isRead && 'bg-primary/5',
                 notif.type === 'official_notice' && 'border-l-4 border-l-amber-500 bg-amber-50/60 ring-1 ring-inset ring-amber-500/15 dark:bg-amber-950/20'
               )}
@@ -216,7 +216,7 @@ export default function Notifications() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="flex shrink-0 items-center gap-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                 {!notif.isRead && <div className="w-2 h-2 rounded-full bg-primary mt-1" />}
                 <button
                   onClick={() => handleDelete(notif.id)}

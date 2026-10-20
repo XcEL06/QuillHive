@@ -815,7 +815,7 @@ export default function Settings() {
                       <Label className="mb-2 block">{t('settings.coverPhoto')}</Label>
                       <div className="relative w-full h-32 rounded-xl overflow-hidden bg-muted border border-border group cursor-pointer" onClick={() => coverInputRef.current?.click()}>
                         {profileForm.coverUrl ? <img src={mediaUrl(profileForm.coverUrl)} alt="Cover" onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = `${import.meta.env.BASE_URL}images/default-cover.png`; }} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-muted-foreground"><Camera className="w-8 h-8" /></div>}
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                           {isUploadingCover ? <Loader2 className="w-6 h-6 text-white animate-spin" /> : <Upload className="w-6 h-6 text-white" />}
                         </div>
                       </div>
@@ -963,8 +963,8 @@ export default function Settings() {
                 <div className="space-y-6">
                   <CreatorModeToggle />
                   <div className="border-t border-border/50 pt-5">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                      <div className="min-w-0">
                         <h3 className="font-medium">{t('settings.hireMeButton', 'Open to opportunities')}</h3>
                         <p className="mt-1 text-sm text-muted-foreground">{t('settings.hireMeButtonDesc', 'Show your profile in Find Talent when you are open to hiring or collaboration opportunities. This is not a service listing.')}</p>
                       </div>
@@ -1035,19 +1035,19 @@ export default function Settings() {
                         <Button variant="outline" className="mt-3 rounded-xl" onClick={() => void fetch2faStatus()}>Try again</Button>
                       </div>
                     ) : twofaStatus && <>
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
+                    <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
+                      <div className="flex min-w-0 items-start gap-3">
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                           <Smartphone className="w-5 h-5 text-primary" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <h3 className="font-medium">{t('settings.authenticatorApp')}</h3>
                           <p className="text-sm text-muted-foreground">
                             {twofaStatus?.enabled ? t('settings.authenticatorEnabled') : t('settings.authenticatorSuggestion')}
                           </p>
                         </div>
                       </div>
-                      <span className={`text-xs px-2.5 py-1 rounded-full ${twofaStatus?.enabled ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
+                      <span className={`shrink-0 text-xs px-2.5 py-1 rounded-full ${twofaStatus?.enabled ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
                         {twofaStatus?.enabled ? t('settings.enabled') : t('settings.disabled')}
                       </span>
                     </div>
@@ -1106,17 +1106,17 @@ export default function Settings() {
                   </div>
 
                   {passkeyEnabled && <div className="rounded-2xl border border-border/60 bg-card p-5 space-y-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex items-start gap-3">
+                    <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:gap-4">
+                      <div className="flex min-w-0 items-start gap-3">
                         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
                           <KeyRound className="w-5 h-5 text-primary" />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                           <h3 className="font-medium">{t('settings.passkeys')}</h3>
                           <p className="text-sm text-muted-foreground">{t('settings.passkeysDesc')}</p>
                         </div>
                       </div>
-                      <Button onClick={addPasskey} disabled={passkeyAdding} size="sm" className="rounded-xl gap-1.5">
+                      <Button onClick={addPasskey} disabled={passkeyAdding} size="sm" className="max-w-full rounded-xl gap-1.5">
                         {passkeyAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                         {t('settings.addPasskey')}
                       </Button>
@@ -1250,7 +1250,7 @@ export default function Settings() {
               {/* WORK EXPERIENCE */}
               {activeSection === 'experience' && (
                 <div className="space-y-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div><h2 className="text-xl font-semibold mb-1">{t('settings.workExperience')}</h2><p className="text-sm text-muted-foreground">{t('settings.workExperienceDesc')}</p></div>
                     <Button size="sm" onClick={openAddWork} className="rounded-xl gap-2"><Plus className="w-4 h-4" /> {t('settings.add')}</Button>
                   </div>
@@ -1271,16 +1271,16 @@ export default function Settings() {
                   ) : (
                     <div className="space-y-4">
                       {workHistory.map(entry => (
-                        <div key={entry.id} className="flex gap-4 p-4 bg-muted/20 rounded-xl border border-border/50 group">
+                        <div key={entry.id} className="flex min-w-0 gap-4 p-4 bg-muted/20 rounded-xl border border-border/50 group">
                           <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5"><Briefcase className="w-5 h-5" /></div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
+                            <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
                                 <p className="font-semibold">{entry.title}</p>
                                 <p className="text-sm text-primary font-medium">{entry.organization}</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">{entry.startYear} - {entry.endYear || t('settings.present')}</p>
                               </div>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                                 <Button size="sm" variant="ghost" onClick={() => openEditWork(entry)} className="h-7 w-7 p-0 rounded-lg"><Pencil className="w-3.5 h-3.5" /></Button>
                                 <Button size="sm" variant="ghost" onClick={() => handleDeleteWork(entry.id)} className="h-7 w-7 p-0 rounded-lg text-destructive hover:text-destructive"><X className="w-3.5 h-3.5" /></Button>
                               </div>
@@ -1318,16 +1318,16 @@ export default function Settings() {
                   ) : (
                     <div className="space-y-4">
                       {educationHistory.map(entry => (
-                        <div key={entry.id} className="flex gap-4 p-4 bg-muted/20 rounded-xl border border-border/50 group">
+                        <div key={entry.id} className="flex min-w-0 gap-4 p-4 bg-muted/20 rounded-xl border border-border/50 group">
                           <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-950/30 text-violet-600 flex items-center justify-center shrink-0 mt-0.5"><GraduationCap className="w-5 h-5" /></div>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
+                            <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
                                 <p className="font-semibold">{entry.school}</p>
                                 <p className="text-sm text-primary font-medium">{entry.degree}{entry.field ? ` · ${entry.field}` : ''}</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">{entry.startYear} - {entry.endYear || t('settings.present')}</p>
                               </div>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex shrink-0 gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
                                 <Button size="sm" variant="ghost" onClick={() => openEditEdu(entry)} className="h-7 w-7 p-0 rounded-lg"><Pencil className="w-3.5 h-3.5" /></Button>
                                 <Button size="sm" variant="ghost" onClick={() => handleDeleteEdu(entry.id)} className="h-7 w-7 p-0 rounded-lg text-destructive hover:text-destructive"><X className="w-3.5 h-3.5" /></Button>
                               </div>
@@ -1437,8 +1437,8 @@ export default function Settings() {
                     <h3 className="font-medium mb-1">{t('settings.creatorNotifications')}</h3>
                     <p className="text-xs text-muted-foreground mb-4">{t('settings.creatorNotificationsDesc')}</p>
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between py-4 border-b border-border/40">
-                        <div>
+                      <div className="flex items-center justify-between gap-4 py-4 border-b border-border/40">
+                        <div className="min-w-0">
                           <p className="font-medium text-sm">{t('settings.weeklyEmailDigest')}</p>
                           <p className="text-xs text-muted-foreground mt-0.5">{t('settings.weeklyEmailDigestDesc')}</p>
                         </div>
@@ -1913,8 +1913,8 @@ function InvitesSection() {
         );
       })()}
 
-      <div className="flex items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <p className="text-sm font-medium">{active.length} {active.length === 1 ? t('settings.activeCodes') : t('settings.activeCodesPlural')}</p>
           <p className="text-xs text-muted-foreground">{used.length} {t('settings.redeemedTotal')}</p>
         </div>
@@ -1937,16 +1937,16 @@ function InvitesSection() {
       ) : (
         <div className="space-y-2">
           {codes.map(c => (
-            <div key={c.id} className="flex items-center justify-between gap-3 border border-border rounded-xl px-4 py-3">
+            <div key={c.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 border border-border rounded-xl px-4 py-3">
               <div className="min-w-0">
-                <p className="font-mono text-sm tracking-wider">{c.code}</p>
+                <p className="break-all font-mono text-sm tracking-wider">{c.code}</p>
                 <p className="text-xs text-muted-foreground">
                   {c.usedBy ? <>{t('settings.redeemed')} {c.usedAt && <Timestamp value={c.usedAt} mode="date" />}</> :
                     c.expiresAt ? `${t('settings.expires')} ${new Date(c.expiresAt).toLocaleDateString()}` : t('settings.activeStatus')}
                 </p>
               </div>
               {!c.usedBy && c.isActive && (
-                <Button size="sm" variant="outline" onClick={() => void copyLink(c.code)}>{t('settings.copyLink')}</Button>
+                <Button size="sm" variant="outline" className="shrink-0" onClick={() => void copyLink(c.code)}>{t('settings.copyLink')}</Button>
               )}
             </div>
           ))}

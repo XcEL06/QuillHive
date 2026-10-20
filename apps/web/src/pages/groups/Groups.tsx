@@ -1281,11 +1281,11 @@ function GroupsList() {
               className="h-11 rounded-xl border-border/60 bg-card pl-11"
             />
           </div>
-          <div className="flex shrink-0 gap-2" role="group" aria-label="Group directory view">
-            <Button type="button" variant={scope === 'discover' ? 'default' : 'outline'} aria-pressed={scope === 'discover'} onClick={() => { setScope('discover'); setPage(1); }} className="h-11 rounded-xl">
+          <div className="flex min-w-0 flex-wrap gap-2 sm:shrink-0" role="group" aria-label="Group directory view">
+            <Button type="button" variant={scope === 'discover' ? 'default' : 'outline'} aria-pressed={scope === 'discover'} onClick={() => { setScope('discover'); setPage(1); }} className="h-11 min-w-0 flex-1 justify-center rounded-xl whitespace-nowrap">
               <Compass className="mr-2 h-4 w-4" /> Discover
             </Button>
-            <Button type="button" variant={scope === 'joined' ? 'default' : 'outline'} aria-pressed={scope === 'joined'} onClick={() => { setScope('joined'); setPage(1); }} className="h-11 rounded-xl">
+            <Button type="button" variant={scope === 'joined' ? 'default' : 'outline'} aria-pressed={scope === 'joined'} onClick={() => { setScope('joined'); setPage(1); }} className="h-11 min-w-0 flex-1 justify-center rounded-xl whitespace-nowrap">
               <Users className="mr-2 h-4 w-4" /> Your groups
             </Button>
           </div>

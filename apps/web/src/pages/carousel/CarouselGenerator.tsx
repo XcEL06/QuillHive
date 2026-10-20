@@ -396,7 +396,7 @@ export default function CarouselGenerator() {
                     {currentSlide > 0 && (
                       <button
                         onClick={prev}
-                        className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 backdrop-blur-sm text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                        className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 backdrop-blur-sm text-white opacity-100 transition-opacity hover:bg-black/70 sm:opacity-0 sm:group-hover:opacity-100"
                       >
                         <ChevronLeft className="w-5 h-5" />
                       </button>
@@ -404,7 +404,7 @@ export default function CarouselGenerator() {
                     {currentSlide < carousel.slides.length - 1 && (
                       <button
                         onClick={next}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 backdrop-blur-sm text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 backdrop-blur-sm text-white opacity-100 transition-opacity hover:bg-black/70 sm:opacity-0 sm:group-hover:opacity-100"
                       >
                         <ChevronRight className="w-5 h-5" />
                       </button>

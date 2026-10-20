@@ -59,7 +59,7 @@ export function FeaturedHero({ slotKey = 'home_hero' }: { slotKey?: string }) {
         <h3 className="font-serif text-base md:text-lg font-bold text-foreground leading-tight mb-0.5 line-clamp-1">{title}</h3>
         {desc && <p className="text-xs text-muted-foreground line-clamp-2">{desc}</p>}
       </div>
-      <div className="self-center pr-4 text-amber-600 dark:text-amber-300 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="self-center pr-4 text-amber-600 opacity-100 transition-opacity dark:text-amber-300 sm:opacity-0 sm:group-hover:opacity-100">
         <ArrowRight className="w-4 h-4" />
       </div>
     </div>
