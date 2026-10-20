@@ -5,6 +5,7 @@ import {
   commentsTable,
   commentLikesTable,
   followsTable,
+  groupMembersTable,
   notificationsTable,
   topicsTable,
   postTopicsTable,
@@ -187,12 +188,21 @@ export async function listPosts(
   const { type, feed, page, limit } = options;
 
   let followingIds: number[] = [];
+  let memberGroupIds: number[] = [];
   if (viewerId) {
-    const following = await db
-      .select({ userId: followsTable.followingId })
-      .from(followsTable)
-      .where(eq(followsTable.followerId, viewerId));
+    const [following, memberships] = await Promise.all([
+      db.select({ userId: followsTable.followingId })
+        .from(followsTable)
+        .where(eq(followsTable.followerId, viewerId)),
+      db.select({ groupId: groupMembersTable.groupId })
+        .from(groupMembersTable)
+        .where(and(
+          eq(groupMembersTable.userId, viewerId),
+          inArray(groupMembersTable.status, ["active", "muted"]),
+        )),
+    ]);
     followingIds = following.map(f => f.userId);
+    memberGroupIds = memberships.map(membership => membership.groupId);
   }
 
   const blockedIds = await getBlockedUserIds(viewerId);
@@ -207,13 +217,17 @@ export async function listPosts(
   ];
   if (feed === "following" && viewerId) {
     const followingFiltered = followingIds.filter(id => !hiddenAuthorIds.includes(id));
-    if (followingFiltered.length === 0) return { posts: [], total: 0, page, limit };
-    conds.push(or(
-      inArray(postsTable.authorId, followingFiltered),
-      inArray(postsTable.id, db.select({ postId: repostsTable.postId })
-        .from(repostsTable)
-        .where(inArray(repostsTable.userId, followingFiltered))),
-    )!);
+    const followingFeedConditions = [
+      ...(followingFiltered.length > 0 ? [
+        inArray(postsTable.authorId, followingFiltered),
+        inArray(postsTable.id, db.select({ postId: repostsTable.postId })
+          .from(repostsTable)
+          .where(inArray(repostsTable.userId, followingFiltered))),
+      ] : []),
+      ...(memberGroupIds.length > 0 ? [inArray(postsTable.groupId, memberGroupIds)] : []),
+    ];
+    if (followingFeedConditions.length === 0) return { posts: [], total: 0, page, limit };
+    conds.push(or(...followingFeedConditions)!);
   }
   if (type) conds.push(eq(postsTable.type, type));
   else conds.push(ne(postsTable.type, "spark"));

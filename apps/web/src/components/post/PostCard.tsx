@@ -834,7 +834,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
         animate={{ opacity: 1, y: 0 }}
         data-card
         className={feedStyle
-          ? `border-b border-border/80 pb-5 ${post.isOfficialPost ? 'border-l-2 border-l-blue-500/50 pl-3' : ''}`
+          ? `border-b-2 border-border pb-5 ${post.isOfficialPost ? 'border-l-2 border-l-blue-500/50 pl-3' : ''}`
           : `rounded-xl border border-border/70 bg-card p-4 shadow-sm transition-colors duration-200 hover:border-border ${
               post.isOfficialPost ? 'border-l-2 border-l-blue-500/50 bg-blue-500/[0.025]' : ''
             }`}

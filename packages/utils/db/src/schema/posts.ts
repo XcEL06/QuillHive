@@ -68,6 +68,7 @@ export const postsTable = pgTable("posts", {
   idxPostsIsPublished: index("idx_posts_is_published").on(t.isPublished),
   idxPostsIsDeleted: index("idx_posts_is_deleted").on(t.isDeleted),
   idxPostsType: index("idx_posts_type").on(t.type),
+  idxPostsGroupId: index("idx_posts_group_id").on(t.groupId),
   idxPostsScheduledAt: index("idx_posts_scheduled_at").on(t.scheduledAt),
   publicIdUnique: uniqueIndex("posts_public_id_unique").on(t.publicId),
 }));

@@ -1369,6 +1369,18 @@ CREATE TABLE IF NOT EXISTS "spam_review_flags" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS "coin_ledger" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"user_id" integer NOT NULL,
+	"amount" integer NOT NULL,
+	"source" text NOT NULL,
+	"basis" text NOT NULL,
+	"reason" text NOT NULL,
+	"admin_id" integer NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "coin_ledger_amount_positive" CHECK ("coin_ledger"."amount" > 0)
+);
+
 DO $schema_sync$
 BEGIN
   IF EXISTS (
@@ -16609,6 +16621,126 @@ EXCEPTION
     RAISE NOTICE 'Skipped column created_at on spam_review_flags: %', SQLERRM;
 END
 $schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('coin_ledger') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD COLUMN IF NOT EXISTS "id" serial NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column id: coin_ledger is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column id on coin_ledger: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('coin_ledger') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD COLUMN IF NOT EXISTS "user_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column user_id: coin_ledger is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column user_id on coin_ledger: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('coin_ledger') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD COLUMN IF NOT EXISTS "amount" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column amount: coin_ledger is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column amount on coin_ledger: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('coin_ledger') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD COLUMN IF NOT EXISTS "source" text;
+  ELSE
+    RAISE NOTICE 'Skipped column source: coin_ledger is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column source on coin_ledger: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('coin_ledger') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD COLUMN IF NOT EXISTS "basis" text;
+  ELSE
+    RAISE NOTICE 'Skipped column basis: coin_ledger is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column basis on coin_ledger: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('coin_ledger') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD COLUMN IF NOT EXISTS "reason" text;
+  ELSE
+    RAISE NOTICE 'Skipped column reason: coin_ledger is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column reason on coin_ledger: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('coin_ledger') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD COLUMN IF NOT EXISTS "admin_id" integer;
+  ELSE
+    RAISE NOTICE 'Skipped column admin_id: coin_ledger is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column admin_id on coin_ledger: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('coin_ledger') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD COLUMN IF NOT EXISTS "created_at" timestamp DEFAULT now() NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column created_at: coin_ledger is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column created_at on coin_ledger: %', SQLERRM;
+END
+$schema_sync$;
 
 DO $schema_sync$
 BEGIN
@@ -18105,6 +18237,20 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped primary key spam_review_flags_pkey: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'coin_ledger'::regclass AND contype = 'p'
+  ) THEN
+    ALTER TABLE "coin_ledger" ADD CONSTRAINT "coin_ledger_pkey" PRIMARY KEY ("id");
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped primary key coin_ledger_pkey: %', SQLERRM;
 END
 $schema_sync$;
 
@@ -21397,6 +21543,44 @@ $schema_sync$;
 
 DO $schema_sync$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'coin_ledger'::regclass AND conname = 'coin_ledger_user_id_users_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "coin_ledger" LIMIT 1) THEN
+      ALTER TABLE "coin_ledger" ADD CONSTRAINT "coin_ledger_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+    ELSE
+      ALTER TABLE "coin_ledger" ADD CONSTRAINT "coin_ledger_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key coin_ledger_user_id_users_id_fk NOT VALID because coin_ledger contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key coin_ledger_user_id_users_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'coin_ledger'::regclass AND conname = 'coin_ledger_admin_id_users_id_fk'
+  ) THEN
+    IF NOT EXISTS (SELECT 1 FROM "coin_ledger" LIMIT 1) THEN
+      ALTER TABLE "coin_ledger" ADD CONSTRAINT "coin_ledger_admin_id_users_id_fk" FOREIGN KEY ("admin_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;
+    ELSE
+      ALTER TABLE "coin_ledger" ADD CONSTRAINT "coin_ledger_admin_id_users_id_fk" FOREIGN KEY ("admin_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action NOT VALID;
+      RAISE NOTICE 'Added foreign key coin_ledger_admin_id_users_id_fk NOT VALID because coin_ledger contains existing rows';
+    END IF;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped foreign key coin_ledger_admin_id_users_id_fk: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
   CREATE UNIQUE INDEX IF NOT EXISTS "revoked_tokens_token_hash_unique" ON "revoked_tokens" USING btree ("token_hash");
 EXCEPTION
   WHEN unique_violation THEN
@@ -21818,6 +22002,15 @@ $schema_sync$;
 
 DO $schema_sync$
 BEGIN
+  CREATE INDEX IF NOT EXISTS "idx_posts_group_id" ON "posts" USING btree ("group_id");
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped index idx_posts_group_id: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
   CREATE INDEX IF NOT EXISTS "idx_posts_scheduled_at" ON "posts" USING btree ("scheduled_at");
 EXCEPTION
   WHEN OTHERS THEN
@@ -22206,6 +22399,17 @@ $schema_sync$;
 
 DO $schema_sync$
 BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS "invite_codes_one_active_reusable_per_user" ON "invite_codes" USING btree ("created_by") WHERE "invite_codes"."expires_at" IS NULL AND "invite_codes"."is_active" = true;
+EXCEPTION
+  WHEN unique_violation THEN
+    RAISE NOTICE 'Skipped unique index invite_codes_one_active_reusable_per_user: existing rows contain duplicate values';
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped unique index invite_codes_one_active_reusable_per_user: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
   CREATE INDEX IF NOT EXISTS "idx_login_email_challenges_user_expiry" ON "login_email_challenges" USING btree ("user_id","expires_at");
 EXCEPTION
   WHEN OTHERS THEN
@@ -22556,6 +22760,24 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped index spam_review_flags_status_created_idx: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  CREATE INDEX IF NOT EXISTS "coin_ledger_user_created_at_idx" ON "coin_ledger" USING btree ("user_id","created_at");
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped index coin_ledger_user_created_at_idx: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  CREATE INDEX IF NOT EXISTS "coin_ledger_admin_id_idx" ON "coin_ledger" USING btree ("admin_id");
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped index coin_ledger_admin_id_idx: %', SQLERRM;
 END
 $schema_sync$;
 
