@@ -129,9 +129,9 @@ export function SparkComposer({ onPosted, prompt, placeholder }: { onPosted?: ()
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
-                className="flex items-center justify-between gap-2 pt-3 mt-2 border-t border-border/50"
+                className="flex flex-col gap-2 pt-3 mt-2 border-t border-border/50 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="flex items-center gap-2 relative flex-wrap">
+                <div className="relative z-50 flex min-w-0 flex-wrap items-center gap-2">
                   <AttachmentPicker
                     attachments={attachments}
                     onChange={setAttachments}
@@ -143,7 +143,7 @@ export function SparkComposer({ onPosted, prompt, placeholder }: { onPosted?: ()
                     <SelectTrigger className="h-8 w-auto min-w-28 rounded-full border-0 bg-muted/50 px-3 text-xs">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-50">
                       <SelectItem value="public">Public</SelectItem>
                       <SelectItem value="followers">Followers</SelectItem>
                       <SelectItem value="private">Only me</SelectItem>
@@ -194,7 +194,7 @@ export function SparkComposer({ onPosted, prompt, placeholder }: { onPosted?: ()
                   )}
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 flex-wrap items-center gap-3 sm:justify-end">
                   <span
                     className={`text-xs tabular-nums ${
                       overLimit

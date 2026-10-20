@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const appUrl = process.env.APP_URL || 'http://localhost:3001';
-  const apiUrl = process.env.API_URL || 'http://localhost:3000';
+  const apiUrl = process.env.API_URL || 'http://localhost:9000';
   const base: MetadataRoute.Sitemap = [
     { url: appUrl, changeFrequency: 'daily', priority: 1 },
     { url: `${appUrl}/explore`, changeFrequency: 'hourly', priority: 0.9 },

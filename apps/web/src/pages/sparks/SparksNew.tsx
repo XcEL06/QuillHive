@@ -88,7 +88,7 @@ export default function SparksNew() {
 
         {/* Main compose card */}
         <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-          <div className="relative">
+          <div>
             <textarea
               ref={textareaRef}
               value={content}
@@ -97,43 +97,43 @@ export default function SparksNew() {
               rows={6}
               className="w-full resize-none bg-transparent px-4 pt-4 pb-2 text-base placeholder:text-muted-foreground focus:outline-none leading-relaxed"
             />
-            {/* Character counter */}
-            <div className={`absolute bottom-2 right-3 text-xs font-mono font-medium tabular-nums ${counterColor}`}>
+            <div className={`flex justify-end px-3 pb-2 text-xs font-mono font-medium tabular-nums ${counterColor}`}>
               {remaining}
             </div>
           </div>
 
           {/* Toolbar */}
-          <div className="flex items-center justify-between px-3 py-2.5 border-t border-border/50">
-            <div className="flex items-center gap-1">
+          <div className="flex flex-col gap-2 border-t border-border/50 px-3 py-2.5 md:flex-row md:items-center md:justify-between">
+            <div className="relative z-50 flex min-w-0 flex-wrap items-center gap-1">
               <AttachmentPicker attachments={attachments} onChange={setAttachments} max={20} compact label="Media" />
-              <Select value={visibility} onValueChange={(value: 'public' | 'followers' | 'private') => setVisibility(value)}>
-                <SelectTrigger className="h-8 w-auto min-w-28 rounded-full border-0 bg-muted/50 px-3 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="public">Public</SelectItem>
-                  <SelectItem value="followers">Followers</SelectItem>
-                  <SelectItem value="private">Only me</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <Select value={visibility} onValueChange={(value: 'public' | 'followers' | 'private') => setVisibility(value)}>
+                  <SelectTrigger className="h-8 w-auto min-w-28 rounded-full border-0 bg-muted/50 px-3 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="z-50">
+                    <SelectItem value="public">Public</SelectItem>
+                    <SelectItem value="followers">Followers</SelectItem>
+                    <SelectItem value="private">Only me</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2 md:justify-end">
               <button
                 onClick={handleMakePunchier}
                 disabled={!content.trim() || makingPunchier}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-violet-600 dark:text-violet-400 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-950/40 disabled:opacity-50 transition-colors"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-violet-600 transition-colors hover:bg-violet-50 disabled:opacity-50 dark:text-violet-400 dark:hover:bg-violet-950/40"
               >
                 {makingPunchier ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
                 Make it punchier
               </button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigate('/')} className="rounded-xl h-8">Cancel</Button>
+              <Button variant="outline" size="sm" onClick={() => navigate('/')} className="h-8 rounded-xl">Cancel</Button>
               <Button
                 size="sm"
                 onClick={handlePublish}
                 disabled={(!content.trim() && attachments.length === 0) || publishing || content.length > MAX_CHARS}
-                className="rounded-xl h-8 bg-amber-500 hover:bg-amber-600 text-white px-5"
+                className="h-8 rounded-xl bg-amber-500 px-5 text-white hover:bg-amber-600"
               >
                 {publishing ? <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />Publishing</> : '⚡ Spark'}
               </Button>

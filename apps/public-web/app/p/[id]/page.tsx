@@ -3,7 +3,7 @@ import { Metadata } from 'next';
 interface Props { params: { id: string } }
 
 async function getPost(id: string) {
-  const apiUrl = process.env.API_URL || 'http://localhost:3000';
+  const apiUrl = process.env.API_URL || 'http://localhost:9000';
   const res = await fetch(`${apiUrl}/api/posts/${id}`, { next: { revalidate: 60 } });
   if (!res.ok) return null;
   return res.json();
