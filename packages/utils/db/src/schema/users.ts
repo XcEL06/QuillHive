@@ -52,7 +52,6 @@ export const usersTable = pgTable("users", {
   lastKnownTimezone: text("last_known_timezone"),
   locationIntegrityStatus: text("location_integrity_status").notNull().default("unknown"),
   locationRiskScore: integer("location_risk_score").notNull().default(0),
-  isCreatorMode: boolean("is_creator_mode").notNull().default(false),
   visibilityPenalty: real("visibility_penalty").notNull().default(0),
   reachMultiplier: real("reach_multiplier").notNull().default(1.0),
   isPremium: boolean("is_premium").notNull().default(false),

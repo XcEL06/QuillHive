@@ -120,7 +120,6 @@ usersRouter.patch("/me", validateBody(z.object({
   interests: z.array(z.string().max(60)).max(20).optional(),
 })), ProfileController.completeOnboarding);
 usersRouter.patch("/me/profile", validateBody(profileSchema), ProfileController.updateMyProfile);
-usersRouter.patch("/me/creator-mode", validateBody(z.object({ isCreatorMode: z.boolean() })), ProfileController.toggleCreatorMode);
 usersRouter.patch("/me/settings", validateBody(z.object({
   emailDigestEnabled: z.boolean().optional(),
   hireMeEnabled: z.boolean().optional(),

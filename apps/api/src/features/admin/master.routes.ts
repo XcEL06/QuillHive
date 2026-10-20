@@ -91,7 +91,6 @@ masterAdminRouter.get("/users/:id", async (req, res) => {
     bannedAt: usersTable.bannedAt,
     isDeleted: usersTable.isDeleted,
     deletedAt: usersTable.deletedAt,
-    isCreatorMode: usersTable.isCreatorMode,
     isPremium: usersTable.isPremium,
     isOfficialAccount: usersTable.isOfficialAccount,
     createdAt: usersTable.createdAt,

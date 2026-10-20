@@ -127,7 +127,6 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"last_known_timezone" text,
 	"location_integrity_status" text DEFAULT 'unknown' NOT NULL,
 	"location_risk_score" integer DEFAULT 0 NOT NULL,
-	"is_creator_mode" boolean DEFAULT false NOT NULL,
 	"visibility_penalty" real DEFAULT 0 NOT NULL,
 	"reach_multiplier" real DEFAULT 1 NOT NULL,
 	"is_premium" boolean DEFAULT false NOT NULL,
@@ -2789,21 +2788,6 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column location_risk_score on users: %', SQLERRM;
-END
-$schema_sync$;
-DO $schema_sync$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM pg_class
-    WHERE oid = to_regclass('users') AND relkind IN ('r', 'p')
-  ) THEN
-    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_creator_mode" boolean DEFAULT false NOT NULL;
-  ELSE
-    RAISE NOTICE 'Skipped column is_creator_mode: users is not a table';
-  END IF;
-EXCEPTION
-  WHEN OTHERS THEN
-    RAISE NOTICE 'Skipped column is_creator_mode on users: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$

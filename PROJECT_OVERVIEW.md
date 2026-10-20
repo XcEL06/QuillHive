@@ -13,7 +13,7 @@ Status describes code wiring visible in this checkout, not the health of any dep
 | Feature area | What it does | Current state |
 |---|---|---|
 | Authentication and account recovery | Password registration/login, JWT/session refresh, email verification, password reset, magic links, OAuth, passkeys, 2FA, session listing/revocation. | **Fully working** in source; mail/OAuth/WebAuthn provider configuration is deployment-dependent and runtime was not tested. |
-| Profiles and privacy | Public profiles, profile editing, privacy controls, profile views, portfolio/gallery, creator mode, language preferences. | **Fully working** in source across UI/API/schema; runtime was not tested. |
+| Profiles and privacy | Public profiles, profile editing, privacy controls, profile views, portfolio/gallery, language preferences. | **Fully working** in source across UI/API/schema; runtime was not tested. |
 | Posts, feed, comments and engagement | Create/edit/publish/schedule posts, feed discovery, comments/replies, likes, saves, reposts, quote posts, shares, highlights and reading. | **Fully working** in source across UI/API/schema; recommendation/analytics quality depends on collected activity. |
 | Short-form “sparks” | Compose and browse short updates/stories. | **Fully working** in source for the implemented short-form flows; runtime was not tested. |
 | Groups | Create/discover/join groups, membership moderation, group posts, polls, questions, announcements, invitations and admin controls. | **Partially wired**: API/UI exist, but group creation explicitly returns a schema-update-unavailable response when required DB columns are missing. |
@@ -492,7 +492,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `GET /api/users/hireable` — Read or list users hireable. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `PATCH /api/users/me` — Update users me. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `PATCH /api/users/me/creator` — Update me creator. ([source](apps/api/src/features/profiles/profile.routes.ts)).
-- `PATCH /api/users/me/creator-mode` — Update me creator mode. ([source](apps/api/src/features/profiles/profile.routes.ts)).
+- `GET /api/users/me/cv` — Read or list me cv. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `GET /api/users/me/education` — Read or list me education. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `POST /api/users/me/education` — Create or submit me education. ([source](apps/api/src/features/profiles/profile.routes.ts)).
 - `DELETE /api/users/me/education/:id` — Remove me education. ([source](apps/api/src/features/profiles/profile.routes.ts)).

@@ -36,7 +36,6 @@ QuillHive is a creator and professional growth platform that brings together pub
 
 **Segmentation signals in the codebase:**
 - `identityType` field on users (creator / professional / organization) - present but not used in onboarding flow
-- `isCreatorMode` toggle - exists but not surfaced prominently
 - `onboardingGoals` - exists but onboarding is not complete
 
 **Assessment:**

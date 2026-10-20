@@ -243,10 +243,6 @@
     "website": "الموقع الإلكتروني",
     "displayName": "الاسم المعروض",
     "selectLanguage": "اختر اللغة",
-    "creatorMode": "وضع المبدع",
-    "creatorModeDesc": "التبديل إلى تخطيط يركز على المبدع مع المحفظة والتحليلات والفرص.",
-    "creatorModeOn": "وضع المبدع مفعّل",
-    "creatorModeOff": "وضع المبدع معطّل",
     "warnings": "التنبيهات"
   },
   "common": {

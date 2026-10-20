@@ -243,10 +243,6 @@
     "website": "वेबसाइट",
     "displayName": "प्रदर्शन नाम",
     "selectLanguage": "भाषा चुनें",
-    "creatorMode": "क्रिएटर मोड",
-    "creatorModeDesc": "पोर्टफोलियो, एनालिटिक्स और अवसरों के साथ क्रिएटर-फोकस्ड लेआउट पर स्विच करें।",
-    "creatorModeOn": "क्रिएटर मोड चालू",
-    "creatorModeOff": "क्रिएटर मोड बंद",
     "warnings": "चेतावनियाँ"
   },
   "common": {

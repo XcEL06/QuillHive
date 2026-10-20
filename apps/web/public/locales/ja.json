@@ -243,10 +243,6 @@
     "website": "ウェブサイト",
     "displayName": "表示名",
     "selectLanguage": "言語を選択",
-    "creatorMode": "クリエイターモード",
-    "creatorModeDesc": "ポートフォリオ、分析、機会を備えたクリエイター中心のレイアウトに切り替えます。",
-    "creatorModeOn": "クリエイターモード ON",
-    "creatorModeOff": "クリエイターモード OFF",
     "warnings": "警告"
   },
   "common": {

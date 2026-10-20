@@ -20,7 +20,6 @@ import { apiFetch, apiUrl, getApiErrorMessage, getStoredToken, mediaUrl } from '
 import { uploadFile } from '@/lib/uploadFile';
 import { useI18n, useT, SUPPORTED_LANGS } from '@/lib/i18n';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
-import { CreatorModeToggle } from '@/components/settings/CreatorModeToggle';
 import { SessionsCard } from '@/components/settings/SessionsCard';
 import { BackButton } from '@/components/ui/BackButton';
 import { useFeature } from '@/lib/features';
@@ -961,8 +960,7 @@ export default function Settings() {
 
               {activeSection === 'creatorTools' && (
                 <div className="space-y-6">
-                  <CreatorModeToggle />
-                  <div className="border-t border-border/50 pt-5">
+                  <div>
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                       <div className="min-w-0">
                         <h3 className="font-medium">{t('settings.hireMeButton', 'Open to opportunities')}</h3>

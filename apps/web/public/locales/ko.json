@@ -243,10 +243,6 @@
     "website": "웹사이트",
     "displayName": "표시 이름",
     "selectLanguage": "언어 선택",
-    "creatorMode": "크리에이터 모드",
-    "creatorModeDesc": "포트폴리오, 분석 및 기회를 갖춘 크리에이터 중심 레이아웃으로 전환합니다.",
-    "creatorModeOn": "크리에이터 모드 ON",
-    "creatorModeOff": "크리에이터 모드 OFF",
     "warnings": "경고"
   },
   "common": {

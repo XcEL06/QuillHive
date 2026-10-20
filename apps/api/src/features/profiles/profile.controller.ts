@@ -1316,15 +1316,6 @@ export const requestVerification = async (req: Request, res: Response) => {
   return res.status(501).json({ error: "verification_provider_unavailable", message: "The configured verification provider is not available yet." });
 };
 
-export const toggleCreatorMode = async (req: Request, res: Response) => {
-  const viewerId = getViewerId(req);
-  if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
-  const { isCreatorMode } = req.body;
-  await db.update(usersTable).set({ isCreatorMode: Boolean(isCreatorMode), updatedAt: new Date() }).where(eq(usersTable.id, viewerId));
-  const user = await getUserWithCounts(viewerId, null);
-  return res.json(user);
-};
-
 export const getMySavedPosts = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
   if (!viewerId) return res.status(401).json({ error: "Unauthorized" });
@@ -1449,7 +1440,6 @@ export const getUserPortfolio = async (req: Request, res: Response) => {
     showEmail: user.showEmail,
     identityType: user.identityType ?? null,
     isPremium: user.isPremium,
-    isCreatorMode: user.isCreatorMode,
   };
   if (user.showEmail) safeUser.email = user.email;
 

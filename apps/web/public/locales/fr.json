@@ -243,10 +243,6 @@
     "website": "Site web",
     "displayName": "Nom affiché",
     "selectLanguage": "Sélectionner la langue",
-    "creatorMode": "Mode Créateur",
-    "creatorModeDesc": "Passez à une mise en page axée sur le créateur avec portfolio, analyses et opportunités.",
-    "creatorModeOn": "Mode Créateur ACTIVÉ",
-    "creatorModeOff": "Mode Créateur DÉSACTIVÉ",
     "warnings": "Avertissements"
   },
   "common": {

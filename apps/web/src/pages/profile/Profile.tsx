@@ -749,11 +749,6 @@ export default function Profile() {
                 </Badge>
               );
             })()}
-            <Link href={`/portfolio/${encodeURIComponent(user.username.replace(/^@+/, '').toLowerCase())}`}>
-              <Button variant="outline" size="sm" className="h-8 rounded-full">
-                {isMe ? 'Manage portfolio' : 'Professional portfolio'}
-              </Button>
-            </Link>
           </div>
 
           {user.bio ? (

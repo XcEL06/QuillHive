@@ -117,7 +117,6 @@ CREATE TABLE "users" (
 	"last_known_timezone" text,
 	"location_integrity_status" text DEFAULT 'unknown' NOT NULL,
 	"location_risk_score" integer DEFAULT 0 NOT NULL,
-	"is_creator_mode" boolean DEFAULT false NOT NULL,
 	"visibility_penalty" real DEFAULT 0 NOT NULL,
 	"reach_multiplier" real DEFAULT 1 NOT NULL,
 	"is_premium" boolean DEFAULT false NOT NULL,

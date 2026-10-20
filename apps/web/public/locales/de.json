@@ -243,10 +243,6 @@
     "website": "Website",
     "displayName": "Anzeigename",
     "selectLanguage": "Sprache wählen",
-    "creatorMode": "Erstellermodus",
-    "creatorModeDesc": "Wechsle zu einem kreatorenzentrierten Layout mit Portfolio, Analysen und Möglichkeiten.",
-    "creatorModeOn": "Erstellermodus AN",
-    "creatorModeOff": "Erstellermodus AUS",
     "warnings": "Verwarnungen"
   },
   "common": {

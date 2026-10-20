@@ -1315,7 +1315,6 @@ router.get("/users/:id/detail", requirePermission("view_users"), async (req, res
     banReason: usersTable.banReason,
     isDeleted: usersTable.isDeleted,
     deletedAt: usersTable.deletedAt,
-    isCreatorMode: usersTable.isCreatorMode,
     isPremium: usersTable.isPremium,
     isOfficialAccount: usersTable.isOfficialAccount,
     createdAt: usersTable.createdAt,

@@ -243,10 +243,6 @@
     "website": "网站",
     "displayName": "显示名称",
     "selectLanguage": "选择语言",
-    "creatorMode": "创作者模式",
-    "creatorModeDesc": "切换到以创作者为中心的布局，包括作品集、分析和机会。",
-    "creatorModeOn": "创作者模式已开启",
-    "creatorModeOff": "创作者模式已关闭",
     "warnings": "警告"
   },
   "common": {

@@ -56,7 +56,6 @@ interface PortfolioPayload {
     showEmail: boolean;
     identityType: string | null;
     isPremium: boolean;
-    isCreatorMode: boolean;
     email?: string;
   };
   featuredPosts: FeaturedPost[];
