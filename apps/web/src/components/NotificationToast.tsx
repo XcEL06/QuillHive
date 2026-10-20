@@ -13,6 +13,7 @@ interface NotificationPayload {
   id: number;
   type: string;
   message: string;
+  title?: string | null;
   category: string;
   postId?: number | null;
   groupId?: number | null;
@@ -50,6 +51,9 @@ function getNotifIcon(type: string): React.ReactNode {
 }
 
 function getNotifLink(notif: NotificationPayload): string {
+  if (notif.type === "official_notice") {
+    return `/notifications?notice=${encodeURIComponent(notif.id)}`;
+  }
   if (notif.type === "follow" && notif.actor?.username) {
     return `/u/${encodeURIComponent(notif.actor.username)}`;
   }
@@ -83,7 +87,7 @@ export function NotificationToast() {
       const actorName = data.actor?.displayName || data.actor?.username || "";
       const isOfficialNotice = data.type === "official_notice";
       const title = isOfficialNotice
-        ? <span className="flex items-center gap-1.5 text-amber-800 dark:text-amber-100"><BadgeCheck className="h-4 w-4" /> Official QuillHive notice</span>
+        ? <span className="flex items-center gap-1.5 text-amber-800 dark:text-amber-100"><BadgeCheck className="h-4 w-4" /> {data.title || "Official QuillHive notice"}</span>
         : actorName ? `${actorName}` : "QuillHive";
       const description = isOfficialNotice
         ? <div className="space-y-2"><p>{data.message}</p><p className="border-t border-amber-500/20 pt-2 text-xs text-amber-900/80 dark:text-amber-100/80">{OFFICIAL_NOTICE_WARNING}</p></div>

@@ -27,6 +27,8 @@ export function useFeature(flag: string): boolean {
     flag === "google_oauth_enabled" ||
     flag === "github_oauth_enabled" ||
     flag === "creator_income_enabled"
+    || flag === "profile_cv_enabled"
+    || flag === "profile_cv_premium_only"
       ? false
       : true
   );

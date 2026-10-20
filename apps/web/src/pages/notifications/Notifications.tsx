@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useGetNotifications, useMarkNotificationsRead } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Bell, Heart, MessageCircle, UserPlus, AtSign, Users, CheckCheck, Trash2, AlertCircle, Info, Zap, BadgeCheck } from 'lucide-react';
 import { Timestamp } from '@/lib/postTimestamp';
-import { Link } from 'wouter';
+import { Link, useSearch } from 'wouter';
 import { useSocketEvent } from '@/hooks/useSocket';
 import { apiUrl, getStoredToken } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -23,8 +23,10 @@ export default function Notifications() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const t = useT();
+  const search = useSearch();
   const token = getStoredToken();
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const requestedNoticeId = new URLSearchParams(search).get('notice');
 
   const { mutate: markRead, isPending } = useMarkNotificationsRead({
     mutation: {
@@ -96,7 +98,7 @@ export default function Notifications() {
   };
 
   const getLink = (notif: any) => {
-    if (notif.type === 'official_notice') return '/notifications';
+    if (notif.type === 'official_notice') return `/notifications?notice=${encodeURIComponent(notif.id)}`;
     if (notif.type === 'follow' && notif.actor?.username) return `/u/${encodeURIComponent(notif.actor.username)}`;
     if ((notif.type === 'group_invite' || notif.type.startsWith('group_')) && notif.groupId) return `/groups/${notif.groupId}`;
     if (['comment', 'comment_like', 'reply'].includes(notif.type) && notif.postId) {
@@ -128,6 +130,11 @@ export default function Notifications() {
   };
 
   const allNotifs: any[] = Array.isArray(data) ? data : [];
+  useEffect(() => {
+    if (isLoading || !requestedNoticeId) return;
+    document.getElementById(`notification-${requestedNoticeId}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [isLoading, requestedNoticeId, data]);
   const unreadCount = allNotifs.filter((n: any) => !n.isRead).length;
 
   return (
@@ -165,10 +172,13 @@ export default function Notifications() {
           {allNotifs.map((notif: any) => (
             <div
               key={notif.id}
+              id={`notification-${notif.id}`}
+              tabIndex={notif.type === 'official_notice' ? -1 : undefined}
               className={clsx(
                 'flex items-start gap-3 p-3 sm:gap-4 sm:p-5 hover:bg-muted/50 transition-colors group',
                 !notif.isRead && 'bg-primary/5',
-                notif.type === 'official_notice' && 'border-l-4 border-l-amber-500 bg-amber-50/60 ring-1 ring-inset ring-amber-500/15 dark:bg-amber-950/20'
+                notif.type === 'official_notice' && 'border-l-4 border-l-amber-500 bg-amber-50/60 ring-1 ring-inset ring-amber-500/15 dark:bg-amber-950/20',
+                notif.type === 'official_notice' && String(notif.id) === requestedNoticeId && 'outline outline-2 outline-offset-2 outline-amber-500'
               )}
             >
               <div className="flex-1 flex items-start gap-4 min-w-0">
@@ -187,7 +197,12 @@ export default function Notifications() {
 
                 <div className="flex-1 min-w-0 pt-1">
                   <p className="text-sm text-foreground/90 leading-snug">
-                    {notif.type === 'like' && notif.groupCount > 1
+                    {notif.type === 'official_notice'
+                      ? <Link href={getLink(notif)} onClick={() => markNotificationRead(notif)} className="hover:text-primary hover:underline">
+                          <span className="block font-semibold text-foreground">{notif.title || 'Official QuillHive notice'}</span>
+                          <span className="block whitespace-pre-wrap">{notif.message}</span>
+                        </Link>
+                      : notif.type === 'like' && notif.groupCount > 1
                       ? <Link href={getLink(notif)} onClick={() => markNotificationRead(notif)} className="hover:text-primary hover:underline">{notif.title || `${notif.groupCount} people liked your post`}</Link>
                       : <>
                           {notif.actor?.username ? (

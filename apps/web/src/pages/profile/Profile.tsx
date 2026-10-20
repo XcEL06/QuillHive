@@ -21,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import {
   MapPin, Link as LinkIcon, Calendar, UserPlus, UserCheck, Plus, Loader2, Handshake,
   Pencil, X, ExternalLink, Sparkles, Globe, Facebook, Linkedin, Twitter, Instagram,
-  MessageCircle, Zap, Camera, Share2, MoreHorizontal,
+  MessageCircle, Zap, Camera, Share2, MoreHorizontal, Download,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { apiFetch, apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
@@ -78,6 +78,89 @@ interface ExtendedProfileData {
     isPremium?: boolean;
     isOfficialAccount?: boolean;
   };
+  workHistory?: Array<{
+    title: string;
+    organization: string;
+    startYear: number;
+    endYear: number | null;
+    description?: string | null;
+  }>;
+  educationHistory?: Array<{
+    school: string;
+    degree: string;
+    field?: string | null;
+    startYear: number;
+    endYear: number | null;
+    description?: string | null;
+  }>;
+  creatorProfile?: CreatorProfile | null;
+}
+
+interface CvDownloadData {
+  user: {
+    username: string;
+    email: string;
+    displayName: string;
+    headline: string | null;
+    bio: string | null;
+    location: string | null;
+    country: string | null;
+    website: string | null;
+    linkedin: string | null;
+  };
+  workHistory: NonNullable<ExtendedProfileData["workHistory"]>;
+  educationHistory: NonNullable<ExtendedProfileData["educationHistory"]>;
+  skills: string[];
+  links: Array<{ label: string; url: string }>;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]!);
+}
+
+function createCvDocument(data: CvDownloadData): string {
+  const { user } = data;
+  const contact = [
+    user.email,
+    [user.location, user.country].filter(Boolean).join(", "),
+    user.website,
+    user.linkedin,
+  ].filter((value): value is string => Boolean(value)).map(escapeHtml);
+  const skills = [...new Set(data.skills.map(skill => skill.trim()).filter(Boolean))];
+  const experience = data.workHistory.map(entry => `
+    <article>
+      <h3>${escapeHtml(entry.title)}</h3>
+      <p><strong>${escapeHtml(entry.organization)}</strong> | ${entry.startYear}–${entry.endYear ?? "Present"}</p>
+      ${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ""}
+    </article>`).join("");
+  const education = data.educationHistory.map(entry => `
+    <article>
+      <h3>${escapeHtml(entry.degree)}${entry.field ? `, ${escapeHtml(entry.field)}` : ""}</h3>
+      <p><strong>${escapeHtml(entry.school)}</strong> | ${entry.startYear}–${entry.endYear ?? "Present"}</p>
+      ${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ""}
+    </article>`).join("");
+  const links = data.links.map(link => `<li>${escapeHtml(link.label)}: ${escapeHtml(link.url)}</li>`).join("");
+
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><title>${escapeHtml(user.displayName)} - CV</title>
+<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.45;max-width:760px;margin:36px auto}h1{font-size:26px;margin:0}h2{font-size:15px;text-transform:uppercase;border-bottom:1px solid #777;padding-bottom:4px;margin:22px 0 8px}h3{font-size:14px;margin:12px 0 2px}p,li{font-size:11pt;margin:4px 0}ul{padding-left:20px}article{page-break-inside:avoid}</style></head>
+<body>
+<header><h1>${escapeHtml(user.displayName)}</h1>
+${user.headline ? `<p><strong>${escapeHtml(user.headline)}</strong></p>` : ""}
+${contact.length ? `<p>${contact.join(" | ")}</p>` : ""}
+<p>QuillHive profile: ${escapeHtml(window.location.origin)}/profile/${encodeURIComponent(user.username)}</p></header>
+${user.bio ? `<section><h2>Professional Summary</h2><p>${escapeHtml(user.bio)}</p></section>` : ""}
+${skills.length ? `<section><h2>Skills</h2><p>${skills.map(escapeHtml).join(" | ")}</p></section>` : ""}
+${experience ? `<section><h2>Professional Experience</h2>${experience}</section>` : ""}
+${education ? `<section><h2>Education</h2>${education}</section>` : ""}
+${links ? `<section><h2>Portfolio and Additional Links</h2><ul>${links}</ul></section>` : ""}
+</body></html>`;
 }
 
 const AVAILABLE_FOR_OPTIONS = [
@@ -100,6 +183,8 @@ export default function Profile() {
   const { toast } = useToast();
   const t = useT();
   const creatorIncomeEnabled = useFeature('creator_income_enabled');
+  const profileCvEnabled = useFeature('profile_cv_enabled');
+  const profileCvPremiumOnly = useFeature('profile_cv_premium_only');
   const isMe = currentUser?.username === username;
   const token = getStoredToken();
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -176,6 +261,32 @@ export default function Profile() {
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') return;
       toast({ title: 'Could not share profile', description: error instanceof Error ? error.message : 'Please try again.', variant: 'destructive' });
+    }
+  };
+
+  const downloadCv = async () => {
+    try {
+      const response = await apiFetch("/api/users/me/cv");
+      const data = await response.json().catch(() => null) as CvDownloadData | { error?: string } | null;
+      if (!response.ok || !data || !("user" in data)) {
+        throw new Error(data && "error" in data ? data.error ?? "Could not download CV." : "Could not download CV.");
+      }
+      const blob = new Blob([createCvDocument(data)], { type: "application/msword;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${data.user.username}-cv.doc`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      toast({ title: "CV downloaded", description: "Your ATS-friendly profile CV is ready." });
+    } catch (error) {
+      toast({
+        title: "Could not download CV",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -689,6 +800,15 @@ export default function Profile() {
               {!isMe && <DropdownMenuItem onSelect={() => setIsCollaborateOpen(true)}><Handshake className="mr-2 h-4 w-4" />{t('profile.collaborate', 'Request collaboration')}</DropdownMenuItem>}
               {isMe && creatorIncomeEnabled && <DropdownMenuItem onSelect={openEditCreator}><Sparkles className="mr-2 h-4 w-4" />{t('profile.creatorProfile', 'Creator Profile')}</DropdownMenuItem>}
               {isMe && <DropdownMenuItem asChild><Link href="/inbox"><Handshake className="mr-2 h-4 w-4" />{t('profile.collabInbox', 'Collab Inbox')}</Link></DropdownMenuItem>}
+              {isMe && profileCvEnabled && (
+                <DropdownMenuItem
+                  disabled={profileCvPremiumOnly && !data.user.isPremium}
+                  onSelect={() => void downloadCv()}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  {profileCvPremiumOnly ? "Download ATS-friendly CV (Premium)" : "Download ATS-friendly CV"}
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => void shareProfile()}><Share2 className="mr-2 h-4 w-4" />Share profile</DropdownMenuItem>
               {!isMe && <><DropdownMenuSeparator /><DropdownMenuItem onSelect={() => setIsReportOpen(true)} className="text-destructive focus:text-destructive">Report</DropdownMenuItem></>}
             </DropdownMenuContent>

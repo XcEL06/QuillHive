@@ -1321,6 +1321,9 @@ router.patch("/settings/features", requirePermission("manage_settings"), async (
   if (Object.hasOwn(updates, "ads_enabled") && req.currentUser?.role !== "super_admin") {
     return res.status(403).json({ error: "Only super admins can change advertising settings." });
   }
+  if (Object.keys(updates).some((key) => key === "profile_cv_enabled" || key === "profile_cv_premium_only") && req.currentUser?.role !== "super_admin") {
+    return res.status(403).json({ error: "Only super admins can change profile CV settings." });
+  }
   const valid = FEATURE_FLAG_KEYS as readonly string[];
   for (const [key, value] of Object.entries(updates)) {
     if (!valid.includes(key)) continue;

@@ -129,6 +129,7 @@ usersRouter.post("/me/verification", validateBody(z.object({ kind: z.enum(["phon
 usersRouter.patch("/me/creator", validateBody(creatorSchema), ProfileController.updateMyCreatorProfile);
 
 usersRouter.get("/me/profile-strength", ProfileController.getProfileStrength);
+usersRouter.get("/me/cv", requireAuth, ProfileController.getMyCvData);
 usersRouter.get("/me/profile-viewers", requireAuth, ProfileController.getProfileViewers);
 usersRouter.get("/me/work-history", ProfileController.getMyWorkHistory);
 usersRouter.post("/me/work-history", validateBody(workHistorySchema), ProfileController.addWorkHistory);

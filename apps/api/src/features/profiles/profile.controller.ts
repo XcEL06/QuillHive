@@ -768,6 +768,58 @@ export const getUserByUsername = async (req: Request, res: Response) => {
   });
 };
 
+export const getMyCvData = async (req: Request, res: Response) => {
+  if (!(await isFeatureEnabled("profile_cv_enabled"))) {
+    return res.status(404).json({ error: "CV downloads are not available." });
+  }
+  const userId = (req as any).currentUser.id as number;
+  const premiumOnly = await isFeatureEnabled("profile_cv_premium_only");
+  const [user] = await db.select({
+    id: usersTable.id,
+    username: usersTable.username,
+    email: usersTable.email,
+    displayName: usersTable.displayName,
+    headline: usersTable.headline,
+    bio: usersTable.bio,
+    location: usersTable.location,
+    country: usersTable.country,
+    website: usersTable.website,
+    linkedin: usersTable.linkedin,
+    isPremium: usersTable.isPremium,
+  }).from(usersTable).where(and(eq(usersTable.id, userId), eq(usersTable.isDeleted, false)));
+  if (!user) return res.status(404).json({ error: "Profile not found." });
+  if (premiumOnly && !user.isPremium) {
+    return res.status(403).json({ error: "A premium membership is required to download a CV." });
+  }
+
+  const [workHistory, educationHistory, creatorProfile] = await Promise.all([
+    db.select({
+      title: workHistoryTable.title,
+      organization: workHistoryTable.organization,
+      startYear: workHistoryTable.startYear,
+      endYear: workHistoryTable.endYear,
+      description: workHistoryTable.description,
+    }).from(workHistoryTable).where(eq(workHistoryTable.userId, userId)).orderBy(desc(workHistoryTable.startYear)),
+    db.select({
+      school: educationHistoryTable.school,
+      degree: educationHistoryTable.degree,
+      field: educationHistoryTable.field,
+      startYear: educationHistoryTable.startYear,
+      endYear: educationHistoryTable.endYear,
+      description: educationHistoryTable.description,
+    }).from(educationHistoryTable).where(eq(educationHistoryTable.userId, userId)).orderBy(desc(educationHistoryTable.startYear)),
+    getCreatorProfile(userId),
+  ]);
+
+  return res.json({
+    user,
+    workHistory,
+    educationHistory,
+    skills: creatorProfile?.skills ?? [],
+    links: creatorProfile?.links ?? [],
+  });
+};
+
 export const getProfileViewers = async (req: Request, res: Response) => {
   const viewerId = (req as any).currentUser.id as number;
   const result = await db.execute(sql`
