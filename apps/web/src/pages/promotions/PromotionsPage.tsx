@@ -5,6 +5,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { BoostModal } from "@/components/boost/BoostModal";
+import { BackButton } from "@/components/ui/BackButton";
 import { useAuthStore } from "@/store/auth";
 import { getStoredToken } from "@/lib/api";
 
@@ -216,6 +217,7 @@ export default function PromotionsPage() {
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] p-4 md:p-8 max-w-5xl mx-auto">
+      <BackButton fallback="/workspace" />
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">

@@ -91,7 +91,7 @@ export default function Portfolio() {
   const [, setLocation] = useLocation();
   const { user: viewer } = useAuthStore();
   const { toast } = useToast();
-  const username = params?.username ?? viewer?.username;
+  const username = (params?.username ?? viewer?.username ?? "").trim().replace(/^@+/, "").toLowerCase();
   const [data, setData] = useState<PortfolioPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -185,7 +185,7 @@ export default function Portfolio() {
   }
 
   const { user, featuredPosts, stats, portfolioItems, achievements, verifiedOutcomes, publishedSeries, publicChains } = data;
-  const isMe = viewer?.username === user.username;
+  const isMe = viewer?.username.replace(/^@+/, "").toLowerCase() === user.username.replace(/^@+/, "").toLowerCase();
   const identityLabel = user.identityType && IDENTITY_LABELS[user.identityType] ? IDENTITY_LABELS[user.identityType] : "Member";
 
   return (
@@ -335,7 +335,7 @@ export default function Portfolio() {
                 </div>
               </div>
             )}
-            {portfolioItems.length === 0 ? <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">No portfolio projects have been added yet.</p> : (
+            {portfolioItems.length === 0 ? <p className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">{isMe ? "Create your professional portfolio by adding your first project above." : "No portfolio projects have been added yet."}</p> : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {portfolioItems.map(item => (
                   <article key={item.id} className="overflow-hidden rounded-2xl border border-border bg-card">

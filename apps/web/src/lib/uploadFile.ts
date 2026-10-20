@@ -34,9 +34,10 @@ export async function uploadFile(file: File, category: UploadCategory = 'general
     method: 'POST',
     body: formData,
   });
-  const data = await response.json().catch(() => null) as (Record<string, unknown> & { id?: number; url?: string; secure_url?: string; error?: string }) | null;
-  const detail = data && nestedUploadValue(data, ['error', 'message']);
-  if (!response.ok) throw new Error(typeof detail === 'string' ? detail : `Upload failed (${response.status}).`);
+  const data = await response.json().catch(() => null) as (Record<string, unknown> & { id?: number; url?: string; secure_url?: string }) | null;
+  if (!response.ok) {
+    throw new Error(response.status === 503 ? 'Upload service temporarily unavailable' : `Upload failed (${response.status}).`);
+  }
 
   const nestedId = data && [data, data.data, data.file, data.result]
     .find(value => value && typeof value === 'object' && 'id' in value) as { id?: unknown } | undefined;

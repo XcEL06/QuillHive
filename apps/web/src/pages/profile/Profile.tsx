@@ -257,7 +257,6 @@ export default function Profile() {
   const [uploadingCover, setUploadingCover] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [coverImageError, setCoverImageError] = useState(false);
-  const [avatarImageError, setAvatarImageError] = useState(false);
 
   async function handleImageUpload(file: File, type: 'avatar' | 'cover') {
     const setLoading = type === 'avatar' ? setUploadingAvatar : setUploadingCover;
@@ -296,9 +295,10 @@ export default function Profile() {
       toast({ title: `${type === 'avatar' ? 'Profile' : 'Cover'} photo updated` });
       void refetch();
     } catch (error) {
+      const unavailable = error instanceof Error && error.message === 'Upload service temporarily unavailable';
       toast({
-        title: 'Upload failed',
-        description: error instanceof Error ? error.message : 'Please try again.',
+        title: unavailable ? 'Upload service temporarily unavailable' : 'Upload failed',
+        ...(!unavailable ? { description: 'Please try again.' } : {}),
         variant: 'destructive',
       });
     } finally {
@@ -357,7 +357,6 @@ export default function Profile() {
 
   useEffect(() => {
     setCoverImageError(false);
-    setAvatarImageError(false);
   }, [data?.user?.coverUrl, data?.user?.avatarUrl]);
 
   const [endorsements, setEndorsements] = useState<Record<string, number>>({});
@@ -626,12 +625,18 @@ export default function Profile() {
             className="w-full h-full object-cover"
             onError={() => setCoverImageError(true)}
           />
-        ) : user.coverUrl && coverImageError ? (
-          <div className="flex h-full w-full items-center justify-center bg-muted text-sm text-destructive" role="alert">
-            Cover image could not be loaded.
+        ) : coverImageError ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-muted to-muted/60 text-muted-foreground" role="img" aria-label="Cover photo placeholder">
+            <Camera className="h-8 w-8 opacity-60" />
+            {isMe && <span className="text-sm">Add a cover photo</span>}
           </div>
         ) : (
-          <img src={`${import.meta.env.BASE_URL}images/default-cover.png`} alt="Default Cover" className="w-full h-full object-cover opacity-80" />
+          <img
+            src={`${import.meta.env.BASE_URL}images/default-cover.png`}
+            alt="Default Cover"
+            className="w-full h-full object-cover opacity-80"
+            onError={() => setCoverImageError(true)}
+          />
         )}
         {isMe && (
           <>
@@ -648,8 +653,10 @@ export default function Profile() {
               }}
             />
             <button
+              type="button"
               onClick={() => coverInputRef.current?.click()}
               disabled={uploadingCover}
+              aria-busy={uploadingCover}
               className="absolute bottom-3 right-3 flex min-h-11 items-center gap-1.5 text-xs font-medium bg-black/65 text-white px-3 py-2 rounded-full hover:bg-black/80 transition-colors"
             >
               {uploadingCover ? <><Loader2 className="h-4 w-4 animate-spin" /> Uploading cover…</> : <><Camera className="h-4 w-4" /> Change cover</>}
@@ -658,15 +665,14 @@ export default function Profile() {
         )}
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative -top-16 md:-top-20">
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 relative -top-16 md:-top-20 pb-16 md:pb-0">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
           <div className="flex items-end gap-4">
             <Avatar className="relative w-32 h-32 md:w-40 md:h-40 border-4 border-background shadow-xl">
-              <AvatarImage src={mediaUrl(user.avatarUrl)} onError={() => setAvatarImageError(true)} />
+              <AvatarImage src={mediaUrl(user.avatarUrl)} />
               <AvatarFallback className="text-4xl bg-primary/10 text-primary font-serif">
                 {user.displayName.substring(0, 2).toUpperCase()}
               </AvatarFallback>
-              {avatarImageError && <span className="absolute inset-x-0 bottom-8 bg-destructive/90 px-1 py-0.5 text-center text-[9px] font-medium text-white">Photo unavailable</span>}
               {isMe && (
                 <>
                   <input
@@ -682,8 +688,10 @@ export default function Profile() {
                     }}
                   />
                   <button
+                    type="button"
                     onClick={() => avatarInputRef.current?.click()}
                     disabled={uploadingAvatar}
+                    aria-busy={uploadingAvatar}
                     aria-label={uploadingAvatar ? 'Uploading profile photo' : 'Change profile photo'}
                     title={uploadingAvatar ? 'Uploading profile photo' : 'Change profile photo'}
                     className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity"
@@ -741,9 +749,9 @@ export default function Profile() {
                 </Badge>
               );
             })()}
-            <Link href={`/portfolio/${encodeURIComponent(user.username)}`}>
+            <Link href={`/portfolio/${encodeURIComponent(user.username.replace(/^@+/, '').toLowerCase())}`}>
               <Button variant="outline" size="sm" className="h-8 rounded-full">
-                Professional portfolio
+                {isMe ? 'Manage portfolio' : 'Professional portfolio'}
               </Button>
             </Link>
           </div>

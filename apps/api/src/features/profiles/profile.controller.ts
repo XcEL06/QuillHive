@@ -1366,9 +1366,10 @@ export const getMySavedPosts = async (req: Request, res: Response) => {
 
 export const getUserPortfolio = async (req: Request, res: Response) => {
   const viewerId = getViewerId(req);
-  const { username } = req.params;
+  const username = String(req.params.username ?? "").trim().replace(/^@+/, "").toLowerCase();
+  if (!username) return res.status(404).json({ error: "User not found" });
   const [user] = await (db as any).select().from(usersTable)
-    .where(and(eq(usersTable.username, username as string), eq(usersTable.isDeleted, false)));
+    .where(and(ilike(usersTable.username, username), eq(usersTable.isDeleted, false)));
   if (!user) return res.status(404).json({ error: "User not found" });
   if (!(await canViewProfile(user, viewerId))) return res.status(404).json({ error: "User not found" });
 
@@ -1530,7 +1531,7 @@ export const getProfileStrength = async (req: Request, res: Response) => {
     { label: "Website link", key: "website", done: !!(user.website), points: 10, category: "branding", tip: "Link to your portfolio, blog, or personal site.", actionUrl: "/settings" },
     { label: "Location", key: "location", done: !!(user.location), points: 5, category: "basics", tip: "Add your city or country to attract local opportunities.", actionUrl: "/settings" },
     { label: "Social links", key: "social", done: hasSocial, points: 10, category: "social", tip: "Connect at least one social account (Twitter, LinkedIn, Instagram, Facebook).", actionUrl: "/settings" },
-    { label: "Portfolio item", key: "portfolio", done: portfolioCount >= 1, points: 10, category: "work", tip: "Add at least one portfolio piece to showcase your best work.", actionUrl: "/profile/" + user.username },
+    { label: "Portfolio item", key: "portfolio", done: portfolioCount >= 1, points: 10, category: "work", tip: "Add at least one portfolio piece to showcase your best work.", actionUrl: "/portfolio/" + encodeURIComponent(user.username.toLowerCase()) },
     ...(creatorIncomeEnabled ? [
       { label: "Open for hire", key: "hire", done: !!(user.hireMeEnabled), points: 3, category: "opportunities", tip: "Toggle 'Open for Hire' so clients know you're available.", actionUrl: "/settings" },
       { label: "Creator skills", key: "skills", done: skills.length >= 2, points: 5, category: "work", tip: "List your skills so collaborators can find you.", actionUrl: "/profile/" + user.username },
