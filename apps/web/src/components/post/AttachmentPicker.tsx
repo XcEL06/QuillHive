@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Paperclip, X, Loader2, FileText, Image as ImageIcon, Music, Video, File } from 'lucide-react';
+import { Paperclip, Plus, X, Loader2, FileText, Image as ImageIcon, Music, Video, File } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadFile, type UploadCategory } from '@/lib/uploadFile';
 import { mediaUrl } from '@/lib/api';
@@ -45,11 +45,12 @@ interface AttachmentPickerProps {
   max?: number;
   label?: string;
   compact?: boolean;
+  iconOnly?: boolean;
   category?: UploadCategory;
   onUploadingChange?: (uploading: boolean) => void;
 }
 
-export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS, label = 'Attach files', compact = false, category = 'post', onUploadingChange }: AttachmentPickerProps) {
+export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS, label = 'Attach files', compact = false, iconOnly = false, category = 'post', onUploadingChange }: AttachmentPickerProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [failedPreviews, setFailedPreviews] = useState<Set<string>>(() => new Set());
@@ -99,7 +100,7 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
   };
 
   return (
-    <div className="space-y-2">
+    <div className={iconOnly ? 'flex min-w-0 flex-col items-start gap-2' : 'space-y-2'}>
       <input
         ref={inputRef}
         type="file"
@@ -114,10 +115,12 @@ export function AttachmentPicker({ attachments, onChange, max = MAX_ATTACHMENTS,
         size={compact ? 'sm' : 'default'}
         onClick={() => inputRef.current?.click()}
         disabled={uploading || attachments.length >= max}
-        className="rounded-full gap-1.5 text-muted-foreground hover:text-primary"
+        aria-label={iconOnly ? label : undefined}
+        title={iconOnly ? label : undefined}
+        className={`rounded-full text-muted-foreground hover:text-primary ${iconOnly ? 'h-10 w-10 shrink-0 p-0' : 'gap-1.5'}`}
       >
-        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Paperclip className="w-4 h-4" />}
-        <span className={compact ? 'text-xs' : 'text-sm'}>{label}</span>
+        {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : iconOnly ? <Plus className="h-5 w-5" /> : <Paperclip className="w-4 h-4" />}
+        {!iconOnly && <span className={compact ? 'text-xs' : 'text-sm'}>{label}</span>}
       </Button>
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2">

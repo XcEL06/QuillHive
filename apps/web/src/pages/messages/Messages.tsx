@@ -9,14 +9,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck, DollarSign, BadgeCheck } from 'lucide-react';
+import { Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck, BadgeCheck } from 'lucide-react';
 import NewConversationModal from '@/components/messages/NewConversationModal';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { Timestamp, formatPostTimestamp } from '@/lib/postTimestamp';
 import { useSocketEvent, useJoinConversation } from '@/hooks/useSocket';
 import { getSocket } from '@/lib/socket';
 import { useT } from '@/lib/i18n';
-import { apiFetch, getStoredToken } from '@/lib/api';
+import { apiFetch } from '@/lib/api';
 import { reportCaughtError } from '@/lib/reportCaughtError';
 import { AttachmentPicker, type Attachment } from '@/components/post/AttachmentPicker';
 import { useToast } from '@/hooks/use-toast';
@@ -52,16 +52,6 @@ interface LocalMessage {
   };
 }
 
-interface PaymentProposal {
-  id: number;
-  proposerId: number;
-  amount: number;
-  currency: string;
-  note?: string | null;
-  status: string;
-  createdAt: string;
-}
-
 interface MessageRequest {
   id: number;
   requester: {
@@ -91,10 +81,6 @@ export default function Messages() {
   const [messageText, setMessageText] = useState('');
   const [messageAttachments, setMessageAttachments] = useState<Attachment[]>([]);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
-  const [paymentProposals, setPaymentProposals] = useState<PaymentProposal[]>([]);
-  const [proposalAmount, setProposalAmount] = useState('');
-  const [proposalCurrency, setProposalCurrency] = useState('USD');
-  const [proposalNote, setProposalNote] = useState('');
   const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set());
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
@@ -131,17 +117,6 @@ export default function Messages() {
   }, [messages]);
 
   useEffect(() => {
-    if (!activeConvId || activeConvRequest?.requestStatus !== 'accepted') {
-      setPaymentProposals([]);
-      return;
-    }
-    const token = getStoredToken();
-    void fetch(`/api/messages/conversations/${activeConvId}/payment-proposals`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).then((response) => response.ok ? response.json() : []).then((data) => setPaymentProposals(Array.isArray(data) ? data : [])).catch(() => setPaymentProposals([]));
-  }, [activeConvId, activeConvRequest?.requestStatus]);
-
-  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [localMessages]);
 
@@ -150,12 +125,6 @@ export default function Messages() {
     || activeConvRequest.requestRecipientId !== currentUser?.id
   );
   useJoinConversation(canJoinActiveConversation ? activeConvId : null);
-
-  useSocketEvent<PaymentProposal>('payment:proposal', useCallback((proposal) => {
-    if (proposal && !paymentProposals.some((current) => current.id === proposal.id)) {
-      setPaymentProposals((current) => [...current, proposal]);
-    }
-  }, [paymentProposals]));
 
   useSocketEvent<LocalMessage & { conversationId: number }>('message:receive', useCallback((msg) => {
     if (msg.conversationId !== activeConvId) {
@@ -303,41 +272,6 @@ export default function Messages() {
     }
   };
 
-  const proposePayment = async () => {
-    if (!activeConvId || !proposalAmount || Number(proposalAmount) <= 0) return;
-    try {
-      const token = getStoredToken();
-      const response = await fetch(`/api/messages/conversations/${activeConvId}/payment-proposals`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ amount: Number(proposalAmount), currency: proposalCurrency, note: proposalNote.trim() || undefined }),
-      });
-      if (!response.ok) throw new Error(`Request failed (${response.status})`);
-      const data = await response.json();
-      setPaymentProposals((current) => [...current, data]);
-      setProposalAmount('');
-      setProposalNote('');
-    } catch (error) {
-      toast({ title: 'Could not propose payment', description: error instanceof Error ? error.message : 'Request failed', variant: 'destructive' });
-    }
-  };
-
-  const updatePaymentProposal = async (proposalId: number, status: 'accepted' | 'rejected') => {
-    if (!activeConvId) return;
-    try {
-      const token = getStoredToken();
-      const response = await fetch(`/api/messages/conversations/${activeConvId}/payment-proposals/${proposalId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ status }),
-      });
-      if (!response.ok) throw new Error(`Request failed (${response.status})`);
-      setPaymentProposals((current) => current.map((proposal) => proposal.id === proposalId ? { ...proposal, status } : proposal));
-    } catch (error) {
-      toast({ title: 'Could not update payment proposal', description: error instanceof Error ? error.message : 'Request failed', variant: 'destructive' });
-    }
-  };
-
   const handleSelectConv = (convId: number) => {
     setConversationFolder('inbox');
     setActiveConvId(convId);
@@ -431,10 +365,10 @@ export default function Messages() {
 
   return (
     <AppLayout>
-      <div className="h-[calc(100vh-4rem-64px)] md:h-[calc(100vh-4rem-2rem)] flex bg-card border border-border/50 rounded-2xl overflow-hidden shadow-sm">
+      <div className="flex h-[calc(100dvh-8rem)] min-h-0 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm md:h-[calc(100dvh-6rem)]">
 
         {/* Sidebar List */}
-        <div className={`${activeConvId ? 'hidden md:flex' : 'flex'} w-full md:w-80 flex-col border-r border-border/50 bg-muted/10`}>
+        <div className={`${activeConvId ? 'hidden md:flex' : 'flex'} min-h-0 w-full flex-col border-r border-border/50 bg-muted/10 md:w-80`}>
           <div className="p-4 border-b border-border/50">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold font-serif">{t('messages.title')}</h2>
@@ -484,7 +418,7 @@ export default function Messages() {
             )}
           </div>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="min-h-0 flex-1">
             {conversationFolder === 'requests' ? (
               isRequestsLoading ? (
                 <div className="p-6 text-center text-sm text-muted-foreground">Loading message requests...</div>
@@ -627,7 +561,7 @@ export default function Messages() {
         )}
 
         {/* Chat Area */}
-        <div className={`${!activeConvId ? 'hidden md:flex' : 'flex'} flex-1 flex-col bg-background`}>
+        <div className={`${!activeConvId ? 'hidden md:flex' : 'flex'} min-h-0 min-w-0 flex-1 flex-col bg-background`}>
           {activeConvId ? (
             <>
               {/* Header */}
@@ -673,17 +607,9 @@ export default function Messages() {
                 )}
               </div>
 
-              {!isOutgoingRequest && !isClosedOutgoingRequest && <div className="border-b border-border/50 bg-muted/20 px-6 py-3">
-                <div className="flex items-center gap-2 mb-2"><DollarSign className="w-4 h-4 text-primary" /><p className="text-xs font-semibold">Payment terms</p><span className="text-[10px] text-muted-foreground">Propose or counter a budget/rate</span></div>
-                <div className="space-y-2">
-                  {paymentProposals.map((proposal) => <div key={proposal.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs"><span className="font-semibold">{proposal.currency} {proposal.amount.toLocaleString()}</span><span className="text-muted-foreground">{proposal.note || 'No note'}</span><span className="ml-auto rounded-full bg-muted px-2 py-0.5 capitalize">{proposal.status}</span>{proposal.status === 'proposed' && proposal.proposerId !== currentUser?.id && <><Button size="sm" className="h-6 text-[10px]" onClick={() => void updatePaymentProposal(proposal.id, 'accepted')}>Accept</Button><Button size="sm" variant="outline" className="h-6 text-[10px]" onClick={() => void updatePaymentProposal(proposal.id, 'rejected')}>Decline</Button></>}</div>)}
-                  <div className="flex flex-wrap items-center gap-2"><Input className="h-8 w-24 text-xs" type="number" min="0" placeholder="Amount" value={proposalAmount} onChange={(event) => setProposalAmount(event.target.value)} /><Input className="h-8 w-16 text-xs uppercase" maxLength={3} value={proposalCurrency} onChange={(event) => setProposalCurrency(event.target.value.toUpperCase())} /><Input className="h-8 min-w-40 flex-1 text-xs" placeholder="Scope, timing, or counter terms" value={proposalNote} onChange={(event) => setProposalNote(event.target.value)} /><Button size="sm" className="h-8" onClick={() => void proposePayment()} disabled={!proposalAmount}><DollarSign className="mr-1 h-3.5 w-3.5" />Propose</Button></div>
-                </div>
-              </div>}
-
               {/* Messages */}
-              <ScrollArea className="flex-1 p-6">
-                <div className="flex flex-col gap-4 justify-end min-h-full">
+              <ScrollArea className="min-h-0 flex-1 p-3 sm:p-5">
+                <div className="flex min-h-full flex-col justify-end gap-3">
                   {!activeConv && (
                     <div className="my-auto text-center text-sm text-muted-foreground">
                       This conversation is unavailable in your inbox. Check Requests to review a message request.
@@ -710,7 +636,7 @@ export default function Messages() {
                     const showSeenLabel = isMine && msg.id === latestSeenMessage?.id && !!messageSeenAt;
 
                     return (
-                      <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'} max-w-[80%] ${isMine ? 'ml-auto' : 'mr-auto'}`}>
+                      <div key={msg.id} className={`flex max-w-[88%] ${isMine ? 'ml-auto justify-end' : 'mr-auto justify-start'}`}>
                         {!isMine && sender && (
                           sender.username ? (
                             <Link href={`/profile/${sender.username}`} className="shrink-0 mr-2 self-end rounded-full focus-visible:ring-2 focus-visible:ring-ring">
@@ -726,7 +652,7 @@ export default function Messages() {
                             </Avatar>
                           )
                         )}
-                        <div className={`px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMine ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted/60 text-foreground border border-border/50 rounded-tl-sm'}`}>
+                        <div className={`rounded-2xl px-3.5 py-2 text-sm shadow-sm sm:px-4 ${isMine ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted/60 text-foreground border border-border/50 rounded-tl-sm'}`}>
                           {!isMine && sender?.isOfficialAccount && (
                             <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold text-blue-600 dark:text-blue-400">
                               <BadgeCheck className="h-3.5 w-3.5" /> Official QuillHive account · @{sender.username}
@@ -758,7 +684,7 @@ export default function Messages() {
                               Seen <Timestamp value={messageSeenAt} />
                             </div>
                           )}
-                          {!isMine && <ReportDialog targetType="message" targetId={msg.id} label="Report" className="mt-2 h-7 px-2 text-[10px]" />}
+                          {!isMine && <ReportDialog targetType="message" targetId={msg.id} label="Report" className="mt-1 h-5 px-1 text-[9px]" />}
                         </div>
                       </div>
                     );
@@ -788,29 +714,25 @@ export default function Messages() {
                     This conversation is unavailable.
                   </div>
               ) : activeConv ? (
-                <div className="p-4 border-t border-border/50 bg-card shrink-0">
-                  <div className="mb-2 flex items-center gap-2">
+                <div className="shrink-0 border-t border-border/50 bg-card p-3 sm:p-4">
+                  <form
+                    onSubmit={handleSend}
+                    className="flex min-w-0 flex-wrap items-center gap-2 rounded-3xl border border-border/50 bg-muted/30 p-1.5 transition-colors focus-within:border-primary/50"
+                  >
                     <AttachmentPicker
                       attachments={messageAttachments}
                       onChange={setMessageAttachments}
                       category="general"
                       max={5}
                       compact
-                      label="Attach file"
+                      iconOnly
+                      label="Add attachment"
                     />
-                    {messageAttachments.length > 0 && (
-                      <span className="text-xs text-muted-foreground">{messageAttachments.length} file{messageAttachments.length === 1 ? '' : 's'} ready</span>
-                    )}
-                  </div>
-                  <form
-                    onSubmit={handleSend}
-                    className="flex items-center gap-2 bg-muted/30 p-1.5 rounded-full border border-border/50 focus-within:border-primary/50 transition-colors"
-                  >
                     <Input
                       placeholder={t('messages.typePlaceholder', 'Type a message...')}
                       value={messageText}
                       onChange={e => handleTyping(e.target.value)}
-                      className="min-w-0 flex-1 border-0 bg-transparent px-4 focus-visible:ring-0"
+                      className="min-w-[120px] flex-1 border-0 bg-transparent px-2 focus-visible:ring-0"
                     />
                     <Button type="submit" size="icon" disabled={isSending || (!messageText.trim() && messageAttachments.length === 0)} className="rounded-full shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground">
                       <Send className="w-4 h-4" />
