@@ -1,9 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import crypto from "crypto";
 import { db } from "@workspace/db";
 import { inviteCodesTable, usersTable } from "@workspace/db/schema";
 import { eq, and, gt, isNull, or, count } from "drizzle-orm";
 import { requireAuth } from "../../middleware/admin";
+import { isFeatureEnabled } from "../../lib/featureFlags";
+import { getOrCreateReferralCode } from "../rewards/rewards.service";
 
 interface AuthedReq extends Request {
   currentUser: { id: number };
@@ -13,37 +14,22 @@ export const invitesRouter: IRouter = Router();
 
 invitesRouter.post("/generate", requireAuth, async (req: Request, res: Response) => {
   const userId = (req as AuthedReq).currentUser.id;
-
-  const [existingPermanent] = await db
-    .select()
-    .from(inviteCodesTable)
-    .where(
-      and(
-        eq(inviteCodesTable.createdBy, userId),
-        isNull(inviteCodesTable.expiresAt),
-      ),
-    );
-
-  const origin = process.env["APP_URL"] || `${req.protocol}://${req.get("host")}`;
-
-  if (existingPermanent) {
-    res.json({
-      invite: existingPermanent,
-      shareUrl: `${origin}/signup?invite=${existingPermanent.code}`,
-    });
+  if (!(await isFeatureEnabled("referral_program_enabled"))) {
+    res.status(404).json({ error: "Referral program is not enabled" });
     return;
   }
 
-  const code = crypto.randomBytes(6).toString("hex").toUpperCase();
-  const [invite] = await db
-    .insert(inviteCodesTable)
-    .values({ code, createdBy: userId, expiresAt: null })
-    .returning();
+  const invite = await getOrCreateReferralCode(userId);
+  const origin = (process.env["APP_URL"] || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
 
-  res.json({ invite, shareUrl: `${origin}/signup?invite=${code}` });
+  res.json({ invite, shareUrl: `${origin}/signup?invite=${encodeURIComponent(invite.code)}` });
 });
 
 invitesRouter.get("/mine", requireAuth, async (req: Request, res: Response) => {
+  if (!(await isFeatureEnabled("referral_program_enabled"))) {
+    res.status(404).json({ error: "Referral program is not enabled" });
+    return;
+  }
   const userId = (req as AuthedReq).currentUser.id;
   const codes = await db
     .select()

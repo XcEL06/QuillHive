@@ -27,7 +27,7 @@ import { useFeature } from '@/lib/features';
 import {
   User, Lock, Bell, Palette, Shield, Trash2, Moon, Sun, ChevronRight, Save, Loader2, Eye, Globe, Link2,
   MessageCircle, GraduationCap, Briefcase, Plus, Pencil, X, Upload, Camera, Facebook, Linkedin,
-  Twitter, Instagram, KeyRound, Smartphone, Download, AlertTriangle, Gift, CreditCard, Rocket,
+  Twitter, Instagram, KeyRound, Smartphone, Download, AlertTriangle, CreditCard, Rocket, Coins, Copy,
   CheckCircle2, Clock, XCircle,
 } from 'lucide-react';
 
@@ -1823,12 +1823,23 @@ function WarningsSection() {
 }
 
 interface InviteRow { id: number; code: string; usedBy: number | null; usedAt: string | null; expiresAt: string | null; isActive: boolean; createdAt: string; }
+interface RewardsSummary {
+  enabled: boolean;
+  coinsEnabled: boolean;
+  referral: { code: string; shareUrl: string } | null;
+  referrals: Array<{ id: number; username: string; displayName: string; joinedAt: string; trustScore: number | null; activityCount: number }>;
+  totalCoins: number;
+  entries: Array<{ id: number; amount: number; reason: string; basis: string; createdAt: string; adminDisplayName: string | null }>;
+}
 function InvitesSection() {
   const { toast } = useToast();
   const t = useT();
   const token = getStoredToken();
+  const referralProgramEnabled = useFeature('referral_program_enabled');
+  const coinsEnabled = useFeature('quillhive_coins_enabled');
   const [codes, setCodes] = useState<InviteRow[]>([]);
   const [totalInvited, setTotalInvited] = useState(0);
+  const [summary, setSummary] = useState<RewardsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -1840,8 +1851,13 @@ function InvitesSection() {
       const res = await apiFetch('/api/invites/mine', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!res.ok) throw new Error(`Could not load invites (${res.status}).`);
       const data = await res.json();
-      setCodes(Array.isArray(data?.codes) ? data.codes : []);
+      setCodes(Array.isArray(data?.codes) ? data.codes.slice(0, 1) : []);
       setTotalInvited(Number(data?.totalInvited) || 0);
+      const rewardsRes = await apiFetch('/api/rewards/mine', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!rewardsRes.ok) throw new Error(`Could not load referral rewards (${rewardsRes.status}).`);
+      const rewards = await rewardsRes.json() as RewardsSummary;
+      setSummary(rewards);
+      setTotalInvited(rewards.referrals.length);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Could not load invites.');
     } finally { setLoading(false); }
@@ -1878,52 +1894,59 @@ function InvitesSection() {
       </div>
       <Separator />
 
-      {/* Referral progress tracker */}
-      {totalInvited > 0 && (() => {
-        const milestones = [
-          { count: 1, label: '1 friend', reward: 'Profile badge' },
-          { count: 3, label: '3 friends', reward: '1 month Pro trial' },
-          { count: 5, label: '5 friends', reward: 'Boost credit' },
-          { count: 10, label: '10 friends', reward: 'Full Pro access' },
-        ];
-        const nextMilestone = milestones.find(m => totalInvited < m.count);
-        const lastMilestone = [...milestones].reverse().find(m => totalInvited >= m.count);
-        return (
-          <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-2xl p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Gift className="w-4 h-4 text-primary" />
-              <h3 className="font-semibold text-sm">{t('settings.referralRewards')}</h3>
-            </div>
-            <p className="text-sm text-muted-foreground mb-3">
-              {t('settings.youReferred')} <strong>{totalInvited}</strong> {totalInvited === 1 ? t('settings.person') : t('settings.people')}.
-              {lastMilestone && <span className="text-primary"> {t('settings.youUnlocked')}: {lastMilestone.reward}!</span>}
-            </p>
-            {nextMilestone && (
-              <div>
-                <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
-                  <span>{t('settings.nextReward')}: <strong>{nextMilestone.reward}</strong> at {nextMilestone.label}</span>
-                  <span>{totalInvited}/{nextMilestone.count}</span>
-                </div>
-                <div className="w-full bg-border rounded-full h-2">
-                  <div className="bg-primary rounded-full h-2 transition-all" style={{ width: `${Math.min((totalInvited / nextMilestone.count) * 100, 100)}%` }} />
-                </div>
-              </div>
-            )}
+      {referralProgramEnabled && summary?.referral && (
+        <section className="rounded-xl border border-border/70 bg-background p-5">
+          <h3 className="font-semibold">Your personal referral link</h3>
+          <p className="mt-1 text-sm text-muted-foreground">You have one reusable referral code. Share your link to invite creators.</p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <code className="min-w-0 flex-1 break-all rounded-lg bg-muted px-3 py-2 text-sm">{summary.referral.code}</code>
+            <Button variant="outline" onClick={() => void navigator.clipboard.writeText(summary.referral!.shareUrl).then(() => toast({ title: t('settings.inviteLinkCopied') })).catch(() => toast({ title: t('settings.copyFailed'), variant: 'destructive' }))}><Copy className="mr-2 h-4 w-4" />Copy link</Button>
           </div>
-        );
-      })()}
+          <p className="mt-2 break-all text-xs text-muted-foreground">{summary.referral.shareUrl}</p>
+        </section>
+      )}
+      {!referralProgramEnabled && <p className="rounded-xl border border-muted p-4 text-sm text-muted-foreground">The referral program is currently unavailable.</p>}
+      {coinsEnabled && (
+        <section className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-5">
+          <div className="flex items-center gap-3"><Coins className="h-6 w-6 text-amber-500" /><div><p className="text-sm text-muted-foreground">Your QuillHive Coin balance</p><p className="text-2xl font-semibold tabular-nums">{summary?.totalCoins ?? 0} QHC</p></div></div>
+          <p className="mt-2 text-xs text-muted-foreground">QuillHive Coins are platform rewards, not cash or a promise of monetary value.</p>
+        </section>
+      )}
+      {referralProgramEnabled && (
+        <section className="space-y-3">
+          <div><h3 className="font-semibold">People you invited</h3><p className="text-sm text-muted-foreground">{summary?.referrals.length ?? 0} accounts joined using your referral code.</p></div>
+          {!summary?.referrals.length ? <p className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">No referred accounts yet. Share your link to invite creators.</p> : (
+            <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70">
+              {summary.referrals.map(referral => <div key={referral.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0"><p className="font-medium">{referral.displayName || referral.username}</p><p className="text-xs text-muted-foreground">@{referral.username} · Joined <Timestamp value={referral.joinedAt} mode="date" /></p></div>
+              </div>)}
+            </div>
+          )}
+        </section>
+      )}
+      {coinsEnabled && !!summary?.entries.length && (
+        <section className="space-y-3">
+          <h3 className="font-semibold">Recent Coin rewards</h3>
+          <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70">
+            {summary.entries.map(entry => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0"><p className="font-medium">{entry.reason}</p><p className="text-xs text-muted-foreground">{entry.basis} · {entry.adminDisplayName || 'QuillHive team'}</p></div>
+              <span className="font-semibold text-amber-600">+{entry.amount} QHC</span>
+            </div>)}
+          </div>
+        </section>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-sm font-medium">{active.length} {active.length === 1 ? t('settings.activeCodes') : t('settings.activeCodesPlural')}</p>
           <p className="text-xs text-muted-foreground">{used.length} {t('settings.redeemedTotal')}</p>
         </div>
-        <Button onClick={() => void generate()} disabled={loading || !!loadError || generating || active.length >= 10}>
+        <Button onClick={() => void generate()} disabled={!referralProgramEnabled || loading || !!loadError || generating || active.length >= 1}>
           <Plus className="w-4 h-4 mr-2" /> {generating ? t('settings.generating') : t('settings.generateInvite')}
         </Button>
       </div>
 
-      {loading ? (
+      {!referralProgramEnabled ? null : loading ? (
         <div className="py-6 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></div>
       ) : loadError ? (
         <div className="py-6 text-center">
@@ -1945,7 +1968,7 @@ function InvitesSection() {
                     c.expiresAt ? `${t('settings.expires')} ${new Date(c.expiresAt).toLocaleDateString()}` : t('settings.activeStatus')}
                 </p>
               </div>
-              {!c.usedBy && c.isActive && (
+              {referralProgramEnabled && !c.usedBy && c.isActive && (
                 <Button size="sm" variant="outline" className="shrink-0" onClick={() => void copyLink(c.code)}>{t('settings.copyLink')}</Button>
               )}
             </div>

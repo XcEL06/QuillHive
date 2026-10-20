@@ -7,10 +7,11 @@ import {
   behaviorEventsTable, reputationEventsTable, blockedEmailAttemptsTable, translationCacheTable,
   boostRequestsTable, challengesTable,
   inviteCodesTable, workHistoryTable, educationHistoryTable,
+  coinLedgerTable,
 } from "@workspace/db/schema";
 import { eq, desc, asc, and, count, ne, lt, sql, inArray, or, gt, gte, isNotNull, ilike } from "drizzle-orm";
 import { requireAdmin, requireSuperAdmin, requirePermission } from "../middleware/admin";
-import { getAllFeatureFlags, FEATURE_FLAG_KEYS, reloadFeatureFlags, type FeatureFlagKey } from "../lib/featureFlags";
+import { getAllFeatureFlags, FEATURE_FLAG_KEYS, reloadFeatureFlags, type FeatureFlagKey, isFeatureEnabled } from "../lib/featureFlags";
 import { sendEmail } from "../features/email/email.service";
 import { notify, notifyOfficialNotice } from "../features/notifications/notification.service";
 import { BOOST_PLANS, type PlanKey } from "../features/boost/boost.routes";
@@ -23,6 +24,7 @@ import { getOfficialSystemAccountId } from "../lib/officialSystemAccount";
 import { addJob, getQueue } from "../lib/queue/queue";
 import { getUserTrustScore } from "../features/trust/trust.service";
 import { invalidateUserCache } from "../features/profiles/profile.service";
+import { coinCreditSchema } from "../features/rewards/rewards.routes";
 
 const router = Router();
 router.use(requireAdmin);
@@ -47,6 +49,29 @@ function checkRateLimit(adminId: number, action: string, max = 20): boolean {
   if (entry.count >= max) return false;
   entry.count++;
   return true;
+}
+
+async function getRewardActivityCounts(userIds: number[]): Promise<Map<number, number>> {
+  const result = new Map<number, number>();
+  if (userIds.length === 0) return result;
+  const [posts, comments, likes] = await Promise.all([
+    db.select({ userId: postsTable.authorId, total: count() })
+      .from(postsTable)
+      .where(and(inArray(postsTable.authorId, userIds), eq(postsTable.isDeleted, false)))
+      .groupBy(postsTable.authorId),
+    db.select({ userId: commentsTable.authorId, total: count() })
+      .from(commentsTable)
+      .where(inArray(commentsTable.authorId, userIds))
+      .groupBy(commentsTable.authorId),
+    db.select({ userId: likesTable.userId, total: count() })
+      .from(likesTable)
+      .where(inArray(likesTable.userId, userIds))
+      .groupBy(likesTable.userId),
+  ]);
+  for (const item of [...posts, ...comments, ...likes]) {
+    result.set(item.userId, (result.get(item.userId) ?? 0) + Number(item.total));
+  }
+  return result;
 }
 
 router.get("/stats", requirePermission("view_analytics"), async (req, res) => {
@@ -1324,6 +1349,9 @@ router.patch("/settings/features", requirePermission("manage_settings"), async (
   if (Object.keys(updates).some((key) => key === "profile_cv_enabled" || key === "profile_cv_premium_only") && req.currentUser?.role !== "super_admin") {
     return res.status(403).json({ error: "Only super admins can change profile CV settings." });
   }
+  if (Object.keys(updates).some((key) => key === "referral_program_enabled" || key === "quillhive_coins_enabled") && req.currentUser?.role !== "super_admin") {
+    return res.status(403).json({ error: "Only super admins can change referral program and Coin settings." });
+  }
   const valid = FEATURE_FLAG_KEYS as readonly string[];
   for (const [key, value] of Object.entries(updates)) {
     if (!valid.includes(key)) continue;
@@ -1335,6 +1363,89 @@ router.patch("/settings/features", requirePermission("manage_settings"), async (
   await reloadFeatureFlags();
   const flags = await getAllFeatureFlags();
   return res.json(flags);
+});
+
+router.get("/rewards", requireSuperAdmin, async (_req, res) => {
+  const coinsEnabled = await isFeatureEnabled("quillhive_coins_enabled");
+  const users = await db.select({
+    id: usersTable.id,
+    username: usersTable.username,
+    displayName: usersTable.displayName,
+    trustScore: userTrustScoresTable.uti,
+  })
+    .from(usersTable)
+    .leftJoin(userTrustScoresTable, eq(userTrustScoresTable.userId, usersTable.id))
+    .where(eq(usersTable.isDeleted, false))
+    .orderBy(asc(usersTable.username));
+
+  const [referralCounts, activityCounts, balances] = await Promise.all([
+    db.select({ userId: usersTable.referredBy, total: count() })
+      .from(usersTable)
+      .where(and(isNotNull(usersTable.referredBy), eq(usersTable.isDeleted, false)))
+      .groupBy(usersTable.referredBy),
+    getRewardActivityCounts(users.map((user) => user.id)),
+    db.select({
+      userId: coinLedgerTable.userId,
+      total: sql<string>`SUM(${coinLedgerTable.amount})::text`,
+    })
+      .from(coinLedgerTable)
+      .groupBy(coinLedgerTable.userId),
+  ]);
+  const referralCountByUser = new Map(referralCounts.map((row) => [row.userId!, Number(row.total)]));
+  const balanceByUser = new Map(balances.map((row) => [row.userId, Number(row.total)]));
+
+  return res.json({
+    coinsEnabled,
+    users: users.map((user) => ({
+      ...user,
+      trustScore: user.trustScore === null ? null : Number(user.trustScore),
+      referredCount: referralCountByUser.get(user.id) ?? 0,
+      activityCount: activityCounts.get(user.id) ?? 0,
+      totalCoins: balanceByUser.get(user.id) ?? 0,
+    })),
+  });
+});
+
+router.post("/rewards/credit", requireSuperAdmin, async (req: any, res) => {
+  const input = coinCreditSchema.safeParse(req.body);
+  if (!input.success) {
+    return res.status(400).json({ error: "Invalid Coin credit request", details: input.error.flatten() });
+  }
+  if (!(await isFeatureEnabled("quillhive_coins_enabled"))) {
+    return res.status(403).json({ error: "QuillHive Coins are not enabled" });
+  }
+  const [target] = await db.select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(eq(usersTable.id, input.data.userId), eq(usersTable.isDeleted, false)))
+    .limit(1);
+  if (!target) return res.status(404).json({ error: "User not found" });
+
+  const adminId = req.currentUser.id as number;
+  const { userId, amount, reason, basis } = input.data;
+  const totalCoins = await db.transaction(async (tx) => {
+    await tx.insert(coinLedgerTable).values({
+      userId,
+      amount,
+      source: "internal_admin_grant",
+      reason,
+      basis,
+      adminId,
+    });
+    await tx.insert(adminLogsTable).values({
+      adminId,
+      action: "coin_credit_granted",
+      targetType: "user",
+      targetId: userId,
+      details: JSON.stringify({ amount, reason, basis, source: "internal_admin_grant" }),
+    });
+    const [balance] = await tx.select({
+      total: sql<string>`COALESCE(SUM(${coinLedgerTable.amount}), 0)::text`,
+    })
+      .from(coinLedgerTable)
+      .where(eq(coinLedgerTable.userId, userId));
+    return Number(balance?.total ?? 0);
+  });
+  return res.json({ success: true, totalCoins });
 });
 
 // ============================================================================

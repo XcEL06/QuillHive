@@ -132,31 +132,33 @@ function createCvDocument(data: CvDownloadData): string {
     user.website,
     user.linkedin,
   ].filter((value): value is string => Boolean(value)).map(escapeHtml);
-  const skills = [...new Set(data.skills.map(skill => skill.trim()).filter(Boolean))];
+  const skills = [...new Map(
+    data.skills.map(skill => skill.trim()).filter(Boolean).map(skill => [skill.toLocaleLowerCase(), skill]),
+  ).values()];
   const experience = data.workHistory.map(entry => `
     <article>
       <h3>${escapeHtml(entry.title)}</h3>
       <p><strong>${escapeHtml(entry.organization)}</strong> | ${entry.startYear}–${entry.endYear ?? "Present"}</p>
-      ${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ""}
+      ${entry.description ? `<p class="entry-description">${escapeHtml(entry.description)}</p>` : ""}
     </article>`).join("");
   const education = data.educationHistory.map(entry => `
     <article>
       <h3>${escapeHtml(entry.degree)}${entry.field ? `, ${escapeHtml(entry.field)}` : ""}</h3>
       <p><strong>${escapeHtml(entry.school)}</strong> | ${entry.startYear}–${entry.endYear ?? "Present"}</p>
-      ${entry.description ? `<p>${escapeHtml(entry.description)}</p>` : ""}
+      ${entry.description ? `<p class="entry-description">${escapeHtml(entry.description)}</p>` : ""}
     </article>`).join("");
   const links = data.links.map(link => `<li>${escapeHtml(link.label)}: ${escapeHtml(link.url)}</li>`).join("");
 
   return `<!doctype html>
 <html><head><meta charset="utf-8"><title>${escapeHtml(user.displayName)} - CV</title>
-<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.45;max-width:760px;margin:36px auto}h1{font-size:26px;margin:0}h2{font-size:15px;text-transform:uppercase;border-bottom:1px solid #777;padding-bottom:4px;margin:22px 0 8px}h3{font-size:14px;margin:12px 0 2px}p,li{font-size:11pt;margin:4px 0}ul{padding-left:20px}article{page-break-inside:avoid}</style></head>
+<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.45;max-width:760px;margin:36px auto}h1{font-size:26px;margin:0}h2{font-size:15px;text-transform:uppercase;border-bottom:1px solid #777;padding-bottom:4px;margin:22px 0 8px}h3{font-size:14px;margin:12px 0 2px}p,li{font-size:11pt;margin:4px 0}ul{padding-left:20px}.entry-description{white-space:pre-line}article{page-break-inside:avoid}@media print{body{max-width:none;margin:0}section,article{break-inside:avoid}}</style></head>
 <body>
 <header><h1>${escapeHtml(user.displayName)}</h1>
 ${user.headline ? `<p><strong>${escapeHtml(user.headline)}</strong></p>` : ""}
 ${contact.length ? `<p>${contact.join(" | ")}</p>` : ""}
 <p>QuillHive profile: ${escapeHtml(window.location.origin)}/profile/${encodeURIComponent(user.username)}</p></header>
 ${user.bio ? `<section><h2>Professional Summary</h2><p>${escapeHtml(user.bio)}</p></section>` : ""}
-${skills.length ? `<section><h2>Skills</h2><p>${skills.map(escapeHtml).join(" | ")}</p></section>` : ""}
+${skills.length ? `<section><h2>Skills</h2><p>${skills.map(escapeHtml).join(", ")}</p></section>` : ""}
 ${experience ? `<section><h2>Professional Experience</h2>${experience}</section>` : ""}
 ${education ? `<section><h2>Education</h2>${education}</section>` : ""}
 ${links ? `<section><h2>Portfolio and Additional Links</h2><ul>${links}</ul></section>` : ""}

@@ -22,6 +22,16 @@ const FLAG_METADATA: Record<string, { label: string; description: string; catego
     description: "Award trust score bonuses to users based on how many valid people they've referred and those referrals' own trust scores. Off by default - enable when ready.",
     category: "Future",
   },
+  referral_program_enabled: {
+    label: "User Referral Program",
+    description: "Allow each user to share one reusable referral link and view the people they referred. Off by default.",
+    category: "Future",
+  },
+  quillhive_coins_enabled: {
+    label: "QuillHive Coins",
+    description: "Show user Coin balances and enable super-admin allocation of internal platform rewards. Coins are not cash. Off by default.",
+    category: "Future",
+  },
   identity_verification_enabled: {
     label: "Identity Verification",
     description: "Expose identity verification when a supported provider is configured. Off by default.",
@@ -69,7 +79,7 @@ export default function AdminFeatureFlags({ token, toast, currentUser }: AdminPr
   const canManageAds = currentUser.role === "super_admin";
   const enabledCount = Object.values(features).filter(Boolean).length;
   const disabledCount = Object.keys(features).length - enabledCount;
-  const requiresSuperAdmin = (key: string) => ["google_oauth_enabled", "github_oauth_enabled", "ads_enabled", "profile_cv_enabled", "profile_cv_premium_only"].includes(key);
+  const requiresSuperAdmin = (key: string) => ["google_oauth_enabled", "github_oauth_enabled", "ads_enabled", "profile_cv_enabled", "profile_cv_premium_only", "referral_program_enabled", "quillhive_coins_enabled"].includes(key);
   const toggle = async (key: string, value: boolean) => { if (!canManageFlags || (requiresSuperAdmin(key) && !canManageOAuth) || !window.confirm(`${value ? "Enable" : "Disable"} ${FLAG_METADATA[key]?.label ?? "this feature"}?`)) return; try { await fetchAdmin("/api/admin/settings/features", { method: "PATCH", body: JSON.stringify({ [key]: value }) }); setFeatures((f) => ({ ...f, [key]: value })); queryClient.setQueryData<Record<string, boolean>>(["feature-flags"], (current) => ({ ...current, [key]: value })); toast({ title: `${FLAG_METADATA[key]?.label ?? key} ${value ? "enabled" : "disabled"}` }); } catch (err: any) { toast({ title: "Could not update flag", description: err.message, variant: "destructive" }); } };
   return <div className="space-y-5">
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

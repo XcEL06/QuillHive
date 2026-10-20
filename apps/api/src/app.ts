@@ -127,6 +127,8 @@ app.get("/api/features", async (_req, res) => {
       "registration_open",
       "maintenance_mode",
       "ads_enabled",
+      "referral_program_enabled",
+      "quillhive_coins_enabled",
       "profile_cv_enabled",
       "profile_cv_premium_only",
     ] as const;

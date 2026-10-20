@@ -48,6 +48,7 @@ import { webhooksRouter } from "../features/distribution/webhooks.routes";
 import { monitoringRouter } from "../features/admin/monitoring.routes";
 import { adminExtensionsRouter, publicFeaturedRouter } from "../features/admin/extensions.routes";
 import { invitesRouter } from "../features/invites/invites.routes";
+import { rewardsRouter } from "../features/rewards/rewards.routes";
 import { magicLinkRouter } from "../features/auth/magicLink.routes";
 import { passkeyRouter } from "../features/auth/passkey.routes";
 import { oauthRouter } from "../features/auth/oauth.routes";
@@ -152,6 +153,7 @@ router.use(publicFeaturedRouter);
 
 // Invite codes
 router.use("/invites", invitesRouter);
+router.use("/rewards", rewardsRouter);
 
 // Auth: magic link, passkeys, social login
 router.use("/auth/magic-link", requireFeatureFlag("magic_link_enabled"), magicLinkRouter);
