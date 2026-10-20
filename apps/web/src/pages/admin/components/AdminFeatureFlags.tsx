@@ -29,7 +29,7 @@ const FLAG_METADATA: Record<string, { label: string; description: string; catego
   },
   quillhive_coins_enabled: {
     label: "QuillHive Coins",
-    description: "Show user Coin balances and enable super-admin allocation of internal platform rewards. Coins are not cash. Off by default.",
+    description: "Show automatically calculated user Coin balances based on trust, referrals, and original posts/comments. Coins are not cash. Off by default.",
     category: "Future",
   },
   identity_verification_enabled: {

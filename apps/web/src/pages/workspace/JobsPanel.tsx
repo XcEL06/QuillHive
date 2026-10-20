@@ -156,6 +156,7 @@ export function JobsPanel() {
   const { user } = useAuthStore();
   const token = getStoredToken();
   const [typeFilter, setTypeFilter] = useState<JobType>('all');
+  const [showClosed, setShowClosed] = useState(false);
   const [shareJobId, setShareJobId] = useState<number | null>(null);
   const [reportJobId, setReportJobId] = useState<number | null>(null);
   const matchMap = new Map<number, { score: number; reasons: string[] }>();
@@ -165,6 +166,14 @@ export function JobsPanel() {
     { request: { headers: token ? { Authorization: `Bearer ${token}` } : {} } }
   );
   const jobs = Array.isArray(data?.jobs) ? data.jobs : [];
+  const closedOwnedJobsCount = jobs.filter(job =>
+    !(job as any).isActive && Number(job.author?.id ?? (job as any).authorId) === Number(user?.id),
+  ).length;
+  const visibleJobs = jobs.filter(job =>
+    (job as any).isActive
+    || Number(job.author?.id ?? (job as any).authorId) !== Number(user?.id)
+    || showClosed,
+  );
 
   return (
     <div className="space-y-5">
@@ -180,13 +189,26 @@ export function JobsPanel() {
           </TabsList>
         </Tabs>
         {user && (
-          <Link href="/jobs/post">
-            <Button aria-label="Post a need" title="Post a need" className="h-9 shrink-0 gap-1.5 px-3 text-sm">
-              <Plus className="w-4 h-4" />
-              <span className="sm:hidden">Post a need</span>
-              <span className="hidden sm:inline">Post a need</span>
-            </Button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <Link href="/jobs/post">
+              <Button aria-label="Post a need" title="Post a need" className="h-9 shrink-0 gap-1.5 px-3 text-sm">
+                <Plus className="w-4 h-4" />
+                <span className="sm:hidden">Post a need</span>
+                <span className="hidden sm:inline">Post a need</span>
+              </Button>
+            </Link>
+            {closedOwnedJobsCount > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 shrink-0 text-sm"
+                aria-pressed={showClosed}
+                onClick={() => setShowClosed(value => !value)}
+              >
+                {showClosed ? 'Hide closed' : 'Show closed'} ({closedOwnedJobsCount})
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -213,7 +235,7 @@ export function JobsPanel() {
           </div>
         )}
 
-        {!isError && jobs.map(job => {
+        {!isError && visibleJobs.map(job => {
           const j = job as any;
           const isFeatured = !!j.isFeatured && (!j.featuredUntil || new Date(j.featuredUntil) > new Date());
           const matchData = matchMap.get(job.id);
@@ -312,7 +334,7 @@ export function JobsPanel() {
                   {j.compensation && <span className="text-foreground font-medium flex items-center gap-0.5"><DollarSign className="w-3 h-3" />{j.compensation}</span>}
                   <span className="flex items-center gap-0.5"><MapPin className="w-3 h-3" />{j.remote ? 'Remote' : j.location || 'Onsite'}</span>
                   <span className="flex items-center gap-0.5"><Clock className="w-3 h-3" /><Timestamp value={job.createdAt} /></span>
-                  {expiresAt && (
+                  {j.isActive && expiresAt && (
                     <span className="flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
                       <Calendar className="w-3 h-3" />Available until {expiresAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                     </span>
@@ -378,7 +400,7 @@ export function JobsPanel() {
           );
         })}
 
-        {!isLoading && !isError && jobs.length === 0 && (
+        {!isLoading && !isError && visibleJobs.length === 0 && (
           <div className="text-center py-12">
             <Briefcase className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">No jobs found in this category.</p>

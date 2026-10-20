@@ -7,7 +7,6 @@ import {
   behaviorEventsTable, reputationEventsTable, blockedEmailAttemptsTable, translationCacheTable,
   boostRequestsTable, challengesTable,
   inviteCodesTable, workHistoryTable, educationHistoryTable,
-  coinLedgerTable,
 } from "@workspace/db/schema";
 import { eq, desc, asc, and, count, ne, lt, sql, inArray, or, gt, gte, isNotNull, ilike } from "drizzle-orm";
 import { requireAdmin, requireSuperAdmin, requirePermission } from "../middleware/admin";
@@ -24,7 +23,7 @@ import { getOfficialSystemAccountId } from "../lib/officialSystemAccount";
 import { addJob, getQueue } from "../lib/queue/queue";
 import { getUserTrustScore } from "../features/trust/trust.service";
 import { invalidateUserCache } from "../features/profiles/profile.service";
-import { coinCreditSchema } from "../features/rewards/rewards.routes";
+import { calculateCoinBalance } from "../features/rewards/rewards.service";
 
 const router = Router();
 router.use(requireAdmin);
@@ -54,7 +53,7 @@ function checkRateLimit(adminId: number, action: string, max = 20): boolean {
 async function getRewardActivityCounts(userIds: number[]): Promise<Map<number, number>> {
   const result = new Map<number, number>();
   if (userIds.length === 0) return result;
-  const [posts, comments, likes] = await Promise.all([
+  const [posts, comments] = await Promise.all([
     db.select({ userId: postsTable.authorId, total: count() })
       .from(postsTable)
       .where(and(inArray(postsTable.authorId, userIds), eq(postsTable.isDeleted, false)))
@@ -63,12 +62,8 @@ async function getRewardActivityCounts(userIds: number[]): Promise<Map<number, n
       .from(commentsTable)
       .where(inArray(commentsTable.authorId, userIds))
       .groupBy(commentsTable.authorId),
-    db.select({ userId: likesTable.userId, total: count() })
-      .from(likesTable)
-      .where(inArray(likesTable.userId, userIds))
-      .groupBy(likesTable.userId),
   ]);
-  for (const item of [...posts, ...comments, ...likes]) {
+  for (const item of [...posts, ...comments]) {
     result.set(item.userId, (result.get(item.userId) ?? 0) + Number(item.total));
   }
   return result;
@@ -1378,21 +1373,14 @@ router.get("/rewards", requireSuperAdmin, async (_req, res) => {
     .where(eq(usersTable.isDeleted, false))
     .orderBy(asc(usersTable.username));
 
-  const [referralCounts, activityCounts, balances] = await Promise.all([
+  const [referralCounts, activityCounts] = await Promise.all([
     db.select({ userId: usersTable.referredBy, total: count() })
       .from(usersTable)
       .where(and(isNotNull(usersTable.referredBy), eq(usersTable.isDeleted, false)))
       .groupBy(usersTable.referredBy),
     getRewardActivityCounts(users.map((user) => user.id)),
-    db.select({
-      userId: coinLedgerTable.userId,
-      total: sql<string>`SUM(${coinLedgerTable.amount})::text`,
-    })
-      .from(coinLedgerTable)
-      .groupBy(coinLedgerTable.userId),
   ]);
   const referralCountByUser = new Map(referralCounts.map((row) => [row.userId!, Number(row.total)]));
-  const balanceByUser = new Map(balances.map((row) => [row.userId, Number(row.total)]));
 
   return res.json({
     coinsEnabled,
@@ -1401,51 +1389,15 @@ router.get("/rewards", requireSuperAdmin, async (_req, res) => {
       trustScore: user.trustScore === null ? null : Number(user.trustScore),
       referredCount: referralCountByUser.get(user.id) ?? 0,
       activityCount: activityCounts.get(user.id) ?? 0,
-      totalCoins: balanceByUser.get(user.id) ?? 0,
+      ...(coinsEnabled
+        ? calculateCoinBalance({
+          trustScore: user.trustScore === null ? null : Number(user.trustScore),
+          referralCount: referralCountByUser.get(user.id) ?? 0,
+          activityCount: activityCounts.get(user.id) ?? 0,
+        })
+        : { trustCoins: 0, referralCoins: 0, activityCoins: 0, totalCoins: 0 }),
     })),
   });
-});
-
-router.post("/rewards/credit", requireSuperAdmin, async (req: any, res) => {
-  const input = coinCreditSchema.safeParse(req.body);
-  if (!input.success) {
-    return res.status(400).json({ error: "Invalid Coin credit request", details: input.error.flatten() });
-  }
-  if (!(await isFeatureEnabled("quillhive_coins_enabled"))) {
-    return res.status(403).json({ error: "QuillHive Coins are not enabled" });
-  }
-  const [target] = await db.select({ id: usersTable.id })
-    .from(usersTable)
-    .where(and(eq(usersTable.id, input.data.userId), eq(usersTable.isDeleted, false)))
-    .limit(1);
-  if (!target) return res.status(404).json({ error: "User not found" });
-
-  const adminId = req.currentUser.id as number;
-  const { userId, amount, reason, basis } = input.data;
-  const totalCoins = await db.transaction(async (tx) => {
-    await tx.insert(coinLedgerTable).values({
-      userId,
-      amount,
-      source: "internal_admin_grant",
-      reason,
-      basis,
-      adminId,
-    });
-    await tx.insert(adminLogsTable).values({
-      adminId,
-      action: "coin_credit_granted",
-      targetType: "user",
-      targetId: userId,
-      details: JSON.stringify({ amount, reason, basis, source: "internal_admin_grant" }),
-    });
-    const [balance] = await tx.select({
-      total: sql<string>`COALESCE(SUM(${coinLedgerTable.amount}), 0)::text`,
-    })
-      .from(coinLedgerTable)
-      .where(eq(coinLedgerTable.userId, userId));
-    return Number(balance?.total ?? 0);
-  });
-  return res.json({ success: true, totalCoins });
 });
 
 // ============================================================================

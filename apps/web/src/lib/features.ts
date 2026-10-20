@@ -29,6 +29,8 @@ export function useFeature(flag: string): boolean {
     flag === "creator_income_enabled"
     || flag === "profile_cv_enabled"
     || flag === "profile_cv_premium_only"
+    || flag === "referral_program_enabled"
+    || flag === "quillhive_coins_enabled"
       ? false
       : true
   );

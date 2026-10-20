@@ -1822,14 +1822,15 @@ function WarningsSection() {
   );
 }
 
-interface InviteRow { id: number; code: string; usedBy: number | null; usedAt: string | null; expiresAt: string | null; isActive: boolean; createdAt: string; }
 interface RewardsSummary {
   enabled: boolean;
   coinsEnabled: boolean;
   referral: { code: string; shareUrl: string } | null;
   referrals: Array<{ id: number; username: string; displayName: string; joinedAt: string; trustScore: number | null; activityCount: number }>;
   totalCoins: number;
-  entries: Array<{ id: number; amount: number; reason: string; basis: string; createdAt: string; adminDisplayName: string | null }>;
+  trustCoins: number;
+  referralCoins: number;
+  activityCoins: number;
 }
 function InvitesSection() {
   const { toast } = useToast();
@@ -1837,54 +1838,28 @@ function InvitesSection() {
   const token = getStoredToken();
   const referralProgramEnabled = useFeature('referral_program_enabled');
   const coinsEnabled = useFeature('quillhive_coins_enabled');
-  const [codes, setCodes] = useState<InviteRow[]>([]);
-  const [totalInvited, setTotalInvited] = useState(0);
   const [summary, setSummary] = useState<RewardsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
 
   const load = async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const res = await apiFetch('/api/invites/mine', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      if (!res.ok) throw new Error(`Could not load invites (${res.status}).`);
-      const data = await res.json();
-      setCodes(Array.isArray(data?.codes) ? data.codes.slice(0, 1) : []);
-      setTotalInvited(Number(data?.totalInvited) || 0);
       const rewardsRes = await apiFetch('/api/rewards/mine', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
       if (!rewardsRes.ok) throw new Error(`Could not load referral rewards (${rewardsRes.status}).`);
       const rewards = await rewardsRes.json() as RewardsSummary;
       setSummary(rewards);
-      setTotalInvited(rewards.referrals.length);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Could not load invites.');
+      setLoadError(error instanceof Error ? error.message : 'Could not load referral rewards.');
     } finally { setLoading(false); }
   };
   useEffect(() => { void load(); /* eslint-disable-next-line */ }, []);
 
-  const generate = async () => {
-    setGenerating(true);
-    try {
-      const res = await apiFetch('/api/invites/generate', { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || t('settings.couldNotExportData'));
-      toast({ title: t('settings.inviteCreated'), description: data?.shareUrl ?? '' });
-      await load();
-    } catch (err: any) {
-      toast({ title: err?.message || t('settings.uploadFailed'), variant: 'destructive' });
-    } finally { setGenerating(false); }
-  };
-
-  const copyLink = async (code: string) => {
-    const url = `${window.location.origin}/signup?invite=${encodeURIComponent(code)}`;
+  const copyLink = async (url: string) => {
     try { await navigator.clipboard.writeText(url); toast({ title: t('settings.inviteLinkCopied') }); }
     catch { toast({ title: t('settings.copyFailed'), variant: 'destructive' }); }
   };
-
-  const active = codes.filter(c => !c.usedBy && c.isActive);
-  const used = codes.filter(c => c.usedBy);
 
   return (
     <div className="space-y-6">
@@ -1900,19 +1875,19 @@ function InvitesSection() {
           <p className="mt-1 text-sm text-muted-foreground">You have one reusable referral code. Share your link to invite creators.</p>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <code className="min-w-0 flex-1 break-all rounded-lg bg-muted px-3 py-2 text-sm">{summary.referral.code}</code>
-            <Button variant="outline" onClick={() => void navigator.clipboard.writeText(summary.referral!.shareUrl).then(() => toast({ title: t('settings.inviteLinkCopied') })).catch(() => toast({ title: t('settings.copyFailed'), variant: 'destructive' }))}><Copy className="mr-2 h-4 w-4" />Copy link</Button>
+            <Button variant="outline" onClick={() => void copyLink(summary.referral!.shareUrl)}><Copy className="mr-2 h-4 w-4" />Copy link</Button>
           </div>
           <p className="mt-2 break-all text-xs text-muted-foreground">{summary.referral.shareUrl}</p>
         </section>
       )}
       {!referralProgramEnabled && <p className="rounded-xl border border-muted p-4 text-sm text-muted-foreground">The referral program is currently unavailable.</p>}
-      {coinsEnabled && (
+      {coinsEnabled && !loading && summary && (
         <section className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-5">
           <div className="flex items-center gap-3"><Coins className="h-6 w-6 text-amber-500" /><div><p className="text-sm text-muted-foreground">Your QuillHive Coin balance</p><p className="text-2xl font-semibold tabular-nums">{summary?.totalCoins ?? 0} QHC</p></div></div>
-          <p className="mt-2 text-xs text-muted-foreground">QuillHive Coins are platform rewards, not cash or a promise of monetary value.</p>
+          <p className="mt-2 text-xs text-muted-foreground">Calculated from trust score ({summary.trustCoins}), referrals ({summary.referralCoins}), and original posts/comments ({summary.activityCoins}). QuillHive Coins are platform points, not cash.</p>
         </section>
       )}
-      {referralProgramEnabled && (
+      {referralProgramEnabled && !loading && summary && (
         <section className="space-y-3">
           <div><h3 className="font-semibold">People you invited</h3><p className="text-sm text-muted-foreground">{summary?.referrals.length ?? 0} accounts joined using your referral code.</p></div>
           {!summary?.referrals.length ? <p className="rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground">No referred accounts yet. Share your link to invite creators.</p> : (
@@ -1924,57 +1899,8 @@ function InvitesSection() {
           )}
         </section>
       )}
-      {coinsEnabled && !!summary?.entries.length && (
-        <section className="space-y-3">
-          <h3 className="font-semibold">Recent Coin rewards</h3>
-          <div className="divide-y divide-border/60 overflow-hidden rounded-xl border border-border/70">
-            {summary.entries.map(entry => <div key={entry.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <div className="min-w-0"><p className="font-medium">{entry.reason}</p><p className="text-xs text-muted-foreground">{entry.basis} · {entry.adminDisplayName || 'QuillHive team'}</p></div>
-              <span className="font-semibold text-amber-600">+{entry.amount} QHC</span>
-            </div>)}
-          </div>
-        </section>
-      )}
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-medium">{active.length} {active.length === 1 ? t('settings.activeCodes') : t('settings.activeCodesPlural')}</p>
-          <p className="text-xs text-muted-foreground">{used.length} {t('settings.redeemedTotal')}</p>
-        </div>
-        <Button onClick={() => void generate()} disabled={!referralProgramEnabled || loading || !!loadError || generating || active.length >= 1}>
-          <Plus className="w-4 h-4 mr-2" /> {generating ? t('settings.generating') : t('settings.generateInvite')}
-        </Button>
-      </div>
-
-      {!referralProgramEnabled ? null : loading ? (
-        <div className="py-6 text-center text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></div>
-      ) : loadError ? (
-        <div className="py-6 text-center">
-          <p role="alert" className="text-sm text-destructive">{loadError}</p>
-          <Button variant="outline" className="mt-3" onClick={() => void load()}>Try again</Button>
-        </div>
-      ) : codes.length === 0 ? (
-        <div className="py-10 text-center text-muted-foreground">
-          <p className="text-sm">{t('settings.noInvitesYet')}</p>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {codes.map(c => (
-            <div key={c.id} className="flex min-w-0 flex-wrap items-center justify-between gap-3 border border-border rounded-xl px-4 py-3">
-              <div className="min-w-0">
-                <p className="break-all font-mono text-sm tracking-wider">{c.code}</p>
-                <p className="text-xs text-muted-foreground">
-                  {c.usedBy ? <>{t('settings.redeemed')} {c.usedAt && <Timestamp value={c.usedAt} mode="date" />}</> :
-                    c.expiresAt ? `${t('settings.expires')} ${new Date(c.expiresAt).toLocaleDateString()}` : t('settings.activeStatus')}
-                </p>
-              </div>
-              {referralProgramEnabled && !c.usedBy && c.isActive && (
-                <Button size="sm" variant="outline" className="shrink-0" onClick={() => void copyLink(c.code)}>{t('settings.copyLink')}</Button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      {loading && <div className="py-6 text-center text-muted-foreground"><Loader2 className="mx-auto h-5 w-5 animate-spin" /></div>}
+      {loadError && <div className="py-3 text-center"><p role="alert" className="text-sm text-destructive">{loadError}</p><Button variant="outline" className="mt-3" onClick={() => void load()}>Try again</Button></div>}
     </div>
   );
 }

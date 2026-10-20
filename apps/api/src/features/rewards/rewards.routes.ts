@@ -2,18 +2,14 @@ import { Router, type Request, type Response } from "express";
 import { db } from "@workspace/db";
 import {
   commentsTable,
-  coinLedgerTable,
-  inviteCodesTable,
-  likesTable,
   postsTable,
   userTrustScoresTable,
   usersTable,
 } from "@workspace/db/schema";
-import { and, count, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { requireAuth } from "../../middleware/admin";
 import { isFeatureEnabled } from "../../lib/featureFlags";
-import { getOrCreateReferralCode } from "./rewards.service";
-import { coinCreditSchema } from "./rewards.validation";
+import { calculateCoinBalance, getOrCreateReferralCode } from "./rewards.service";
 
 interface AuthedRequest extends Request {
   currentUser: { id: number; role: string };
@@ -25,7 +21,7 @@ async function getActivityCounts(userIds: number[]): Promise<Map<number, number>
   const result = new Map<number, number>();
   if (userIds.length === 0) return result;
 
-  const [posts, comments, likes] = await Promise.all([
+  const [posts, comments] = await Promise.all([
     db.select({ userId: postsTable.authorId, total: count() })
       .from(postsTable)
       .where(and(inArray(postsTable.authorId, userIds), eq(postsTable.isDeleted, false)))
@@ -34,13 +30,9 @@ async function getActivityCounts(userIds: number[]): Promise<Map<number, number>
       .from(commentsTable)
       .where(inArray(commentsTable.authorId, userIds))
       .groupBy(commentsTable.authorId),
-    db.select({ userId: likesTable.userId, total: count() })
-      .from(likesTable)
-      .where(inArray(likesTable.userId, userIds))
-      .groupBy(likesTable.userId),
   ]);
 
-  for (const item of [...posts, ...comments, ...likes]) {
+  for (const item of [...posts, ...comments]) {
     result.set(item.userId, (result.get(item.userId) ?? 0) + Number(item.total));
   }
   return result;
@@ -64,8 +56,6 @@ rewardsRouter.get("/mine", requireAuth, async (req: Request, res: Response) => {
     username: string;
     displayName: string;
     joinedAt: Date;
-    trustScore: number | null;
-    activityCount: number;
   }> = [];
 
   if (enabled) {
@@ -77,53 +67,31 @@ rewardsRouter.get("/mine", requireAuth, async (req: Request, res: Response) => {
       username: usersTable.username,
       displayName: usersTable.displayName,
       joinedAt: usersTable.createdAt,
-      trustScore: userTrustScoresTable.uti,
     })
       .from(usersTable)
-      .leftJoin(userTrustScoresTable, eq(userTrustScoresTable.userId, usersTable.id))
       .where(and(eq(usersTable.referredBy, userId), eq(usersTable.isDeleted, false)))
       .orderBy(desc(usersTable.createdAt));
-    const activityCounts = await getActivityCounts(referredUsers.map((user) => user.id));
-    referrals = referredUsers.map((user) => ({
-      ...user,
-      trustScore: user.trustScore === null ? null : Number(user.trustScore),
-      activityCount: activityCounts.get(user.id) ?? 0,
-    }));
+    referrals = referredUsers;
   }
 
-  let totalCoins = 0;
-  let entries: Array<{
-    id: number;
-    amount: number;
-    reason: string;
-    basis: string;
-    createdAt: Date;
-    adminDisplayName: string;
-  }> = [];
+  let coinBreakdown = { trustCoins: 0, referralCoins: 0, activityCoins: 0, totalCoins: 0 };
   if (coinsEnabled) {
-    const [balance] = await db.select({ total: sql<string>`COALESCE(SUM(${coinLedgerTable.amount}), 0)::text` })
-      .from(coinLedgerTable)
-      .where(eq(coinLedgerTable.userId, userId));
-    totalCoins = Number(balance?.total ?? 0);
-    const rows = await db.select({
-      id: coinLedgerTable.id,
-      amount: coinLedgerTable.amount,
-      reason: coinLedgerTable.reason,
-      basis: coinLedgerTable.basis,
-      createdAt: coinLedgerTable.createdAt,
-      adminDisplayName: usersTable.displayName,
-      adminUsername: usersTable.username,
-    })
-      .from(coinLedgerTable)
-      .leftJoin(usersTable, eq(coinLedgerTable.adminId, usersTable.id))
-      .where(eq(coinLedgerTable.userId, userId))
-      .orderBy(desc(coinLedgerTable.createdAt), desc(coinLedgerTable.id))
-      .limit(100);
-    entries = rows.map(({ adminUsername, ...entry }) => ({
-      ...entry,
-      adminDisplayName: entry.adminDisplayName || adminUsername || "QuillHive admin",
-    }));
+    const [[trust], [referralCount], activityCounts] = await Promise.all([
+      db.select({ trustScore: userTrustScoresTable.uti })
+        .from(userTrustScoresTable)
+        .where(eq(userTrustScoresTable.userId, userId))
+        .limit(1),
+      db.select({ total: count() })
+        .from(usersTable)
+        .where(and(eq(usersTable.referredBy, userId), eq(usersTable.isDeleted, false))),
+      getActivityCounts([userId]),
+    ]);
+    coinBreakdown = calculateCoinBalance({
+      trustScore: trust?.trustScore === null || trust?.trustScore === undefined ? null : Number(trust.trustScore),
+      referralCount: Number(referralCount?.total ?? 0),
+      activityCount: activityCounts.get(userId) ?? 0,
+    });
   }
 
-  return res.json({ enabled, coinsEnabled, referral, referrals, totalCoins, entries });
+  return res.json({ enabled, coinsEnabled, referral, referrals, ...coinBreakdown });
 });
