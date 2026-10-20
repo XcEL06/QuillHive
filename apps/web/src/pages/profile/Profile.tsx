@@ -24,6 +24,7 @@ import {
   MessageCircle, Zap, Camera, Share2, MoreHorizontal, Download,
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { AlignmentType, Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 import { apiFetch, apiUrl, getStoredToken, mediaUrl } from '@/lib/api';
 import { uploadFile } from '@/lib/uploadFile';
 import { useT } from '@/lib/i18n';
@@ -114,55 +115,117 @@ interface CvDownloadData {
   links: Array<{ label: string; url: string }>;
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[character]!);
-}
-
-function createCvDocument(data: CvDownloadData): string {
+function createCvDocument(data: CvDownloadData): Document {
   const { user } = data;
+  const fullName = user.displayName.trim();
   const contact = [
+    user.username ? `@${user.username.trim()}` : "",
     user.email,
     [user.location, user.country].filter(Boolean).join(", "),
     user.website,
     user.linkedin,
-  ].filter((value): value is string => Boolean(value)).map(escapeHtml);
+  ].map(value => value?.trim()).filter((value): value is string => Boolean(value));
   const skills = [...new Map(
-    data.skills.map(skill => skill.trim()).filter(Boolean).map(skill => [skill.toLocaleLowerCase(), skill]),
+    data.skills
+      .filter((skill): skill is string => typeof skill === "string")
+      .map(skill => skill.trim())
+      .filter(Boolean)
+      .map(skill => [skill.toLocaleLowerCase(), skill]),
   ).values()];
-  const experience = data.workHistory.map(entry => `
-    <article>
-      <h3>${escapeHtml(entry.title)}</h3>
-      <p><strong>${escapeHtml(entry.organization)}</strong> | ${entry.startYear}–${entry.endYear ?? "Present"}</p>
-      ${entry.description ? `<p class="entry-description">${escapeHtml(entry.description)}</p>` : ""}
-    </article>`).join("");
-  const education = data.educationHistory.map(entry => `
-    <article>
-      <h3>${escapeHtml(entry.degree)}${entry.field ? `, ${escapeHtml(entry.field)}` : ""}</h3>
-      <p><strong>${escapeHtml(entry.school)}</strong> | ${entry.startYear}–${entry.endYear ?? "Present"}</p>
-      ${entry.description ? `<p class="entry-description">${escapeHtml(entry.description)}</p>` : ""}
-    </article>`).join("");
-  const links = data.links.map(link => `<li>${escapeHtml(link.label)}: ${escapeHtml(link.url)}</li>`).join("");
+  const workHistory = data.workHistory.filter(entry =>
+    Boolean(entry.title?.trim() || entry.organization?.trim() || entry.description?.trim()),
+  );
+  const educationHistory = data.educationHistory.filter(entry =>
+    Boolean(entry.school?.trim() || entry.degree?.trim() || entry.field?.trim() || entry.description?.trim()),
+  );
+  const links = data.links.filter(link => Boolean(link.label?.trim() || link.url?.trim()));
+  const children: Paragraph[] = [
+    ...(fullName ? [new Paragraph({
+      text: fullName,
+      heading: HeadingLevel.TITLE,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+    })] : []),
+    ...(user.headline?.trim() ? [new Paragraph({
+      children: [new TextRun({ text: user.headline.trim(), bold: true })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+    })] : []),
+    ...(contact.length ? [new Paragraph({
+      text: contact.join(" | "),
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 100 },
+    })] : []),
+    new Paragraph({
+      text: `QuillHive profile: ${window.location.origin}/profile/${encodeURIComponent(user.username)}`,
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 240 },
+    }),
+  ];
+  const addSection = (title: string, paragraphs: Paragraph[]) => {
+    if (paragraphs.length === 0) return;
+    children.push(new Paragraph({
+      text: title,
+      heading: HeadingLevel.HEADING_1,
+      spacing: { before: 240, after: 100 },
+    }), ...paragraphs);
+  };
+  const textParagraphs = (value: string) => value.split(/\r?\n/).map(line => new Paragraph({
+    text: line || " ",
+    spacing: { after: 80 },
+  }));
 
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><title>${escapeHtml(user.displayName)} - CV</title>
-<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;line-height:1.45;max-width:760px;margin:36px auto}h1{font-size:26px;margin:0}h2{font-size:15px;text-transform:uppercase;border-bottom:1px solid #777;padding-bottom:4px;margin:22px 0 8px}h3{font-size:14px;margin:12px 0 2px}p,li{font-size:11pt;margin:4px 0}ul{padding-left:20px}.entry-description{white-space:pre-line}article{page-break-inside:avoid}@media print{body{max-width:none;margin:0}section,article{break-inside:avoid}}</style></head>
-<body>
-<header><h1>${escapeHtml(user.displayName)}</h1>
-${user.headline ? `<p><strong>${escapeHtml(user.headline)}</strong></p>` : ""}
-${contact.length ? `<p>${contact.join(" | ")}</p>` : ""}
-<p>QuillHive profile: ${escapeHtml(window.location.origin)}/profile/${encodeURIComponent(user.username)}</p></header>
-${user.bio ? `<section><h2>Professional Summary</h2><p>${escapeHtml(user.bio)}</p></section>` : ""}
-${skills.length ? `<section><h2>Skills</h2><p>${skills.map(escapeHtml).join(", ")}</p></section>` : ""}
-${experience ? `<section><h2>Professional Experience</h2>${experience}</section>` : ""}
-${education ? `<section><h2>Education</h2>${education}</section>` : ""}
-${links ? `<section><h2>Portfolio and Additional Links</h2><ul>${links}</ul></section>` : ""}
-</body></html>`;
+  if (user.bio?.trim()) addSection("Professional Summary", textParagraphs(user.bio.trim()));
+  if (skills.length) addSection("Skills", [new Paragraph({ text: skills.join(", ") })]);
+  addSection("Professional Experience", workHistory.flatMap(entry => [
+    ...(entry.title.trim() ? [new Paragraph({
+      children: [new TextRun({ text: entry.title.trim(), bold: true })],
+      spacing: { before: 100, after: 40 },
+    })] : []),
+    ...(entry.title.trim() || entry.organization.trim() ? [new Paragraph({
+      children: [
+        ...(entry.organization.trim() ? [new TextRun({ text: entry.organization.trim(), bold: true })] : []),
+        new TextRun({ text: `${entry.organization.trim() ? " | " : ""}${entry.startYear} - ${entry.endYear ?? "Present"}` }),
+      ],
+      spacing: { after: 60 },
+    })] : []),
+    ...(entry.description?.trim() ? textParagraphs(entry.description.trim()) : []),
+  ]));
+  addSection("Education", educationHistory.flatMap(entry => {
+    const qualification = [entry.degree.trim(), entry.field?.trim()].filter(Boolean).join(", ");
+    return [
+      ...(qualification ? [new Paragraph({
+        children: [new TextRun({ text: qualification, bold: true })],
+        spacing: { before: 100, after: 40 },
+      })] : []),
+      ...(entry.school.trim() || qualification ? [new Paragraph({
+        children: [
+          ...(entry.school.trim() ? [new TextRun({ text: entry.school.trim(), bold: true })] : []),
+          new TextRun({ text: `${entry.school.trim() ? " | " : ""}${entry.startYear} - ${entry.endYear ?? "Present"}` }),
+        ],
+        spacing: { after: 60 },
+      })] : []),
+      ...(entry.description?.trim() ? textParagraphs(entry.description.trim()) : []),
+    ];
+  }));
+  addSection("Portfolio and Additional Links", links.map(link => new Paragraph({
+    children: [
+      ...(link.label.trim() ? [new TextRun({ text: `${link.label.trim()}: `, bold: true })] : []),
+      ...(link.url.trim() ? [new TextRun({ text: link.url.trim() })] : []),
+    ],
+    spacing: { after: 80 },
+  })));
+
+  return new Document({
+    sections: [{
+      properties: {
+        page: {
+          margin: { top: 720, right: 900, bottom: 720, left: 900 },
+        },
+      },
+      children,
+    }],
+  });
 }
 
 const AVAILABLE_FOR_OPTIONS = [
@@ -273,15 +336,15 @@ export default function Profile() {
       if (!response.ok || !data || !("user" in data)) {
         throw new Error(data && "error" in data ? data.error ?? "Could not download CV." : "Could not download CV.");
       }
-      const blob = new Blob([createCvDocument(data)], { type: "application/msword;charset=utf-8" });
+      const blob = await Packer.toBlob(createCvDocument(data));
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `${data.user.username}-cv.doc`;
+      anchor.download = `${data.user.username}-cv.docx`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
       toast({ title: "CV downloaded", description: "Your ATS-friendly profile CV is ready." });
     } catch (error) {
       toast({
