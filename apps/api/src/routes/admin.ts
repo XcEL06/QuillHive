@@ -355,7 +355,13 @@ async function enqueueOfficialBroadcast(adminId: number, title: string, message:
     Object.assign(error, { status: 503 });
     throw error;
   }
-  await auditLog(adminId, "admin_notification_broadcast_queued", "users", undefined, `${title}: ${message}`);
+  await auditLog(
+    adminId,
+    postId == null ? "admin_notification_broadcast_queued" : "admin_feed_announcement_broadcast_queued",
+    "users",
+    undefined,
+    JSON.stringify({ title, message, postId: postId ?? null }),
+  );
   return jobId;
 }
 
@@ -364,7 +370,9 @@ router.get("/communications/announcements", requireSuperAdmin, async (req, res) 
   const requestedOffset = Number(req.query.offset);
   const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 50) : 20;
   const offset = Number.isInteger(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
-  const posts = await db.select({
+  const historyLimit = limit + offset + 1;
+  const [posts, broadcasts] = await Promise.all([
+    db.select({
     id: postsTable.id,
     title: postsTable.title,
     content: postsTable.content,
@@ -384,11 +392,58 @@ router.get("/communications/announcements", requireSuperAdmin, async (req, res) 
       eq(postsTable.isDeleted, false),
     ))
     .orderBy(desc(postsTable.createdAt))
-    .limit(limit + 1)
-    .offset(offset);
-  const hasMore = posts.length > limit;
-  const pagePosts = posts.slice(0, limit);
-  const postIds = pagePosts.map(post => post.id);
+    .limit(historyLimit),
+    db.select({
+      id: adminLogsTable.id,
+      details: adminLogsTable.details,
+      createdAt: adminLogsTable.createdAt,
+    })
+      .from(adminLogsTable)
+      .where(eq(adminLogsTable.action, "admin_notification_broadcast_queued"))
+      .orderBy(desc(adminLogsTable.createdAt))
+      .limit(historyLimit),
+  ]);
+
+  const feedAnnouncements = posts.map(post => ({
+    ...post,
+    historyId: `post-${post.id}`,
+    postId: post.id,
+    kind: "announcement" as const,
+  }));
+  const notificationBroadcasts = broadcasts.flatMap(broadcast => {
+    let title = "A message from the QuillHive team";
+    let content = broadcast.details ?? "";
+    let isFeedAnnouncement = false;
+    try {
+      const parsed = JSON.parse(content) as { title?: unknown; message?: unknown; postId?: unknown };
+      if (typeof parsed.title === "string") title = parsed.title;
+      if (typeof parsed.message === "string") content = parsed.message;
+      isFeedAnnouncement = parsed.postId != null;
+    } catch {
+      const separator = content.indexOf(": ");
+      if (separator >= 0) {
+        title = content.slice(0, separator);
+        content = content.slice(separator + 2);
+      }
+      isFeedAnnouncement = posts.some(post => broadcast.details === `${post.title}: ${post.content}`);
+    }
+    if (isFeedAnnouncement) return [];
+    return {
+      id: broadcast.id,
+      historyId: `broadcast-${broadcast.id}`,
+      title,
+      content,
+      createdAt: broadcast.createdAt,
+      postId: null,
+      boostEndsAt: null,
+      kind: "broadcast" as const,
+    };
+  });
+  const history = [...feedAnnouncements, ...notificationBroadcasts]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const pageHistory = history.slice(offset, offset + limit);
+  const hasMore = history.length > offset + limit;
+  const postIds = pageHistory.flatMap(item => item.postId === null ? [] : [item.postId]);
 
   const [likes, comments] = postIds.length > 0 ? await Promise.all([
     db.select({ postId: likesTable.postId, total: count() })
@@ -404,11 +459,17 @@ router.get("/communications/announcements", requireSuperAdmin, async (req, res) 
   const likesByPost = new Map(likes.map(row => [row.postId, row.total]));
   const commentsByPost = new Map(comments.map(row => [row.postId, row.total]));
   return res.json({
-    announcements: pagePosts.map(post => ({
-      ...post,
-      likesCount: likesByPost.get(post.id) ?? 0,
-      commentsCount: commentsByPost.get(post.id) ?? 0,
-      isBoosted: post.boostEndsAt !== null && post.boostEndsAt > new Date(),
+    announcements: pageHistory.map(item => ({
+      id: item.id,
+      historyId: item.historyId,
+      title: item.title,
+      content: item.content,
+      createdAt: item.createdAt,
+      postId: item.postId,
+      kind: item.kind,
+      likesCount: item.postId === null ? null : likesByPost.get(item.postId) ?? 0,
+      commentsCount: item.postId === null ? null : commentsByPost.get(item.postId) ?? 0,
+      isBoosted: item.boostEndsAt !== null && item.boostEndsAt > new Date(),
     })),
     nextOffset: hasMore ? offset + limit : null,
   });

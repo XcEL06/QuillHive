@@ -27,11 +27,14 @@ type Recipient = {
 
 type Announcement = {
   id: number;
+  historyId: string;
+  postId: number | null;
+  kind: "announcement" | "broadcast";
   title: string;
   content: string;
   createdAt: string;
-  likesCount: number;
-  commentsCount: number;
+  likesCount: number | null;
+  commentsCount: number | null;
   isBoosted: boolean;
 };
 
@@ -64,7 +67,7 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
   const [announcementOffset, setAnnouncementOffset] = useState<number | null>(0);
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
   const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
-  const [expandedAnnouncementId, setExpandedAnnouncementId] = useState<number | null>(null);
+  const [expandedAnnouncementId, setExpandedAnnouncementId] = useState<string | null>(null);
 
   const loadAnnouncements = useCallback(async (offset: number | null = 0) => {
     if (offset === null) return;
@@ -148,7 +151,8 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
           title: "Announcement published",
           description: `Feed post #${result.postId} is live; notification delivery is queued as job ${result.jobId}.`,
         });
-      } else {
+      } else if (selectedMode === "broadcast") {
+        void loadAnnouncements();
         toast({ title: "Broadcast queued", description: `Background job ${result.jobId} is processing users in batches.` });
       }
     } catch (error: any) {
@@ -171,7 +175,7 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-semibold">Announcement history</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Published platform announcements and their current engagement.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Feed announcements, all-user broadcasts, and current announcement engagement.</p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void loadAnnouncements()} disabled={announcementsLoading}>
           <RefreshCw className={`mr-2 h-3.5 w-3.5 ${announcementsLoading ? "animate-spin" : ""}`} />
@@ -189,25 +193,31 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
       {announcements.length === 0 && announcementsLoading ? (
         <p className="text-sm text-muted-foreground">Loading announcements…</p>
       ) : announcements.length === 0 && !announcementsError ? (
-        <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">No announcements have been published yet.</p>
+        <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">No announcements or broadcasts have been sent yet.</p>
       ) : (
         <div className="divide-y divide-border/60 rounded-lg border border-border/60">
           {announcements.map(announcement => {
-            const isExpanded = expandedAnnouncementId === announcement.id;
+            const isExpanded = expandedAnnouncementId === announcement.historyId;
             return (
-              <article key={announcement.id} className="p-4">
+              <article key={announcement.historyId} className="p-4">
                 <button
                   type="button"
                   aria-expanded={isExpanded}
-                  onClick={() => setExpandedAnnouncementId(isExpanded ? null : announcement.id)}
+                  onClick={() => setExpandedAnnouncementId(isExpanded ? null : announcement.historyId)}
                   className="flex w-full min-w-0 flex-col gap-3 text-left sm:flex-row sm:items-center sm:justify-between"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold">{announcement.title}</span>
                     <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" />{new Date(announcement.createdAt).toLocaleString()}</span>
-                      <span className="inline-flex items-center gap-1"><Heart className="h-3 w-3" />{announcement.likesCount} likes</span>
-                      <span className="inline-flex items-center gap-1"><MessageCircle className="h-3 w-3" />{announcement.commentsCount} comments</span>
+                      {announcement.kind === "broadcast" ? (
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 font-medium text-primary">Notification broadcast</span>
+                      ) : (
+                        <>
+                          <span className="inline-flex items-center gap-1"><Heart className="h-3 w-3" />{announcement.likesCount} likes</span>
+                          <span className="inline-flex items-center gap-1"><MessageCircle className="h-3 w-3" />{announcement.commentsCount} comments</span>
+                        </>
+                      )}
                       {announcement.isBoosted && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-300">Boosted</span>}
                     </span>
                   </span>
@@ -217,13 +227,17 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
                   <div className="mt-4 space-y-3 border-t border-border/60 pt-3">
                     <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{announcement.content}</p>
                     <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                      <div className="flex flex-wrap gap-4 text-muted-foreground">
-                        <span className="inline-flex items-center gap-1.5"><Heart className="h-4 w-4" />{announcement.likesCount} likes</span>
-                        <span className="inline-flex items-center gap-1.5"><MessageCircle className="h-4 w-4" />{announcement.commentsCount} comments</span>
-                      </div>
-                      <a href={`/post/${announcement.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline">
-                        Open announcement <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
+                      {announcement.postId !== null && (
+                        <>
+                          <div className="flex flex-wrap gap-4 text-muted-foreground">
+                            <span className="inline-flex items-center gap-1.5"><Heart className="h-4 w-4" />{announcement.likesCount} likes</span>
+                            <span className="inline-flex items-center gap-1.5"><MessageCircle className="h-4 w-4" />{announcement.commentsCount} comments</span>
+                          </div>
+                          <a href={`/post/${announcement.postId}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline">
+                            Open announcement <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}

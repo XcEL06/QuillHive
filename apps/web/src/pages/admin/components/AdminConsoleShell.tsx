@@ -1,6 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ArrowUpRight, BookOpen, ChevronRight, LogOut, Menu, MonitorCog, Search, X } from "lucide-react";
-import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -25,7 +24,6 @@ function initials(name: string) {
 }
 
 export default function AdminConsoleShell({ groups, activeTab, onSelectTab, currentUser, children, onBackToApp, onLogout }: AdminConsoleShellProps) {
-  const [, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
   const allItems = groups.flatMap((group) => group.items);
@@ -45,7 +43,7 @@ export default function AdminConsoleShell({ groups, activeTab, onSelectTab, curr
   const navigation = (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b border-border/70 px-5 py-5">
-        <button onClick={() => setLocation("/")} className="flex items-center gap-3 text-left">
+        <button onClick={() => onSelectTab("dashboard")} className="flex items-center gap-3 text-left">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><BookOpen className="h-4 w-4" /></span>
           <span><span className="block text-sm font-semibold tracking-tight">QuillHive</span><span className="block text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Admin console</span></span>
         </button>
@@ -96,7 +94,7 @@ export default function AdminConsoleShell({ groups, activeTab, onSelectTab, curr
               <div className="hidden items-center gap-2 text-xs text-muted-foreground lg:flex"><MonitorCog className="h-4 w-4" />Operations console</div>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild><button className="flex items-center gap-2 rounded-lg p-1.5 text-left hover:bg-muted"><span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">{initials(currentUser.displayName || "Administrator")}</span><span className="hidden max-w-32 truncate text-sm font-medium sm:block">{currentUser.displayName || "Administrator"}</span><ChevronRight className="hidden h-3.5 w-3.5 rotate-90 text-muted-foreground sm:block" /></button></DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52"><div className="px-2 py-2"><p className="text-sm font-medium">{currentUser.displayName || "Administrator"}</p><p className="text-xs capitalize text-muted-foreground">{currentUser.role?.replace("_", " ")}</p></div><DropdownMenuSeparator /><DropdownMenuItem onClick={() => setLocation("/")}><ArrowUpRight className="mr-2 h-4 w-4" />Open QuillHive</DropdownMenuItem><DropdownMenuItem onClick={onLogout}><LogOut className="mr-2 h-4 w-4" />Sign out</DropdownMenuItem></DropdownMenuContent>
+                <DropdownMenuContent align="end" className="w-52"><div className="px-2 py-2"><p className="text-sm font-medium">{currentUser.displayName || "Administrator"}</p><p className="text-xs capitalize text-muted-foreground">{currentUser.role?.replace("_", " ")}</p></div><DropdownMenuSeparator /><DropdownMenuItem asChild><a href="/" target="_blank" rel="noreferrer"><ArrowUpRight className="mr-2 h-4 w-4" />Open QuillHive</a></DropdownMenuItem><DropdownMenuItem onClick={onLogout}><LogOut className="mr-2 h-4 w-4" />Sign out</DropdownMenuItem></DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>

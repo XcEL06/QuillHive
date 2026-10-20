@@ -154,7 +154,7 @@ export default function OpportunityDetail() {
                 {opportunity.compensation && <span className="flex items-center gap-1.5"><DollarSign className="h-4 w-4" />{opportunity.compensation}</span>}
                 <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" />{opportunity.remote ? 'Remote' : opportunity.location || 'Location not specified'}</span>
                 <span className="flex items-center gap-1.5"><Clock className="h-4 w-4" /><Timestamp value={opportunity.createdAt} /></span>
-                {opportunity.expiresAt && <span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" />Application deadline: {new Date(opportunity.expiresAt).toLocaleString()}</span>}
+                {opportunity.isActive && opportunity.expiresAt && <span className="flex items-center gap-1.5"><Calendar className="h-4 w-4" />Application deadline: {new Date(opportunity.expiresAt).toLocaleString()}</span>}
               </div>
             </header>
             <section>
