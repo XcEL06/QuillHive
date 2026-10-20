@@ -118,6 +118,7 @@ export default function Admin({ initialTab }: { initialTab?: AdminTabKey }) {
     master: <AdminMaster {...props} />,
   };
 
+  const backToApp = () => setLocation("/");
   const signOut = () => { logout(); setLocation("/"); };
 
   return (
@@ -126,6 +127,7 @@ export default function Admin({ initialTab }: { initialTab?: AdminTabKey }) {
       activeTab={visibleTab}
       onSelectTab={selectSection}
       currentUser={currentUser}
+      onBackToApp={backToApp}
       onLogout={signOut}
     >
       {panels[visibleTab]}

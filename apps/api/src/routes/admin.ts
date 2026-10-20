@@ -339,6 +339,61 @@ async function enqueueOfficialBroadcast(adminId: number, title: string, message:
   return jobId;
 }
 
+router.get("/communications/announcements", requireSuperAdmin, async (req, res) => {
+  const requestedLimit = Number(req.query.limit);
+  const requestedOffset = Number(req.query.offset);
+  const limit = Number.isInteger(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 50) : 20;
+  const offset = Number.isInteger(requestedOffset) ? Math.max(requestedOffset, 0) : 0;
+  const posts = await db.select({
+    id: postsTable.id,
+    title: postsTable.title,
+    content: postsTable.content,
+    createdAt: postsTable.createdAt,
+    isPublished: postsTable.isPublished,
+    boostEndsAt: boostRequestsTable.boostEndsAt,
+  })
+    .from(postsTable)
+    .leftJoin(boostRequestsTable, and(
+      eq(boostRequestsTable.postId, postsTable.id),
+      eq(boostRequestsTable.status, "approved"),
+    ))
+    .where(and(
+      eq(postsTable.isOfficialPost, true),
+      eq(postsTable.postCategory, "announcement"),
+      eq(postsTable.isPublished, true),
+      eq(postsTable.isDeleted, false),
+    ))
+    .orderBy(desc(postsTable.createdAt))
+    .limit(limit + 1)
+    .offset(offset);
+  const hasMore = posts.length > limit;
+  const pagePosts = posts.slice(0, limit);
+  const postIds = pagePosts.map(post => post.id);
+
+  const [likes, comments] = postIds.length > 0 ? await Promise.all([
+    db.select({ postId: likesTable.postId, total: count() })
+      .from(likesTable)
+      .where(inArray(likesTable.postId, postIds))
+      .groupBy(likesTable.postId),
+    db.select({ postId: commentsTable.postId, total: count() })
+      .from(commentsTable)
+      .where(inArray(commentsTable.postId, postIds))
+      .groupBy(commentsTable.postId),
+  ]) : [[], []];
+
+  const likesByPost = new Map(likes.map(row => [row.postId, row.total]));
+  const commentsByPost = new Map(comments.map(row => [row.postId, row.total]));
+  return res.json({
+    announcements: pagePosts.map(post => ({
+      ...post,
+      likesCount: likesByPost.get(post.id) ?? 0,
+      commentsCount: commentsByPost.get(post.id) ?? 0,
+      isBoosted: post.boostEndsAt !== null && post.boostEndsAt > new Date(),
+    })),
+    nextOffset: hasMore ? offset + limit : null,
+  });
+});
+
 router.post("/communications", requireSuperAdmin, async (req: any, res) => {
   const mode = req.body?.mode;
   const userId = Number(req.body?.userId);
@@ -411,19 +466,42 @@ router.post("/communications", requireSuperAdmin, async (req: any, res) => {
       return res.status(503).json({ error: "Broadcast queue is unavailable. Configure the background worker and try again." });
     }
     const authorId = await getOfficialSystemAccountId();
-    const [post] = await db.insert(postsTable).values({
-      authorId,
-      title,
-      content,
-      excerpt: content.slice(0, 500),
-      type: "post",
-      isPublished: true,
-      isOfficialPost: true,
-      postCategory: "announcement",
-      officialTargetAudience: "all",
-      aiTextScore: 0,
-      ...interactionSettings,
-    }).returning({ id: postsTable.id });
+    const now = new Date();
+    const spotlightPlan = BOOST_PLANS.spotlight;
+    const [post] = await db.transaction(async tx => {
+      const [createdPost] = await tx.insert(postsTable).values({
+        authorId,
+        title,
+        content,
+        excerpt: content.slice(0, 500),
+        type: "post",
+        isPublished: true,
+        isOfficialPost: true,
+        postCategory: "announcement",
+        officialTargetAudience: "all",
+        officialPostPriority: 10,
+        aiTextScore: 0,
+        ...interactionSettings,
+      }).returning({ id: postsTable.id });
+
+      await tx.insert(boostRequestsTable).values({
+        userId: authorId,
+        postId: createdPost.id,
+        plan: "spotlight",
+        durationHours: spotlightPlan.durationHours,
+        reachMultiplier: spotlightPlan.reachMultiplier,
+        placementPriority: spotlightPlan.placementPriority,
+        status: "approved",
+        paidAmountCents: 0,
+        grantedByAdminId: req.currentUser.id,
+        reviewedBy: req.currentUser.id,
+        reviewedAt: now,
+        boostStartsAt: now,
+        boostEndsAt: new Date(now.getTime() + spotlightPlan.durationHours * 3_600_000),
+        adminNote: "Default Spotlight boost for platform announcement",
+      });
+      return [createdPost] as const;
+    });
 
     let jobId: string;
     try {
@@ -431,8 +509,15 @@ router.post("/communications", requireSuperAdmin, async (req: any, res) => {
     } catch (error) {
       await db.update(postsTable).set({ isPublished: false, updatedAt: new Date() })
         .where(eq(postsTable.id, post.id));
+      await db.update(boostRequestsTable).set({ status: "rejected" })
+        .where(and(eq(boostRequestsTable.postId, post.id), eq(boostRequestsTable.status, "approved")));
       throw error;
     }
+    await Promise.all([
+      deleteCachePattern("feed:*"),
+      deleteCachePattern("trending:*"),
+    ]);
+    memDeletePattern("trending:");
     await auditLog(req.currentUser.id, "admin_feed_announcement_published", "post", post.id, title);
     return res.status(202).json({ success: true, postId: post.id, jobId, status: "queued" });
   }

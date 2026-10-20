@@ -19,6 +19,7 @@ describe("AdminConsoleShell scrolling", () => {
         activeTab="dashboard"
         onSelectTab={() => {}}
         currentUser={{ role: "admin", displayName: "Admin" }}
+        onBackToApp={() => {}}
         onLogout={() => {}}
       >
         <div>Admin content</div>

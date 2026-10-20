@@ -16,6 +16,7 @@ interface AdminConsoleShellProps {
   onSelectTab: (key: AdminTabKey) => void;
   currentUser: { role?: string; displayName?: string };
   children: ReactNode;
+  onBackToApp: () => void;
   onLogout: () => void;
 }
 
@@ -23,7 +24,7 @@ function initials(name: string) {
   return name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "QH";
 }
 
-export default function AdminConsoleShell({ groups, activeTab, onSelectTab, currentUser, children, onLogout }: AdminConsoleShellProps) {
+export default function AdminConsoleShell({ groups, activeTab, onSelectTab, currentUser, children, onBackToApp, onLogout }: AdminConsoleShellProps) {
   const [, setLocation] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -72,7 +73,7 @@ export default function AdminConsoleShell({ groups, activeTab, onSelectTab, curr
       </div>
       <div className="mt-auto border-t border-border/70 p-4">
         <div className="mb-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5 text-xs text-muted-foreground">Operations workspace</div>
-        <button onClick={onLogout} className="flex w-full items-center gap-2 px-2 text-sm text-muted-foreground transition-colors hover:text-foreground"><LogOut className="h-4 w-4" /> Back to app</button>
+        <button onClick={onBackToApp} className="flex w-full items-center gap-2 px-2 text-sm text-muted-foreground transition-colors hover:text-foreground"><ArrowUpRight className="h-4 w-4" /> Back to app</button>
       </div>
     </div>
   );

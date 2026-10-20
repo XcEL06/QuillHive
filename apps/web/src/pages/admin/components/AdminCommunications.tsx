@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Megaphone, Search, Send } from "lucide-react";
+import { CalendarDays, ExternalLink, Heart, Megaphone, MessageCircle, RefreshCw, Search, Send } from "lucide-react";
 import type { AdminProps } from "./types";
 import { useAdminFetch } from "../hooks/useAdminFetch";
 
@@ -23,6 +23,16 @@ type Recipient = {
   username: string;
   displayName: string;
   email: string;
+};
+
+type Announcement = {
+  id: number;
+  title: string;
+  content: string;
+  createdAt: string;
+  likesCount: number;
+  commentsCount: number;
+  isBoosted: boolean;
 };
 
 const MODES: Array<{ key: CommunicationMode; label: string }> = [
@@ -50,6 +60,31 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
   });
   const [sending, setSending] = useState(false);
   const [confirmBroadcast, setConfirmBroadcast] = useState(false);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementOffset, setAnnouncementOffset] = useState<number | null>(0);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [announcementsError, setAnnouncementsError] = useState<string | null>(null);
+  const [expandedAnnouncementId, setExpandedAnnouncementId] = useState<number | null>(null);
+
+  const loadAnnouncements = useCallback(async (offset: number | null = 0) => {
+    if (offset === null) return;
+    setAnnouncementsLoading(true);
+    setAnnouncementsError(null);
+    try {
+      const data = await fetchAdmin(`/api/admin/communications/announcements?limit=20&offset=${offset}`);
+      const loaded = Array.isArray(data.announcements) ? data.announcements as Announcement[] : [];
+      setAnnouncements(current => offset === 0 ? loaded : [...current, ...loaded]);
+      setAnnouncementOffset(data.nextOffset ?? null);
+    } catch (error) {
+      setAnnouncementsError(error instanceof Error ? error.message : "Could not load announcement history.");
+    } finally {
+      setAnnouncementsLoading(false);
+    }
+  }, [fetchAdmin]);
+
+  useEffect(() => {
+    void loadAnnouncements();
+  }, [loadAnnouncements]);
 
   useEffect(() => {
     if (mode === "broadcast" || mode === "announcement" || search.trim().length < 2) {
@@ -108,6 +143,7 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
       } else if (selectedMode === "notification") {
         toast({ title: "QuillHive notification sent", description: "It was saved and pushed through the live notification channel." });
       } else if (selectedMode === "announcement") {
+        void loadAnnouncements();
         toast({
           title: "Announcement published",
           description: `Feed post #${result.postId} is live; notification delivery is queued as job ${result.jobId}.`,
@@ -131,6 +167,80 @@ export default function AdminCommunications({ token, toast }: AdminProps) {
     : "";
 
   return <>
+    <section className="mx-auto mb-5 max-w-3xl space-y-4 rounded-xl border border-border/70 bg-background p-5 shadow-sm sm:p-6">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Announcement history</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Published platform announcements and their current engagement.</p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={() => void loadAnnouncements()} disabled={announcementsLoading}>
+          <RefreshCw className={`mr-2 h-3.5 w-3.5 ${announcementsLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      </header>
+
+      {announcementsError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3" role="alert">
+          <p className="text-sm text-destructive">Could not load announcement history: {announcementsError}</p>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadAnnouncements()}>Try again</Button>
+        </div>
+      )}
+
+      {announcements.length === 0 && announcementsLoading ? (
+        <p className="text-sm text-muted-foreground">Loading announcements…</p>
+      ) : announcements.length === 0 && !announcementsError ? (
+        <p className="rounded-lg border border-dashed border-border p-5 text-center text-sm text-muted-foreground">No announcements have been published yet.</p>
+      ) : (
+        <div className="divide-y divide-border/60 rounded-lg border border-border/60">
+          {announcements.map(announcement => {
+            const isExpanded = expandedAnnouncementId === announcement.id;
+            return (
+              <article key={announcement.id} className="p-4">
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  onClick={() => setExpandedAnnouncementId(isExpanded ? null : announcement.id)}
+                  className="flex w-full min-w-0 flex-col gap-3 text-left sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold">{announcement.title}</span>
+                    <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1"><CalendarDays className="h-3 w-3" />{new Date(announcement.createdAt).toLocaleString()}</span>
+                      <span className="inline-flex items-center gap-1"><Heart className="h-3 w-3" />{announcement.likesCount} likes</span>
+                      <span className="inline-flex items-center gap-1"><MessageCircle className="h-3 w-3" />{announcement.commentsCount} comments</span>
+                      {announcement.isBoosted && <span className="rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-300">Boosted</span>}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-xs font-medium text-primary">{isExpanded ? "Hide details" : "View details"}</span>
+                </button>
+                {isExpanded && (
+                  <div className="mt-4 space-y-3 border-t border-border/60 pt-3">
+                    <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{announcement.content}</p>
+                    <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+                      <div className="flex flex-wrap gap-4 text-muted-foreground">
+                        <span className="inline-flex items-center gap-1.5"><Heart className="h-4 w-4" />{announcement.likesCount} likes</span>
+                        <span className="inline-flex items-center gap-1.5"><MessageCircle className="h-4 w-4" />{announcement.commentsCount} comments</span>
+                      </div>
+                      <a href={`/post/${announcement.id}`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-medium text-primary hover:underline">
+                        Open announcement <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      )}
+      {announcementOffset !== null && announcements.length > 0 && (
+        <div className="text-center">
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadAnnouncements(announcementOffset)} disabled={announcementsLoading}>
+            {announcementsLoading ? "Loading…" : "Load more announcements"}
+          </Button>
+        </div>
+      )}
+    </section>
+
     <section className="mx-auto max-w-3xl space-y-5 rounded-xl border border-border/70 bg-background p-5 shadow-sm sm:p-6">
       <header>
         <h2 className="font-semibold">Platform communications</h2>
