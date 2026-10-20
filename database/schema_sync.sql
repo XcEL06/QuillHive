@@ -1,7 +1,8 @@
 -- Generated from packages/utils/db/src/schema/*.ts by scripts/sql/generate-schema-sync.mjs.
 -- Refresh with: pnpm project:snapshot
--- Additive only: this file creates missing objects and never removes or rewrites data.
--- For existing tables, required columns without defaults are added nullable to preserve existing rows.
+  -- Creates missing objects and preserves existing data except NULL email_digest_enabled values,
+  -- which are backfilled to the schema default before the NOT NULL contract is enforced.
+  -- For existing tables, required columns without defaults are added nullable to preserve existing rows.
 -- Unique indexes that conflict with existing duplicate values are skipped with a NOTICE.
 -- Foreign keys are validated on empty tables and added NOT VALID on populated tables, preserving old data.
 -- Existing column types/defaults and invalid historical foreign-key rows are not rewritten or repaired.
@@ -110,6 +111,8 @@ CREATE TABLE IF NOT EXISTS "users" (
 	"email_verified" boolean DEFAULT false NOT NULL,
 	"is_banned" boolean DEFAULT false NOT NULL,
 	"banned_at" timestamp,
+	"banned_until" timestamp,
+	"ban_reason" text,
 	"is_deleted" boolean DEFAULT false NOT NULL,
 	"deleted_at" timestamp,
 	"is_featured" boolean DEFAULT false NOT NULL,
@@ -213,6 +216,10 @@ CREATE TABLE IF NOT EXISTS "posts" (
 	"attachments" text DEFAULT '[]' NOT NULL,
 	"tags" text DEFAULT '[]' NOT NULL,
 	"is_published" boolean DEFAULT true NOT NULL,
+	"comments_enabled" boolean DEFAULT true NOT NULL,
+	"likes_enabled" boolean DEFAULT true NOT NULL,
+	"reposts_enabled" boolean DEFAULT true NOT NULL,
+	"sharing_enabled" boolean DEFAULT true NOT NULL,
 	"visibility" text DEFAULT 'public' NOT NULL,
 	"scheduled_at" timestamp,
 	"expires_at" timestamp,
@@ -233,6 +240,8 @@ CREATE TABLE IF NOT EXISTS "posts" (
 	"sponsor_url" text,
 	"is_deleted" boolean DEFAULT false NOT NULL,
 	"deleted_at" timestamp,
+	"is_archived" boolean DEFAULT false NOT NULL,
+	"archive_type" text DEFAULT 'owner' NOT NULL,
 	"is_official_post" boolean DEFAULT false NOT NULL,
 	"post_category" text,
 	"official_post_priority" integer DEFAULT 0 NOT NULL,
@@ -420,6 +429,7 @@ CREATE TABLE IF NOT EXISTS "jobs" (
 	"type" text DEFAULT 'job' NOT NULL,
 	"skills" text DEFAULT '[]' NOT NULL,
 	"compensation" text,
+	"fee_details" text,
 	"remote" boolean DEFAULT true NOT NULL,
 	"location" text,
 	"is_paid" boolean DEFAULT false NOT NULL,
@@ -2535,6 +2545,36 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('users') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "banned_until" timestamp;
+  ELSE
+    RAISE NOTICE 'Skipped column banned_until: users is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column banned_until on users: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('users') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "ban_reason" text;
+  ELSE
+    RAISE NOTICE 'Skipped column ban_reason: users is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column ban_reason on users: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('users') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "is_deleted" boolean DEFAULT false NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column is_deleted: users is not a table';
@@ -3780,6 +3820,66 @@ BEGIN
     SELECT 1 FROM pg_class
     WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
   ) THEN
+    ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "comments_enabled" boolean DEFAULT true NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column comments_enabled: posts is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column comments_enabled on posts: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "likes_enabled" boolean DEFAULT true NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column likes_enabled: posts is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column likes_enabled on posts: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "reposts_enabled" boolean DEFAULT true NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column reposts_enabled: posts is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column reposts_enabled on posts: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "sharing_enabled" boolean DEFAULT true NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column sharing_enabled: posts is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column sharing_enabled on posts: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
+  ) THEN
     ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "visibility" text DEFAULT 'public' NOT NULL;
   ELSE
     RAISE NOTICE 'Skipped column visibility: posts is not a table';
@@ -4072,6 +4172,36 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column deleted_at on posts: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "is_archived" boolean DEFAULT false NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column is_archived: posts is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column is_archived on posts: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('posts') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "posts" ADD COLUMN IF NOT EXISTS "archive_type" text DEFAULT 'owner' NOT NULL;
+  ELSE
+    RAISE NOTICE 'Skipped column archive_type: posts is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column archive_type on posts: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -6202,6 +6332,21 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped column compensation on jobs: %', SQLERRM;
+END
+$schema_sync$;
+DO $schema_sync$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class
+    WHERE oid = to_regclass('jobs') AND relkind IN ('r', 'p')
+  ) THEN
+    ALTER TABLE "jobs" ADD COLUMN IF NOT EXISTS "fee_details" text;
+  ELSE
+    RAISE NOTICE 'Skipped column fee_details: jobs is not a table';
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped column fee_details on jobs: %', SQLERRM;
 END
 $schema_sync$;
 DO $schema_sync$
@@ -21706,6 +21851,17 @@ BEGIN
 EXCEPTION
   WHEN OTHERS THEN
     RAISE NOTICE 'Skipped index idx_reposts_user_id: %', SQLERRM;
+END
+$schema_sync$;
+
+DO $schema_sync$
+BEGIN
+  CREATE UNIQUE INDEX IF NOT EXISTS "reposts_user_post_unique" ON "reposts" USING btree ("post_id","user_id");
+EXCEPTION
+  WHEN unique_violation THEN
+    RAISE NOTICE 'Skipped unique index reposts_user_post_unique: existing rows contain duplicate values';
+  WHEN OTHERS THEN
+    RAISE NOTICE 'Skipped unique index reposts_user_post_unique: %', SQLERRM;
 END
 $schema_sync$;
 

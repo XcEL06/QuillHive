@@ -1,6 +1,6 @@
 # QuillHive project overview
 
-> Generated on 2026-10-16 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
+> Generated on 2026-10-20 from the checked-out source. Re-run `pnpm project:snapshot` to refresh both this file's route/database inventories and `database/schema_sync.sql`. Feature-state and gap assessments below are source audits and should be reviewed when implementation changes.
 
 ## Project shape
 
@@ -296,6 +296,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 
 - `GET /api/groups/:id/activity` — Read or list groups activity. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `POST /api/groups/:id/archive` — Create or submit groups archive. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
+- `GET /api/groups/:id/archived-posts` — Read or list groups archived posts. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `POST /api/groups/:id/bans` — Create or submit groups bans. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `DELETE /api/groups/:id/bans/:userId` — Remove groups bans. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
 - `PATCH /api/groups/:id/features` — Update groups features. ([source](apps/api/src/features/groups/groupAdmin.routes.ts)).
@@ -433,6 +434,8 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `GET /api/posts/:id` — Read or list posts. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `PATCH /api/posts/:id` — Update posts. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `POST /api/posts/:id/ab-click/:variant` — Create or submit posts ab click. ([source](apps/api/src/features/posts/post.routes.ts)).
+- `DELETE /api/posts/:id/archive` — Remove posts archive. ([source](apps/api/src/features/posts/post.routes.ts)).
+- `POST /api/posts/:id/archive` — Create or submit posts archive. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `GET /api/posts/:id/comments` — Read or list posts comments. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `POST /api/posts/:id/comments` — Create or submit posts comments. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `GET /api/posts/:id/curators` — Read or list posts curators. ([source](apps/api/src/features/posts/post.routes.ts)).
@@ -443,6 +446,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `POST /api/posts/:id/save` — Create or submit posts save. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `POST /api/posts/:id/share` — Create or submit posts share. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `POST /api/posts/:id/track-share` — Create or submit posts track share. ([source](apps/api/src/features/posts/post.routes.ts)).
+- `GET /api/posts/archived` — Read or list posts archived. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `POST /api/posts/draft` — Create or submit posts draft. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `DELETE /api/posts/draft/:id` — Remove posts draft. ([source](apps/api/src/features/posts/post.routes.ts)).
 - `GET /api/posts/draft/:id` — Read or list posts draft. ([source](apps/api/src/features/posts/post.routes.ts)).
@@ -631,6 +635,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `GET /api/admin/posts` — Read or list admin posts. ([source](apps/api/src/routes/admin.ts)).
 - `DELETE /api/admin/posts/:id` — Remove admin posts. ([source](apps/api/src/routes/admin.ts)).
 - `GET /api/admin/posts/:id` — Read or list admin posts. ([source](apps/api/src/routes/admin.ts)).
+- `GET /api/admin/posts/:id/engagement` — Read or list posts engagement. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/posts/:id/flag` — Create or submit posts flag. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/posts/:id/grant-boost` — Create or submit posts grant boost. ([source](apps/api/src/routes/admin.ts)).
 - `PATCH /api/admin/posts/:id/unpublish` — Unpublish content (admin posts :id). ([source](apps/api/src/routes/admin.ts)).
@@ -668,6 +673,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `PATCH /api/admin/users/:id/role` — Update users role. ([source](apps/api/src/routes/admin.ts)).
 - `GET /api/admin/users/:id/strikes` — Read or list users strikes. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/users/:id/strikes` — Create or submit users strikes. ([source](apps/api/src/routes/admin.ts)).
+- `POST /api/admin/users/:id/temporary-restriction` — Create or submit users temporary restriction. ([source](apps/api/src/routes/admin.ts)).
 - `POST /api/admin/users/:id/warn` — Create or submit users warn. ([source](apps/api/src/routes/admin.ts)).
 
 ### routes / ai
@@ -695,6 +701,7 @@ The API application mounts the main router at `/api`; public distribution endpoi
 - `POST /api/groups/:id/opportunities/:opportunityId/reshare` — Create or submit opportunities reshare. ([source](apps/api/src/routes/groups.ts)).
 - `GET /api/groups/:id/posts` — Read or list groups posts. ([source](apps/api/src/routes/groups.ts)).
 - `POST /api/groups/:id/posts` — Create or submit groups posts. ([source](apps/api/src/routes/groups.ts)).
+- `DELETE /api/groups/:id/posts/:postId/archive` — Remove posts archive. ([source](apps/api/src/routes/groups.ts)).
 - `POST /api/groups/:id/posts/:postId/archive` — Create or submit posts archive. ([source](apps/api/src/routes/groups.ts)).
 - `POST /api/groups/:id/posts/:postId/best-answer` — Create or submit posts best answer. ([source](apps/api/src/routes/groups.ts)).
 - `PATCH /api/groups/:id/posts/:postId/comments` — Update posts comments. ([source](apps/api/src/routes/groups.ts)).
