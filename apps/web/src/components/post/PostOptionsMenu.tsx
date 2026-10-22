@@ -2,21 +2,15 @@ import * as React from 'react';
 import type { ComponentType } from 'react';
 import {
   Archive,
-  BarChart3,
   BellOff,
   Bookmark,
   BookOpen,
-  BriefcaseBusiness,
-  CheckCircle2,
   CircleDollarSign,
   Code2,
   Edit3,
   Flag,
   Link2,
-  MessageCircleOff,
   MoreHorizontal,
-  Pin,
-  PinOff,
   Redo2,
   Send,
   Share2,
@@ -24,7 +18,6 @@ import {
   Trash2,
   UserMinus,
   UserPlus,
-  XCircle,
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useToast } from '@/hooks/use-toast';
@@ -53,9 +46,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -69,21 +59,11 @@ export type PostOptionPost = {
 };
 
 export type PostOptionAction =
-  | 'pin'
   | 'edit'
-  | 'analytics'
-  | 'proposals'
   | 'boost'
-  | 'toggle-comments'
   | 'archive'
   | 'restore'
-  | 'filled'
-  | 'completed'
-  | 'closed'
-  | 'unavailable'
-  | 'reopen'
   | 'delete'
-  | 'delete-permanently'
   | 'save'
   | 'add-to-library'
   | 'copy-link'
@@ -91,28 +71,19 @@ export type PostOptionAction =
   | 'share-whatsapp'
   | 'share-twitter'
   | 'follow'
-  | 'not-interested'
   | 'mute'
   | 'block'
-  | 'report'
-  | 'apply'
-  | 'withdraw-proposal'
-  | 'save-job';
+  | 'report';
 
 export type PostOptionsMenuProps = {
   post: PostOptionPost;
-  currentUserId?: number | string | null;
   isOwner: boolean;
   canRestore?: boolean;
-  isPinned?: boolean;
-  commentsEnabled?: boolean;
   sharingEnabled?: boolean;
   isSaved?: boolean;
   isFollowingAuthor?: boolean;
-  hasApplied?: boolean;
-  hideAnalytics?: boolean;
   hideBoost?: boolean;
-  onAction?: (action: PostOptionAction, post: PostOptionPost) => void | Promise<void>;
+  onAction: (action: PostOptionAction, post: PostOptionPost) => void | Promise<void>;
   onDeletePermanently: () => void | Promise<void>;
   extraActions?: Array<{ label: string; icon: ComponentType<{ className?: string }>; onSelect: () => void }>;
   className?: string;
@@ -125,30 +96,17 @@ type MenuItem = {
   destructive?: boolean;
 };
 
-const reportReasons = [
-  'Spam',
-  'Plagiarism',
-  'Harassment',
-  'Scam/Fake Job',
-  'Inappropriate Content',
-] as const;
-
 function ItemIcon({ icon: Icon }: { icon: React.ElementType }) {
   return <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />;
 }
 
 export function PostOptionsMenu({
   post,
-  currentUserId,
   isOwner,
   canRestore = false,
-  isPinned = false,
-  commentsEnabled = true,
   sharingEnabled = true,
   isSaved = false,
   isFollowingAuthor = false,
-  hasApplied = false,
-  hideAnalytics = false,
   hideBoost = false,
   onAction,
   onDeletePermanently,
@@ -164,7 +122,7 @@ export function PostOptionsMenu({
   const runAction = React.useCallback(async (action: PostOptionAction) => {
     setOpen(false);
     try {
-      await onAction?.(action, post);
+      await onAction(action, post);
     } catch (error) {
       toast({
         title: 'Action could not be completed',
@@ -181,7 +139,7 @@ export function PostOptionsMenu({
       if (confirmation === 'delete') {
         await onDeletePermanently();
       } else {
-        await onAction?.('archive', post);
+        await onAction('archive', post);
       }
       setConfirmation(null);
       setOpen(false);
@@ -200,9 +158,7 @@ export function PostOptionsMenu({
     {
       label: 'Management',
       items: [
-        { label: isPinned ? 'Unpin from Profile' : 'Pin to Profile', action: 'pin', icon: isPinned ? PinOff : Pin },
         { label: 'Edit Post', action: 'edit', icon: Edit3 },
-        ...(post.type === 'job' || !hideAnalytics ? [{ label: post.type === 'job' ? 'View Proposals' : 'View Analytics', action: post.type === 'job' ? 'proposals' as const : 'analytics' as const, icon: post.type === 'job' ? BriefcaseBusiness : BarChart3 }] : []),
         ...(post.type !== 'job' && !hideBoost ? [{ label: 'Boost Post', action: 'boost' as const, icon: CircleDollarSign }] : []),
       ],
     },
@@ -221,19 +177,12 @@ export function PostOptionsMenu({
     {
       label: 'Visibility',
       items: [
-        { label: commentsEnabled ? 'Turn Off Comments' : 'Turn On Comments', action: 'toggle-comments', icon: MessageCircleOff },
-        ...(post.isArchived
-          ? canRestore ? [{ label: 'Restore Post', action: 'restore' as const, icon: Redo2 }] : []
-          : [{ label: 'Archive Post', action: 'archive' as const, icon: Archive }]),
+        ...(post.type !== 'group_post'
+          ? post.isArchived
+            ? canRestore ? [{ label: 'Restore Post', action: 'restore' as const, icon: Redo2 }] : []
+            : [{ label: 'Archive Post', action: 'archive' as const, icon: Archive }]
+          : []),
         { label: 'Delete Post', action: 'delete' as const, icon: Trash2, destructive: true },
-        ...(post.type === 'job' ? [
-          ...(post.status === 'active' ? [
-            { label: 'Mark as Filled', action: 'filled' as const, icon: CheckCircle2 },
-            { label: 'Mark as Completed', action: 'completed' as const, icon: CheckCircle2 },
-            { label: 'Close Opportunity', action: 'closed' as const, icon: XCircle },
-            { label: 'Mark as No Longer Available', action: 'unavailable' as const, icon: Archive },
-          ] : [{ label: 'Reopen Opportunity', action: 'reopen' as const, icon: Redo2 }]),
-        ] : []),
       ],
     },
   ];
@@ -256,7 +205,6 @@ export function PostOptionsMenu({
       label: 'Preferences',
       items: [
         { label: isFollowingAuthor ? 'Unfollow Author' : 'Follow Author', action: 'follow', icon: isFollowingAuthor ? UserMinus : UserPlus },
-        { label: 'Not Interested', action: 'not-interested', icon: BellOff },
         { label: 'Mute Author', action: 'mute', icon: BellOff },
         { label: 'Block Author', action: 'block', icon: ShieldBan, destructive: true },
       ],
@@ -271,17 +219,6 @@ export function PostOptionsMenu({
     viewerSections.unshift({
       label: 'Archived post',
       items: [{ label: 'Restore Post', action: 'restore', icon: Redo2 }],
-    });
-  }
-
-  if (!isOwner && post.type === 'job') {
-    viewerSections.splice(1, 0, {
-      label: 'Workspace',
-      items: [
-        { label: hasApplied ? 'Withdraw Proposal' : 'Apply for this Job', action: hasApplied ? 'withdraw-proposal' : 'apply', icon: hasApplied ? XCircle : BriefcaseBusiness },
-        { label: 'Save Job', action: 'save-job', icon: Bookmark },
-        { label: 'Report Job', action: 'report', icon: Flag, destructive: true },
-      ],
     });
   }
 
@@ -312,25 +249,9 @@ export function PostOptionsMenu({
     </button>
   );
 
-  const renderReportSubmenu = (mobile = false) => mobile ? (
-    <div className="space-y-1">
-      <p className="px-3 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Report Post</p>
-      {reportReasons.map((reason) => (
-        <button key={reason} type="button" className={itemClass(true)} onClick={() => { setOpen(false); void runAction('report'); }}>
-          <Flag className="h-4 w-4 shrink-0" aria-hidden="true" />{reason}
-        </button>
-      ))}
-    </div>
-  ) : (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger className="gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-destructive focus:bg-destructive/10">
-        <Flag className="h-4 w-4" /> Report Post
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-52 rounded-xl p-1">
-        {reportReasons.map((reason) => <DropdownMenuItem key={reason} onSelect={() => void runAction('report')} className="cursor-pointer gap-2 rounded-lg py-2.5">{reason}</DropdownMenuItem>)}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  );
+  const renderReportAction = (mobile = false) => mobile
+    ? <button type="button" className={itemClass(true)} onClick={() => { setOpen(false); void runAction('report'); }}><Flag className="h-4 w-4 shrink-0" aria-hidden="true" /><span>Report Post</span></button>
+    : <DropdownMenuItem onSelect={() => { setOpen(false); void runAction('report'); }} className={`${itemClass(true)} cursor-pointer`}><Flag className="h-4 w-4 shrink-0" aria-hidden="true" /><span>Report Post</span></DropdownMenuItem>;
 
   const renderSections = (mobile = false) => {
     const sections = isOwner ? ownerSections : viewerSections;
@@ -339,8 +260,7 @@ export function PostOptionsMenu({
         {index > 0 && (mobile ? <div className="my-3 h-px bg-border" /> : <DropdownMenuSeparator />)}
         {mobile ? <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{section.label}</p> : <DropdownMenuLabel className="px-3 pb-1 pt-2 text-xs uppercase tracking-wider text-muted-foreground">{section.label}</DropdownMenuLabel>}
         {section.items.map((item) => mobile ? renderItem(item) : <DropdownMenuItem key={`${item.action}-${item.label}`} onSelect={() => { setOpen(false); if (item.action === 'archive') setConfirmation('archive'); else if (item.action === 'delete') setConfirmation('delete'); else void runAction(item.action); }} className={`${itemClass(item.destructive)} cursor-pointer`}>{React.createElement(item.icon, { className: 'h-4 w-4 shrink-0', 'aria-hidden': true })}<span>{item.label}</span></DropdownMenuItem>)}
-        {!isOwner && section.label === 'Support' && !mobile && renderReportSubmenu()}
-        {!isOwner && section.label === 'Support' && mobile && renderReportSubmenu(true)}
+        {!isOwner && section.label === 'Support' && renderReportAction(mobile)}
       </React.Fragment>
     ));
   };

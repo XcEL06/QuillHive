@@ -8,7 +8,7 @@ import { readingTimeLabel } from '@/lib/readingTime';
 import { useLikePost, useDeletePost, useGetGroup, type Post } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth';
-import { apiUrl, mediaUrl, copyTextToClipboard, getPostShareUrl } from '@/lib/api';
+import { apiFetch, apiUrl, mediaUrl, copyTextToClipboard, getPostShareUrl } from '@/lib/api';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import { getStoredToken } from '@/lib/api';
 import { useI18n, useT } from '@/lib/i18n';
 import { PollBlock, samePollText } from '@/components/post/PollBlock';
 import { PostOptionsMenu, type PostOptionAction, type PostOptionPost, type PostOptionsMenuProps } from './PostOptionsMenu';
+import { ReportDialog } from '@/components/report/ReportDialog';
 import { ImageLightbox } from './ImageLightbox';
 import { formatPostTimestamp } from '@/lib/postTimestamp';
 import { useFeature } from '@/lib/features';
@@ -358,7 +359,7 @@ function TrustBadge({ tier, isAdmin }: { tier?: string; isAdmin?: boolean }) {
   return null;
 }
 
-export function PostCard({ post: initialPost, compact = false, feedStyle = false, hideAnalytics = false, hideBoost = false, hideReputation = false, extraActions = [] }: { post: EnrichedPost; compact?: boolean; feedStyle?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean; extraActions?: PostOptionsMenuProps['extraActions'] }) {
+export function PostCard({ post: initialPost, compact = false, feedStyle = false, hideBoost = false, hideReputation = false, extraActions = [] }: { post: EnrichedPost; compact?: boolean; feedStyle?: boolean; hideAnalytics?: boolean; hideBoost?: boolean; hideReputation?: boolean; extraActions?: PostOptionsMenuProps['extraActions'] }) {
   const [, setLocation] = useLocation();
   const { user: currentUser } = useAuthStore();
   const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
@@ -378,6 +379,8 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
   const [translateError, setTranslateError] = useState(false);
   const [showWhyDialog, setShowWhyDialog] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [isFollowingAuthor, setIsFollowingAuthor] = useState(Boolean(initialPost.author.isFollowing));
   const [boostOpen, setBoostOpen] = useState(false);
   const [boostPlan, setBoostPlan] = useState<'starter' | 'growth' | 'spotlight'>('starter');
   const [isBoosting, setIsBoosting] = useState(false);
@@ -394,7 +397,10 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
   const t = useT();
   const { lang } = useI18n();
 
-  useEffect(() => setPost(initialPost), [initialPost]);
+  useEffect(() => {
+    setPost(initialPost);
+    setIsFollowingAuthor(Boolean(initialPost.author.isFollowing));
+  }, [initialPost]);
 
   useEffect(() => {
     if (!post.isBoosted || !post.boostEndsAt) {
@@ -690,7 +696,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
   }, [post.id]);
 
   const handleReport = () => {
-    toast({ title: 'Report submitted', description: 'Our team will review this post.' });
+    setReportOpen(true);
   };
 
   const handlePostOptionAction = async (action: PostOptionAction, optionPost: PostOptionPost) => {
@@ -705,7 +711,6 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
         setLocation(`/write?edit=${post.id}`);
         break;
       case 'save':
-      case 'save-job':
         await handleSave();
         break;
       case 'embed': {
@@ -730,6 +735,19 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
       case 'report':
         handleReport();
         break;
+      case 'follow': {
+        if (!currentUser || !token) throw new Error('Sign in to follow creators');
+        const response = await apiFetch(`/api/users/${encodeURIComponent(post.author.username)}/follow`, { method: 'POST' });
+        const result = await response.json().catch(() => null) as { following?: boolean; error?: string } | null;
+        if (!response.ok || typeof result?.following !== 'boolean') {
+          throw new Error(result?.error ?? 'Could not update follow status');
+        }
+        setIsFollowingAuthor(result.following);
+        await queryClient.invalidateQueries({ queryKey: ['/api/feed'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
+        toast({ title: result.following ? 'Following creator' : 'Unfollowed creator' });
+        break;
+      }
       case 'mute': {
         const res = await fetch(apiUrl(`/api/blocks/mute/${optionPost.authorId}`), {
           method: 'POST',
@@ -739,12 +757,17 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
         toast({ title: 'Author muted', description: 'Their posts will no longer appear in your feed.' });
         break;
       }
-      case 'pin':
-        await handlePinToGroup();
+      case 'block': {
+        if (!currentUser || !token) throw new Error('Sign in to block creators');
+        const response = await apiFetch(`/api/blocks/${optionPost.authorId}`, { method: 'POST' });
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        if (!response.ok) throw new Error(result?.error ?? 'Could not block author');
+        setIsHidden(true);
+        await queryClient.invalidateQueries({ queryKey: ['/api/feed'] });
+        await queryClient.invalidateQueries({ queryKey: ['/api/posts'] });
+        toast({ title: 'Author blocked', description: 'Their posts will no longer appear in your feed.' });
         break;
-      case 'toggle-comments':
-        toast({ title: 'Comment settings updated' });
-        break;
+      }
       case 'archive':
       case 'restore': {
         const archived = action === 'archive';
@@ -763,7 +786,7 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
         break;
       }
       default:
-        toast({ title: 'Action saved', description: 'Your preference has been updated.' });
+        throw new Error('This post action is not available.');
     }
   };
 
@@ -896,12 +919,11 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
           <div className="shrink-0">
             <PostOptionsMenu
               post={optionPost}
-              currentUserId={currentUser?.id}
               isOwner={isOwner}
               canRestore={Boolean(post.isArchived && ((isOwner && post.archiveType !== 'moderation') || currentUser?.role === 'super_admin'))}
               isSaved={post.isSaved}
+              isFollowingAuthor={isFollowingAuthor}
               sharingEnabled={post.sharingEnabled !== false}
-              hideAnalytics={hideAnalytics}
               hideBoost={hideBoost}
               onAction={handlePostOptionAction}
               onDeletePermanently={handleDeletePermanently}
@@ -1254,6 +1276,13 @@ export function PostCard({ post: initialPost, compact = false, feedStyle = false
           )}
         </AnimatePresence>
       </motion.article>
+      <ReportDialog
+        targetType={optionPost.type === 'job' ? 'job' : 'post'}
+        targetId={post.id}
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        hideTrigger
+      />
 
       {/* Boost Dialog */}
       {!hideBoost && <Dialog open={boostOpen} onOpenChange={setBoostOpen}>
