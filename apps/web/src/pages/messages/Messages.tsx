@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useGetConversations, useGetMessages, useSendMessage, getGetMessagesQueryKey } from '@workspace/api-client-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useLocation, useSearch } from 'wouter';
+import { Link, useLocation, useRoute, useSearch } from 'wouter';
 import { useAuthStore } from '@/store/auth';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck, BadgeCheck } from 'lucide-react';
+import { ArrowLeft, Send, Users, Search, MessageCircle, PenSquare, Check, CheckCheck, BadgeCheck } from 'lucide-react';
 import NewConversationModal from '@/components/messages/NewConversationModal';
 import { ReportDialog } from '@/components/report/ReportDialog';
 import { Timestamp, formatPostTimestamp } from '@/lib/postTimestamp';
@@ -68,6 +68,7 @@ interface MessageRequest {
 export default function Messages() {
   usePageTitle('Messages');
   const [, setLocation] = useLocation();
+  const [, conversationRouteParams] = useRoute('/messages/:convId');
   const search = useSearch();
   const { user: currentUser } = useAuthStore();
   const t = useT();
@@ -291,7 +292,7 @@ export default function Messages() {
 
   useEffect(() => {
     const params = new URLSearchParams(search);
-    const requestedConversationId = Number(params.get('conv'));
+    const requestedConversationId = Number(params.get('conv') ?? conversationRouteParams?.convId);
     if (Number.isInteger(requestedConversationId) && requestedConversationId > 0) {
       requestedUserStartRef.current = null;
       if (requestedConversationId !== activeConvId) handleSelectConv(requestedConversationId);
@@ -341,7 +342,7 @@ export default function Messages() {
         });
       }
     })();
-  }, [search, activeConvId, currentUser, queryClient, setLocation, toast]);
+  }, [search, conversationRouteParams?.convId, activeConvId, currentUser, queryClient, setLocation, toast]);
 
   const handleConversationStart = (convId: number) => {
     queryClient.invalidateQueries({ queryKey: ['/api/messages/conversations'] });
@@ -362,13 +363,18 @@ export default function Messages() {
 
   const activeConv = conversationList.find((c) => (c as { id: number }).id === activeConvId) as { id: number; isGroup?: boolean; groupName?: string; contextCard?: { type: string; title: string; url: string } | null; participants: Array<{ id: number; displayName?: string; avatarUrl?: string | null; username?: string }> } | undefined;
   const otherUser = activeConv?.participants.find((p) => p.id !== currentUser?.id);
+  const latestSeenMessage = localMessages
+    .filter(message => message.senderId === currentUser?.id && message.seenAt)
+    .sort((a, b) => new Date(b.seenAt ?? 0).getTime() - new Date(a.seenAt ?? 0).getTime())[0];
 
   return (
     <AppLayout>
-      <div className="flex h-[calc(100dvh-8rem)] min-h-0 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm md:h-[calc(100dvh-6rem)]">
+      <div className={`${activeConvId
+        ? 'fixed inset-0 z-[60] flex h-[100dvh] w-screen min-h-0 overflow-hidden border-0 bg-card shadow-none'
+        : 'flex h-[calc(100dvh-8rem)] min-h-0 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm md:h-[calc(100dvh-6rem)]'}`}>
 
         {/* Sidebar List */}
-        <div className={`${activeConvId ? 'hidden md:flex' : 'flex'} min-h-0 w-full flex-col border-r border-border/50 bg-muted/10 md:w-80`}>
+        <div className={`${activeConvId ? 'hidden' : 'flex'} min-h-0 w-full flex-col border-r border-border/50 bg-muted/10 md:w-80`}>
           <div className="p-4 border-b border-border/50">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold font-serif">{t('messages.title')}</h2>
@@ -566,8 +572,19 @@ export default function Messages() {
             <>
               {/* Header */}
               <div className="min-h-16 border-b border-border/50 flex flex-wrap items-center px-3 sm:px-6 py-2 bg-card shrink-0 gap-2 sm:gap-3 shadow-sm z-10">
-                <button className="md:hidden p-2 -ml-2 text-muted-foreground" onClick={() => setActiveConvId(null)}>
-                  ←
+                <button
+                  type="button"
+                  aria-label="Back to conversations"
+                  title="Back to conversations"
+                  className="rounded-full p-2 -ml-2 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => {
+                    setActiveConvId(null);
+                    setLocalMessages([]);
+                    setConversationFolder('inbox');
+                    setLocation('/messages');
+                  }}
+                >
+                  <ArrowLeft className="h-5 w-5" aria-hidden="true" />
                 </button>
                 {activeConv?.isGroup ? (
                   <Avatar className="w-9 h-9">
@@ -630,9 +647,6 @@ export default function Messages() {
                     const isMine = msg.senderId === currentUser?.id;
                     const sender = msg.sender;
                     const messageSeenAt = msg.seenAt ? new Date(msg.seenAt) : null;
-                    const latestSeenMessage = localMessages
-                      .filter(m => m.senderId === currentUser?.id && m.seenAt)
-                      .sort((a, b) => new Date(b.seenAt ?? 0).getTime() - new Date(a.seenAt ?? 0).getTime())[0];
                     const showSeenLabel = isMine && msg.id === latestSeenMessage?.id && !!messageSeenAt;
 
                     return (
@@ -664,17 +678,11 @@ export default function Messages() {
                             {isMine && (
                               <div className="inline-flex items-center gap-0.5" title={msg.seenAt ? `Seen ${formatPostTimestamp(msg.seenAt)?.title ?? ''}` : msg.deliveredAt ? 'Delivered' : 'Sent'}>
                                 {msg.seenAt ? (
-                                  <>
-                                    <CheckCheck className="h-3.5 w-3.5 fill-current text-primary-foreground/95" />
-                                    <CheckCheck className="h-3.5 w-3.5 fill-current text-primary-foreground/95 -ml-1.5" />
-                                  </>
+                                  <CheckCheck className="h-3.5 w-3.5 text-sky-200" aria-label="Seen" />
                                 ) : msg.deliveredAt ? (
-                                  <>
-                                    <Check className="h-3.5 w-3.5 text-primary-foreground/80" />
-                                    <Check className="h-3.5 w-3.5 text-primary-foreground/80 -ml-1.5" />
-                                  </>
+                                  <CheckCheck className="h-3.5 w-3.5 text-primary-foreground/80" aria-label="Delivered" />
                                 ) : (
-                                  <Check className="h-3.5 w-3.5 text-primary-foreground/60" />
+                                  <Check className="h-3.5 w-3.5 text-primary-foreground/60" aria-label="Sent" />
                                 )}
                               </div>
                             )}
@@ -714,7 +722,7 @@ export default function Messages() {
                     This conversation is unavailable.
                   </div>
               ) : activeConv ? (
-                <div className="shrink-0 border-t border-border/50 bg-card p-3 sm:p-4">
+                <div className="shrink-0 border-t border-border/50 bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4">
                   <form
                     onSubmit={handleSend}
                     className="flex min-w-0 flex-wrap items-center gap-2 rounded-3xl border border-border/50 bg-muted/30 p-1.5 transition-colors focus-within:border-primary/50"
