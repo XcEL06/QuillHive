@@ -1,5 +1,5 @@
 import { Fragment, useState, useEffect } from 'react';
-import { useGetPosts } from '@workspace/api-client-react';
+import { getGetPostsQueryKey, useGetPosts } from '@workspace/api-client-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { PostCard } from '@/components/post/PostCard';
@@ -516,6 +516,14 @@ function AuthenticatedHome() {
   const { data, isLoading, isError: error, refetch } = useGetPosts({
     feed: feedSource === 'following' ? 'following' : undefined,
     limit: 20,
+  }, {
+    query: {
+      enabled: feedSource === 'following',
+      queryKey: getGetPostsQueryKey({
+        feed: feedSource === 'following' ? 'following' : undefined,
+        limit: 20,
+      }),
+    },
   });
 
   const fetchAlgorithmicFeed = async (algo: FeedAlgorithm) => {
