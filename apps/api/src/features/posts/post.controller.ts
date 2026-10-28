@@ -408,7 +408,12 @@ export const listRecentSparks = async (req: Request, res: Response) => {
     stories.set(row.authorId, story);
   }
 
-  return res.json({ stories: [...stories.values()] });
+  return res.json({
+    stories: [...stories.values()].map(story => ({
+      ...story,
+      sparks: [...story.sparks].reverse(),
+    })),
+  });
 };
 
 export const viewSpark = async (req: Request, res: Response) => {

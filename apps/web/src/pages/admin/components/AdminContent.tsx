@@ -4,6 +4,7 @@ import { useAdminFetch } from "../hooks/useAdminFetch";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Eye, Search, Zap } from "lucide-react";
@@ -19,6 +20,7 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
   const [reports, setReports] = useState<any[]>([]);
   const [totalReports, setTotalReports] = useState(0);
   const [search, setSearch] = useState("");
+  const [showDeletedPosts, setShowDeletedPosts] = useState(false);
   const [boostPost, setBoostPost] = useState<any | null>(null);
   const [previewPost, setPreviewPost] = useState<any | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -28,7 +30,7 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
   const [plan, setPlan] = useState<"starter" | "growth" | "spotlight">("starter");
   const [reason, setReason] = useState("");
   const [granting, setGranting] = useState(false);
-  useEffect(() => { void Promise.all([fetchAdmin("/api/admin/posts?limit=100"), fetchAdmin("/api/admin/reports?limit=100")]).then(([p, r]) => { setPosts(p.posts ?? p); setTotalPosts(Number(p.total ?? p.posts?.length ?? 0)); setReports(r.reports ?? r); setTotalReports(Number(r.total ?? r.reports?.length ?? 0)); }).catch((err) => toast({ title: "Could not load content", description: err.message, variant: "destructive" })); }, [fetchAdmin, toast]);
+  useEffect(() => { void Promise.all([fetchAdmin(`/api/admin/posts?limit=100${showDeletedPosts ? "&includeDeleted=true" : ""}`), fetchAdmin("/api/admin/reports?limit=100")]).then(([p, r]) => { setPosts(p.posts ?? p); setTotalPosts(Number(p.total ?? p.posts?.length ?? 0)); setReports(r.reports ?? r); setTotalReports(Number(r.total ?? r.reports?.length ?? 0)); }).catch((err) => toast({ title: "Could not load content", description: err.message, variant: "destructive" })); }, [fetchAdmin, toast, showDeletedPosts]);
   const grantBoost = async () => {
     if (!boostPost) return;
     setGranting(true);
@@ -74,12 +76,12 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
   const publishedPosts = posts.filter((post) => post.isPublished && !post.isDeleted).length;
   return <>
     <AdminOverviewStats items={[
-      { label: "Total posts", value: totalPosts, detail: "All non-deleted posts" },
+      { label: "Total posts", value: totalPosts, detail: showDeletedPosts ? "Includes deleted posts" : "All non-deleted posts" },
       { label: "Published posts", value: publishedPosts, detail: `Among ${posts.length} latest posts` },
       { label: "Pending reports", value: pendingReports, detail: `Awaiting review among ${reports.length} loaded` },
       { label: "Total reports", value: totalReports },
     ]} />
-    <div className="space-y-4"><div className="relative max-w-sm"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter posts by title, creator, or ID" className="pl-9" /></div><div className="grid gap-6 lg:grid-cols-2"><List title={`Posts (${posts.length})`} rows={posts.filter((p) => `${p.id} ${p.type} ${p.title} ${p.authorDisplayName} ${p.authorUsername}`.toLowerCase().includes(needle))} label={(p) => p.title || `${p.type || 'Post'} #${p.id}`} inspectLabel="View post" onInspect={(post) => void openPostPreview(post)} actionLabel={canGrantBoost ? "Grant Boost" : undefined} onAction={canGrantBoost ? (post) => setBoostPost(post) : undefined} /><List title={`Reports (${reports.length})`} rows={reports.filter((r) => `${r.reason} ${r.status}`.toLowerCase().includes(needle))} label={(r) => r.reason || r.category || "Reported item"} /></div></div>
+    <div className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-4"><div className="relative w-full max-w-sm"><Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Filter posts by title, creator, or ID" className="pl-9" /></div><label className="flex items-center gap-2 text-sm"><Switch checked={showDeletedPosts} onCheckedChange={setShowDeletedPosts} /><span>Show deleted posts</span></label></div><div className="grid gap-6 lg:grid-cols-2"><List title={`Posts (${posts.length})`} rows={posts.filter((p) => `${p.id} ${p.type} ${p.title} ${p.authorDisplayName} ${p.authorUsername}`.toLowerCase().includes(needle))} label={(p) => p.title || `${p.type || 'Post'} #${p.id}`} inspectLabel="View post" onInspect={(post) => void openPostPreview(post)} actionLabel={canGrantBoost ? "Grant Boost" : undefined} onAction={canGrantBoost ? (post) => setBoostPost(post) : undefined} /><List title={`Reports (${reports.length})`} rows={reports.filter((r) => `${r.reason} ${r.status}`.toLowerCase().includes(needle))} label={(r) => r.reason || r.category || "Reported item"} /></div></div>
     <Dialog open={!!boostPost} onOpenChange={(open) => { if (!open) { setBoostPost(null); setReason(""); } }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader><DialogTitle>Grant Boost</DialogTitle><DialogDescription>Give this post a free editorial campaign. The creator will not be charged.</DialogDescription></DialogHeader>
@@ -96,7 +98,7 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
           <DialogDescription>
             {previewPost?.authorDisplayName || previewPost?.authorUsername || "Unknown creator"}
             {previewPost?.authorUsername ? ` · @${previewPost.authorUsername}` : ""}
-            {previewPost ? ` · ${previewPost.isPublished ? "Published" : "Draft"}` : ""}
+            {previewPost ? ` · ${previewPost.isDeleted ? "Deleted" : previewPost.isArchived ? "Archived" : previewPost.isPublished ? "Published" : "Draft"}` : ""}
           </DialogDescription>
         </DialogHeader>
         {previewLoading ? <p className="py-8 text-sm text-muted-foreground">Loading post…</p> : previewPost && (
@@ -140,7 +142,7 @@ export default function AdminContent({ token, toast, currentUser }: AdminProps) 
           </div>
         )}
         <DialogFooter>
-          {previewPost?.isPublished && <Button asChild variant="outline"><Link href={`/post/${previewPost.id}`} target="_blank" rel="noreferrer">Open post page</Link></Button>}
+          {previewPost?.isPublished && !previewPost?.isDeleted && !previewPost?.isArchived && <Button asChild variant="outline"><Link href={`/post/${previewPost.id}`} target="_blank" rel="noreferrer">Open post page</Link></Button>}
           <Button variant="outline" onClick={() => setPreviewPost(null)}>Close</Button>
         </DialogFooter>
       </DialogContent>
@@ -158,5 +160,5 @@ function EngagementList({ title, rows, empty, render }: { title: string; rows: a
   </section>;
 }
 function List({ title, rows, label, actionLabel, onAction, inspectLabel, onInspect }: { title: string; rows: any[]; label: (row: any) => string; actionLabel?: string; onAction?: (row: any) => void; inspectLabel?: string; onInspect?: (row: any) => void }) {
-  return <section className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm"><div className="border-b border-border/70 px-5 py-4"><h2 className="text-sm font-semibold">{title}</h2></div><div className="divide-y divide-border/60">{rows.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">Nothing needs attention here.</p> : rows.slice(0, 8).map((row) => { const href = row.targetType === "post" ? `/post/${row.targetId}` : row.targetType === "user" && row.target?.username ? `/profile/${row.target.username}` : `/post/${row.id}`; const authorUsername = row.authorUsername || row.target?.username; const status = row.status || (typeof row.isPublished === "boolean" ? row.isPublished ? "published" : "draft" : "published"); return <div key={row.id} className="flex items-center gap-3 px-5 py-3.5"><div className="min-w-0 flex-1"><Link href={href} target="_blank" rel="noreferrer" className="block hover:underline"><p className="truncate text-sm font-medium">{label(row)}</p></Link>{authorUsername ? <Link href={`/profile/${encodeURIComponent(authorUsername)}`} target="_blank" rel="noreferrer" className="mt-0.5 block truncate text-xs text-muted-foreground hover:text-primary hover:underline">Open @{authorUsername}</Link> : <p className="truncate text-xs text-muted-foreground">{row.authorDisplayName || row.category || "Awaiting review"}</p>}</div><Badge variant={status === "pending" || status === "draft" ? "secondary" : "outline"} className="text-[10px] capitalize">{status}</Badge>{inspectLabel && onInspect && <Button variant="ghost" size="sm" onClick={() => onInspect(row)} title={inspectLabel}><Eye className="h-4 w-4" /><span className="sr-only">{inspectLabel}</span></Button>}{actionLabel && onAction && <Button variant="outline" size="sm" onClick={() => onAction(row)}><Zap className="mr-1.5 h-3.5 w-3.5" />{actionLabel}</Button>}</div>; })}</div></section>;
+  return <section className="overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm"><div className="border-b border-border/70 px-5 py-4"><h2 className="text-sm font-semibold">{title}</h2></div><div className="divide-y divide-border/60">{rows.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">Nothing needs attention here.</p> : rows.slice(0, 8).map((row) => { const href = row.targetType === "post" ? `/post/${row.targetId}` : row.targetType === "user" && row.target?.username ? `/profile/${row.target.username}` : `/post/${row.id}`; const authorUsername = row.authorUsername || row.target?.username; const status = row.isDeleted ? "deleted" : row.isArchived ? "archived" : row.status || (typeof row.isPublished === "boolean" ? row.isPublished ? "published" : "draft" : "published"); return <div key={row.id} className="flex items-center gap-3 px-5 py-3.5"><div className="min-w-0 flex-1">{row.isDeleted || row.isArchived ? <p className="truncate text-sm font-medium">{label(row)}</p> : <Link href={href} target="_blank" rel="noreferrer" className="block hover:underline"><p className="truncate text-sm font-medium">{label(row)}</p></Link>}{authorUsername ? <Link href={`/profile/${encodeURIComponent(authorUsername)}`} target="_blank" rel="noreferrer" className="mt-0.5 block truncate text-xs text-muted-foreground hover:text-primary hover:underline">Open @{authorUsername}</Link> : <p className="truncate text-xs text-muted-foreground">{row.authorDisplayName || row.category || "Awaiting review"}</p>}</div><Badge variant={status === "pending" || status === "draft" ? "secondary" : status === "deleted" ? "destructive" : "outline"} className="text-[10px] capitalize">{status}</Badge>{inspectLabel && onInspect && <Button variant="ghost" size="sm" onClick={() => onInspect(row)} title={inspectLabel}><Eye className="h-4 w-4" /><span className="sr-only">{inspectLabel}</span></Button>}{actionLabel && onAction && !row.isDeleted && !row.isArchived && <Button variant="outline" size="sm" onClick={() => onAction(row)}><Zap className="mr-1.5 h-3.5 w-3.5" />{actionLabel}</Button>}</div>; })}</div></section>;
 }

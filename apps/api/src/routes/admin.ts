@@ -793,14 +793,15 @@ router.post("/users/:id/revive", requireSuperAdmin, async (req: any, res) => {
 router.get("/posts", async (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 50;
+  const includeDeleted = req.query.includeDeleted === "true";
   const posts = await db
-    .select({ id: postsTable.id, title: postsTable.title, type: postsTable.type, isPublished: postsTable.isPublished, authorId: postsTable.authorId, createdAt: postsTable.createdAt, authorUsername: usersTable.username, authorDisplayName: usersTable.displayName })
+    .select({ id: postsTable.id, title: postsTable.title, type: postsTable.type, isPublished: postsTable.isPublished, isDeleted: postsTable.isDeleted, deletedAt: postsTable.deletedAt, isArchived: postsTable.isArchived, archiveType: postsTable.archiveType, authorId: postsTable.authorId, createdAt: postsTable.createdAt, authorUsername: usersTable.username, authorDisplayName: usersTable.displayName })
     .from(postsTable)
     .leftJoin(usersTable, eq(postsTable.authorId, usersTable.id))
-    .where(eq(postsTable.isDeleted, false))
+    .where(includeDeleted ? sql`true` : eq(postsTable.isDeleted, false))
     .orderBy(desc(postsTable.createdAt))
     .limit(limit).offset((page - 1) * limit);
-  const [total] = await db.select({ count: count() }).from(postsTable).where(eq(postsTable.isDeleted, false));
+  const [total] = await db.select({ count: count() }).from(postsTable).where(includeDeleted ? sql`true` : eq(postsTable.isDeleted, false));
   return res.json({ posts, total: total?.count ?? 0, page, limit });
 });
 
@@ -817,6 +818,10 @@ router.get("/posts/:id", async (req, res) => {
       imageUrl: postsTable.imageUrl,
       attachments: postsTable.attachments,
       isPublished: postsTable.isPublished,
+      isDeleted: postsTable.isDeleted,
+      deletedAt: postsTable.deletedAt,
+      isArchived: postsTable.isArchived,
+      archiveType: postsTable.archiveType,
       createdAt: postsTable.createdAt,
       authorId: usersTable.id,
       authorUsername: usersTable.username,
@@ -824,7 +829,7 @@ router.get("/posts/:id", async (req, res) => {
     })
     .from(postsTable)
     .leftJoin(usersTable, eq(usersTable.id, postsTable.authorId))
-    .where(and(eq(postsTable.id, id), eq(postsTable.isDeleted, false)));
+    .where(eq(postsTable.id, id));
   if (!post) return res.status(404).json({ error: "Post not found" });
   return res.json(post);
 });

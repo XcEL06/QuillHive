@@ -207,16 +207,20 @@ export function ShareSheet({ postId, title, isReposted = false, repostingEnabled
             </>
           )}
 
-          <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
-            <input
-              readOnly
-              value={url}
-              className="flex-1 bg-transparent text-sm px-2 outline-none"
-              data-testid="input-share-url"
-            />
-            <Button size="sm" variant="ghost" onClick={copy} data-testid="button-copy-link">
-              {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-            </Button>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Share post link</p>
+            <div className="flex items-center gap-2 p-2 bg-muted rounded-lg">
+              <input
+                readOnly
+                value={url}
+                className="min-w-0 flex-1 bg-transparent text-sm px-2 outline-none"
+                data-testid="input-share-url"
+              />
+              <Button size="sm" variant="ghost" onClick={copy} data-testid="button-copy-link">
+                {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                <span>{copied ? "Copied" : "Copy link"}</span>
+              </Button>
+            </div>
           </div>
 
           <div className="grid grid-cols-4 gap-2">
